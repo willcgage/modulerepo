@@ -1,0 +1,394 @@
+openapi: 3.0.3
+info:
+  title: Free-moN Module Repository API
+  description: >
+    Versioned REST contract for the Module Repository, consumed primarily
+    by Free Dispatcher (read-only, one-directional per ADR-001).
+    Endpoints under /api/v1/ are custom Supabase Edge Functions; the
+    underlying tables are also exposed via Supabase's auto-generated
+    PostgREST API at /rest/v1/ and governed by the same RLS policies.
+  version: "1.0.0"
+  contact:
+    name: Will Gage
+    url: https://github.com/willcgage/modulerepo
+
+servers:
+  - url: https://dpifxkipqfaxujidgjyg.supabase.co/functions/v1
+    description: Edge Functions (custom endpoints)
+  - url: https://dpifxkipqfaxujidgjyg.supabase.co/rest/v1
+    description: Auto-generated PostgREST API (direct table access, RLS-governed)
+
+security:
+  - ApiKeyAuth: []
+  - BearerAuth: []
+
+paths:
+  /api/v1/modules/full:
+    get:
+      summary: Get all active modules with nested endplates and industries
+      description: >
+        Primary integration endpoint for Free Dispatcher. Returns every
+        active module with its endplates and industries (each industry
+        carrying its accepted car types) nested inline — one call gives
+        the complete operational picture.
+      tags: [Modules]
+      parameters:
+        - name: status
+          in: query
+          description: Filter by module status. Defaults to "active". Non-admin callers may only request "active".
+          schema:
+            type: string
+            enum: [active, inactive, archived]
+            default: active
+        - name: category
+          in: query
+          description: Filter by operational category.
+          schema:
+            type: string
+        - name: updated_since
+          in: query
+          description: ISO-8601 timestamp; only return modules updated at or after this time (for incremental sync).
+          schema:
+            type: string
+            format: date-time
+      responses:
+        "200":
+          description: Array of modules with nested children
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/ModuleFull"
+              example:
+                - id: 2
+                  record_number: "FMN-0002"
+                  module_name: "Cascade Lumber & Grain"
+                  description: "Two-industry module: lumber yard and grain elevator with passing siding."
+                  category: "industry_spur"
+                  geometry_type: "straight"
+                  geometry_degrees: null
+                  geometry_offset_inches: null
+                  length_feet: 6
+                  length_inches: 0
+                  endplate_count: 2
+                  has_mss: true
+                  mss_block_count: 2
+                  status: "active"
+                  updated_at: "2026-06-06T18:30:00Z"
+                  endplates:
+                    - endplate_number: 1
+                      label: "EP-1"
+                      track_config: "double"
+                      width_inches: 7.0
+                      height_inches: null
+                  industries:
+                    - industry_number: 1
+                      label: "IND-1"
+                      industry_name: "Cascade Lumber Co."
+                      industry_type: "lumber_yard"
+                      spur_capacity_scale_feet: 120
+                      notes: "Accessible from west end only."
+                      car_types:
+                        - value: "flatcar"
+                          display_label: "Flatcar"
+                          notes: "Primary — lumber loads"
+                        - value: "gondola"
+                          display_label: "Gondola"
+                          notes: "Secondary — wood chips"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+
+  /api/v1/car-types:
+    get:
+      summary: List active rail car types
+      description: Reference data used to populate dropdowns in the owner portal and for Free Dispatcher car-type matching.
+      tags: [Reference Data]
+      responses:
+        "200":
+          description: Array of active car types
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/CarType"
+              example:
+                - value: "boxcar"
+                  display_label: "Boxcar"
+                - value: "tank_car"
+                  display_label: "Tank Car"
+
+  /api/v1/industry-types:
+    get:
+      summary: List industry types
+      description: Admin-managed controlled list of industry types.
+      tags: [Reference Data]
+      responses:
+        "200":
+          description: Array of industry types
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/IndustryType"
+              example:
+                - value: "lumber_yard"
+                  display_label: "Lumber Yard"
+                - value: "grain_elevator"
+                  display_label: "Grain Elevator"
+
+  /api/v1/car-types/suggest:
+    post:
+      summary: Suggest a new rail car type
+      description: >
+        Owner-facing endpoint used by the Add/Edit Module wizard's "Other"
+        field. Inserts a new rail_car_types row with status =
+        pending_review. The suggestion is immediately usable by the
+        suggesting owner; admins review it later in the Car Type
+        Suggestions queue.
+      tags: [Reference Data]
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [value, display_label]
+              properties:
+                value:
+                  type: string
+                  maxLength: 40
+                  description: Stored value, snake_case (e.g. "wood_chip_car"). Immutable after first use.
+                display_label:
+                  type: string
+                  maxLength: 60
+                  description: Human-readable label (e.g. "Wood Chip Car").
+                suggestion_notes:
+                  type: string
+                  maxLength: 255
+                  description: Why the owner is suggesting this car type.
+            example:
+              value: "wood_chip_car"
+              display_label: "Wood Chip Car"
+              suggestion_notes: "We run dedicated chip cars to the paper mill on our layout."
+      responses:
+        "201":
+          description: Suggestion created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CarType"
+        "400":
+          description: Validation error (e.g. missing fields, value already exists)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "409":
+          description: A car type with this value already exists
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /rest/v1/freemon_modules:
+    get:
+      summary: (Auto-generated) Direct table access to modules
+      description: >
+        Standard PostgREST endpoint exposed by Supabase. Subject to the
+        same RLS policies as /api/v1/modules/full but returns flat rows
+        without nested children — use query params like
+        `?select=*,freemon_endplates(*),freemon_industries(*)` to embed
+        relations. Prefer /api/v1/modules/full for Free Dispatcher sync.
+      tags: [Auto-generated (PostgREST)]
+      parameters:
+        - name: select
+          in: query
+          schema:
+            type: string
+          description: Comma-separated columns / embedded resource expressions.
+        - name: status
+          in: query
+          schema:
+            type: string
+          description: 'PostgREST filter, e.g. status=eq.active'
+      responses:
+        "200":
+          description: Array of module rows (shape depends on `select`)
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: object
+
+components:
+  securitySchemes:
+    ApiKeyAuth:
+      type: apiKey
+      in: header
+      name: apikey
+      description: Supabase project anon or service_role API key.
+    BearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: Supabase Auth user JWT (required for owner/admin-scoped operations).
+
+  responses:
+    Unauthorized:
+      description: Missing or invalid credentials
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+
+  schemas:
+    ErrorResponse:
+      type: object
+      properties:
+        error:
+          type: string
+        message:
+          type: string
+        details:
+          type: object
+          nullable: true
+
+    CarType:
+      type: object
+      properties:
+        value:
+          type: string
+          example: "boxcar"
+        display_label:
+          type: string
+          example: "Boxcar"
+        notes:
+          type: string
+          nullable: true
+          description: Present only when returned nested inside an industry — the industry-specific note for this car type.
+
+    IndustryType:
+      type: object
+      properties:
+        value:
+          type: string
+          example: "lumber_yard"
+        display_label:
+          type: string
+          example: "Lumber Yard"
+
+    Industry:
+      type: object
+      properties:
+        industry_number:
+          type: integer
+          example: 1
+        label:
+          type: string
+          example: "IND-1"
+        industry_name:
+          type: string
+          example: "Cascade Lumber Co."
+        industry_type:
+          type: string
+          example: "lumber_yard"
+        spur_capacity_scale_feet:
+          type: integer
+          example: 120
+        notes:
+          type: string
+          nullable: true
+        car_types:
+          type: array
+          items:
+            $ref: "#/components/schemas/CarType"
+
+    Endplate:
+      type: object
+      properties:
+        endplate_number:
+          type: integer
+          example: 1
+        label:
+          type: string
+          example: "EP-1"
+        track_config:
+          type: string
+          enum: [single, double]
+        width_inches:
+          type: number
+          format: float
+          example: 3.5
+        height_inches:
+          type: number
+          format: float
+          nullable: true
+
+    ModuleFull:
+      type: object
+      properties:
+        id:
+          type: integer
+        record_number:
+          type: string
+          example: "FMN-0001"
+        module_name:
+          type: string
+        description:
+          type: string
+          nullable: true
+        category:
+          type: string
+          example: "industry_spur"
+        geometry_type:
+          type: string
+          example: "straight"
+        geometry_degrees:
+          type: number
+          format: float
+          nullable: true
+        geometry_offset_inches:
+          type: number
+          format: float
+          nullable: true
+        length_feet:
+          type: integer
+        length_inches:
+          type: integer
+        endplate_count:
+          type: integer
+        has_mss:
+          type: boolean
+        mss_block_count:
+          type: integer
+          nullable: true
+        status:
+          type: string
+          enum: [active, inactive, archived]
+        updated_at:
+          type: string
+          format: date-time
+        endplates:
+          type: array
+          items:
+            $ref: "#/components/schemas/Endplate"
+        industries:
+          type: array
+          items:
+            $ref: "#/components/schemas/Industry"
+
+tags:
+  - name: Modules
+    description: Module data, including the primary Free Dispatcher sync endpoint
+  - name: Reference Data
+    description: Controlled lookup lists and the car-type suggestion workflow
+  - name: Auto-generated (PostgREST)
+    description: Supabase's built-in REST API over the underlying tables

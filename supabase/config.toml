@@ -1,0 +1,65 @@
+# Supabase CLI project configuration
+# Module Repository — github.com/willcgage/modulerepo
+#
+# Usage:
+#   supabase login
+#   supabase link --project-ref dpifxkipqfaxujidgjyg
+#   supabase db push                # apply migrations/
+#   supabase functions deploy modules-full
+#   supabase functions deploy car-types
+#   supabase functions deploy industry-types
+#   supabase functions deploy car-types-suggest
+#   supabase functions deploy modules-validate-name
+
+project_id = "modulerepo-dev"
+
+[api]
+enabled = true
+port = 54321
+schemas = ["public", "graphql_public"]
+extra_search_path = ["public", "extensions"]
+max_rows = 1000
+
+[db]
+port = 54322
+major_version = 15
+
+[studio]
+enabled = true
+port = 54323
+
+[inbucket]
+enabled = true
+port = 54324
+
+[storage]
+enabled = true
+file_size_limit = "50MiB"
+
+[auth]
+enabled = true
+site_url = "http://localhost:3000"
+additional_redirect_urls = ["https://localhost:3000"]
+jwt_expiry = 3600
+enable_signup = true
+
+[auth.email]
+enable_signup = true
+double_confirm_changes = true
+enable_confirmations = false
+
+[functions]
+[functions.modules-full]
+verify_jwt = false
+
+[functions.car-types]
+verify_jwt = false
+
+[functions.industry-types]
+verify_jwt = false
+
+[functions.car-types-suggest]
+verify_jwt = true
+
+[functions.modules-validate-name]
+verify_jwt = true
