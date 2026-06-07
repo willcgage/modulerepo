@@ -16,6 +16,10 @@ Repository. See `github.com/willcgage/modulerepo`.
 │       ├── industry-types/          GET  /api/v1/industry-types
 │       ├── car-types-suggest/       POST /api/v1/car-types/suggest
 │       └── modules-validate-name/   POST /api/v1/modules/validate-name
+├── web/                         # Owner portal — Next.js + Tailwind frontend
+│   ├── src/app/                     # Pages: /, /login, /register, /dashboard,
+│   │                                #   /forgot-password, /reset-password
+│   └── src/lib/supabase/            # Browser/server Supabase clients + session proxy
 ├── openapi/
 │   └── modulerepo-openapi-v1.yaml   # REST contract for Free Dispatcher
 ├── docs/
@@ -77,6 +81,27 @@ Edit a migration → `supabase db reset` to re-apply from scratch locally,
 or add a new timestamped file to `supabase/migrations/` for incremental changes
 and run `supabase db push` against the linked project when ready.
 
+## Frontend (Owner Portal)
+
+`web/` is a Next.js + Tailwind app providing email/password auth — registration,
+login, logout, and password reset — backed directly by Supabase Auth.
+
+```bash
+cd web
+npm install
+cp .env.local.example .env.local
+#   fill in NEXT_PUBLIC_SUPABASE_URL / NEXT_PUBLIC_SUPABASE_ANON_KEY
+#   (Dashboard -> Settings -> API, or `supabase status` for the local stack)
+npm run dev
+# http://localhost:3000
+```
+
+Role assignment is handled server-side: a `handle_new_user` trigger
+(migration `...000009_handle_new_user.sql`) creates the matching
+`owner_profiles` row on signup — the very first account in the project
+becomes `admin`, every account after that is an `owner`. Clients can never
+self-assign a role.
+
 ## Testing the API
 
 Follow `docs/M2_API_TEST_PLAN.md` for curl scripts covering RLS behavior
@@ -99,8 +124,8 @@ VS Code extension for an interactive contract view.
 | Milestone | Status |
 |-----------|--------|
 | M1 — Schema, migrations, RLS, triggers, sample data | ✅ Complete |
-| M2 — REST API layer, Edge Functions, OpenAPI contract | ✅ Complete (pending deploy + test run) |
-| M3 — Auth & user management | ⬜ Next |
+| M2 — REST API layer, Edge Functions, OpenAPI contract | ✅ Complete |
+| M3 — Auth & user management | ✅ Complete |
 | M4 — Owner portal | ⬜ Planned |
 | M5 — Admin GUI | ⬜ Planned |
 | M6 — Free Dispatcher integration | ⬜ Planned |
