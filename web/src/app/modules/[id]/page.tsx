@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
+import { embeddedOne } from "@/lib/embedded";
 import { StatusBadge } from "@/components/status-badge";
 import {
   TextField,
@@ -33,14 +34,6 @@ const TRACK_CONFIG_OPTIONS = [
   { value: "single", label: "Single" },
   { value: "double", label: "Double" },
 ];
-
-// PostgREST returns a single embedded row for a many-to-one join, but without
-// generated DB types supabase-js can't infer the cardinality and types it as
-// an array — normalize both shapes here.
-function embeddedOne<T>(value: T | T[] | null | undefined): T | null {
-  if (!value) return null;
-  return Array.isArray(value) ? (value[0] ?? null) : value;
-}
 
 export default async function ModuleDetailPage({
   params,

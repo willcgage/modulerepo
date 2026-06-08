@@ -25,6 +25,8 @@ export default async function DashboardPage({
     .eq("id", user.id)
     .single();
 
+  const isAdmin = profile?.role === "admin";
+
   return (
     <div className="mx-auto max-w-2xl px-4 py-12">
       <div className="flex items-center justify-between">
@@ -58,6 +60,14 @@ export default async function DashboardPage({
         >
           Edit profile
         </Link>
+        {isAdmin && (
+          <Link
+            href="/admin"
+            className="rounded-md border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
+          >
+            Admin
+          </Link>
+        )}
       </div>
 
       <dl className="mt-8 divide-y divide-gray-200 rounded-lg border border-gray-200 bg-white">

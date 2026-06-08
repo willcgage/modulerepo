@@ -127,5 +127,5 @@ VS Code extension for an interactive contract view.
 | M2 — REST API layer, Edge Functions, OpenAPI contract | ✅ Complete |
 | M3 — Auth & user management | ✅ Complete |
 | M4 — Owner portal | ✅ Complete |
-| M5 — Admin GUI | ⬜ Planned |
+| M5 — Admin GUI | ✅ Complete |
 | M6 — Free Dispatcher integration | ⬜ Planned |
