@@ -126,6 +126,6 @@ VS Code extension for an interactive contract view.
 | M1 — Schema, migrations, RLS, triggers, sample data | ✅ Complete |
 | M2 — REST API layer, Edge Functions, OpenAPI contract | ✅ Complete |
 | M3 — Auth & user management | ✅ Complete |
-| M4 — Owner portal | ⬜ Planned |
+| M4 — Owner portal | ✅ Complete |
 | M5 — Admin GUI | ⬜ Planned |
 | M6 — Free Dispatcher integration | ⬜ Planned |
