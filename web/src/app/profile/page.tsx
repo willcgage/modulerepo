@@ -19,7 +19,7 @@ export default async function ProfilePage({
 
   const { data: profile } = await supabase
     .from("owner_profiles")
-    .select("display_name, contact_email, phone, location, role")
+    .select("display_name, first_name, last_name, contact_email, phone, location, role")
     .eq("id", user.id)
     .single();
 
@@ -37,6 +37,20 @@ export default async function ProfilePage({
 
         <form action={updateProfile}>
           <TextField label="Display name" name="display_name" defaultValue={profile?.display_name ?? ""} maxLength={120} />
+          <TextField
+            label="First name"
+            name="first_name"
+            defaultValue={profile?.first_name ?? ""}
+            required={false}
+            maxLength={60}
+          />
+          <TextField
+            label="Last name"
+            name="last_name"
+            defaultValue={profile?.last_name ?? ""}
+            required={false}
+            maxLength={60}
+          />
           <TextField
             label="Contact email"
             name="contact_email"
