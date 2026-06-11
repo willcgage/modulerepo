@@ -175,7 +175,7 @@ export default async function ModuleDetailPage({
         {module.geometry_offset_inches != null && (
           <Fact label="Offset (in)" value={String(module.geometry_offset_inches)} />
         )}
-        <Fact label="MSS" value={module.has_mss ? `Yes (${module.mss_block_count} blocks)` : "No"} />
+        <Fact label="MSS" value={module.has_mss ? "Yes" : "No"} />
       </dl>
 
       {/* ---- Endplates ------------------------------------------------- */}

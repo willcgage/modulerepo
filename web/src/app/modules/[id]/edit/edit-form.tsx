@@ -177,21 +177,8 @@ export function EditModuleForm({
             if (!e.target.checked) set("mss_block_count", "");
           }}
         />
-        Has a Module Storage System (MSS)
+        Has a Modular Signal System (MSS)
       </label>
-      {values.has_mss && (
-        <label className={`${labelClass} mb-4 block`}>
-          MSS block count
-          <input
-            className={inputClass}
-            type="number"
-            min="1"
-            value={values.mss_block_count}
-            onChange={(e) => set("mss_block_count", e.target.value)}
-            required
-          />
-        </label>
-      )}
 
       <div className="mt-6 flex items-center gap-3">
         <button

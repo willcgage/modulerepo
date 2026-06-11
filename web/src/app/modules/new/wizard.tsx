@@ -423,21 +423,8 @@ function BasicsStep({
             if (!e.target.checked) set("mss_block_count", "");
           }}
         />
-        Has a Module Storage System (MSS)
+        Has a Modular Signal System (MSS)
       </label>
-      {basics.has_mss && (
-        <label className={`${labelClass} block`}>
-          MSS block count
-          <input
-            className={inputClass}
-            type="number"
-            min="1"
-            value={basics.mss_block_count}
-            onChange={(e) => set("mss_block_count", e.target.value)}
-            required
-          />
-        </label>
-      )}
     </div>
   );
 }
