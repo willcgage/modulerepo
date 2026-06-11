@@ -82,12 +82,18 @@ paths:
                       track_config: "double"
                       width_inches: 7.0
                       height_inches: null
+                  tracks:
+                    - track_number: 1
+                      label: "TRK-1"
+                      track_name: "House Track"
+                      capacity_scale_feet: 120
+                      notes: "Accessible from west end only."
                   industries:
                     - industry_number: 1
                       label: "IND-1"
                       industry_name: "Cascade Lumber Co."
                       industry_type: "lumber_yard"
-                      spur_capacity_scale_feet: 120
+                      track_label: "TRK-1"
                       notes: "Accessible from west end only."
                       car_types:
                         - value: "flatcar"
@@ -300,9 +306,11 @@ components:
         industry_type:
           type: string
           example: "lumber_yard"
-        spur_capacity_scale_feet:
-          type: integer
-          example: 120
+        track_label:
+          type: string
+          nullable: true
+          description: Label of the track (spur/siding) this industry sits on, or null if served directly off the mainline.
+          example: "TRK-1"
         notes:
           type: string
           nullable: true
@@ -330,6 +338,26 @@ components:
         height_inches:
           type: number
           format: float
+          nullable: true
+
+    Track:
+      type: object
+      properties:
+        track_number:
+          type: integer
+          example: 1
+        label:
+          type: string
+          example: "TRK-1"
+        track_name:
+          type: string
+          nullable: true
+          example: "House Track"
+        capacity_scale_feet:
+          type: integer
+          example: 120
+        notes:
+          type: string
           nullable: true
 
     ModuleFull:
@@ -380,6 +408,10 @@ components:
           type: array
           items:
             $ref: "#/components/schemas/Endplate"
+        tracks:
+          type: array
+          items:
+            $ref: "#/components/schemas/Track"
         industries:
           type: array
           items:

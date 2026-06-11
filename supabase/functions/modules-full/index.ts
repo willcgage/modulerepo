@@ -2,9 +2,10 @@
 // Edge Function: GET /api/v1/modules/full
 // Module Repository — Milestone 2
 //
-// Returns active modules with endplates and industries (each industry
-// carrying its accepted car_types) nested inline. This is the primary
-// integration endpoint for Free Dispatcher (read-only, per ADR-001).
+// Returns active modules with endplates, tracks, and industries (each
+// industry carrying its accepted car_types and the label of the track it
+// sits on, if any) nested inline. This is the primary integration endpoint
+// for Free Dispatcher (read-only, per ADR-001).
 //
 // Deploy: supabase functions deploy modules-full
 // Invoke: GET /functions/v1/api/v1/modules/full
@@ -69,13 +70,20 @@ Deno.serve(async (req) => {
           width_inches,
           height_inches
         ),
+        module_tracks (
+          track_number,
+          label,
+          track_name,
+          capacity_scale_feet,
+          notes
+        ),
         freemon_industries (
           industry_number,
           label,
           industry_name,
           industry_type,
-          spur_capacity_scale_feet,
           notes,
+          track:module_tracks ( label ),
           freemon_industry_car_types (
             notes,
             rail_car_types ( value, display_label )
@@ -85,6 +93,7 @@ Deno.serve(async (req) => {
       .eq("status", status)
       .order("record_number", { ascending: true })
       .order("endplate_number", { foreignTable: "freemon_endplates", ascending: true })
+      .order("track_number", { foreignTable: "module_tracks", ascending: true })
       .order("industry_number", { foreignTable: "freemon_industries", ascending: true });
 
     if (category) query = query.eq("category", category);
@@ -124,12 +133,19 @@ Deno.serve(async (req) => {
         width_inches: ep.width_inches,
         height_inches: ep.height_inches,
       })),
+      tracks: (m.module_tracks ?? []).map((t: any) => ({
+        track_number: t.track_number,
+        label: t.label,
+        track_name: t.track_name,
+        capacity_scale_feet: t.capacity_scale_feet,
+        notes: t.notes,
+      })),
       industries: (m.freemon_industries ?? []).map((ind: any) => ({
         industry_number: ind.industry_number,
         label: ind.label,
         industry_name: ind.industry_name,
         industry_type: ind.industry_type,
-        spur_capacity_scale_feet: ind.spur_capacity_scale_feet,
+        track_label: ind.track?.label ?? null,
         notes: ind.notes,
         car_types: (ind.freemon_industry_car_types ?? []).map((ct: any) => ({
           value: ct.rail_car_types?.value,

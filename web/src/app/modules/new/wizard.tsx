@@ -10,6 +10,7 @@ import {
   type BasicsInput,
   type EndplateInput,
   type IndustryInput,
+  type TrackInput,
 } from "./actions";
 
 type Category = { value: string; display_label: string };
@@ -51,6 +52,7 @@ export function ModuleWizard({
   const [step, setStep] = useState(1);
   const [basics, setBasics] = useState<BasicsInput>(EMPTY_BASICS);
   const [endplates, setEndplates] = useState<EndplateInput[]>([]);
+  const [tracks, setTracks] = useState<TrackInput[]>([]);
   const [industries, setIndustries] = useState<IndustryInput[]>([]);
   const [carTypes, setCarTypes] = useState<ReferenceOption[]>(initialCarTypes);
   const [nameStatus, setNameStatus] = useState<
@@ -95,7 +97,7 @@ export function ModuleWizard({
         return;
       }
     }
-    setStep((s) => Math.min(4, s + 1));
+    setStep((s) => Math.min(5, s + 1));
   }
 
   function goBack() {
@@ -106,7 +108,7 @@ export function ModuleWizard({
   function handleSubmit() {
     setError(null);
     startTransition(async () => {
-      const result = await createModule(basics, endplates, industries);
+      const result = await createModule(basics, endplates, tracks, industries);
       if (result && "error" in result) {
         setError(result.error);
       }
@@ -138,13 +140,41 @@ export function ModuleWizard({
     );
   }
 
+  function addTrack() {
+    setTracks((rows) => [
+      ...rows,
+      {
+        track_name: "",
+        capacity_scale_feet: "",
+        notes: "",
+      },
+    ]);
+  }
+  function updateTrack(index: number, patch: Partial<TrackInput>) {
+    setTracks((rows) =>
+      rows.map((row, i) => (i === index ? { ...row, ...patch } : row)),
+    );
+  }
+  function removeTrack(index: number) {
+    setTracks((rows) => rows.filter((_, i) => i !== index));
+    setIndustries((rows) =>
+      rows.map((row) => {
+        if (row.track_index === "") return row;
+        const trackIndex = Number(row.track_index);
+        if (trackIndex === index) return { ...row, track_index: "" };
+        if (trackIndex > index) return { ...row, track_index: String(trackIndex - 1) };
+        return row;
+      }),
+    );
+  }
+
   function addIndustry() {
     setIndustries((rows) => [
       ...rows,
       {
         industry_name: "",
         industry_type: "",
-        spur_capacity_scale_feet: "",
+        track_index: "",
         notes: "",
         car_type_values: [],
       },
@@ -204,9 +234,18 @@ export function ModuleWizard({
         />
       )}
       {step === 3 && (
+        <TracksStep
+          tracks={tracks}
+          onAdd={addTrack}
+          onUpdate={updateTrack}
+          onRemove={removeTrack}
+        />
+      )}
+      {step === 4 && (
         <IndustriesStep
           industries={industries}
           industryTypes={industryTypes}
+          tracks={tracks}
           carTypes={carTypes}
           setCarTypes={setCarTypes}
           onAdd={addIndustry}
@@ -215,7 +254,7 @@ export function ModuleWizard({
           onToggleCarType={toggleCarType}
         />
       )}
-      {step === 4 && (
+      {step === 5 && (
         <div className="rounded-lg border border-dashed border-gray-300 bg-white p-6 text-sm text-gray-600">
           You can add photos once the module is created — finish here and
           you&apos;ll land on the module page, where you can upload images.
@@ -231,7 +270,7 @@ export function ModuleWizard({
         >
           Back
         </button>
-        {step < 4 ? (
+        {step < 5 ? (
           <button
             type="button"
             onClick={goNext}
@@ -519,9 +558,87 @@ function EndplatesStep({
   );
 }
 
+function TracksStep({
+  tracks,
+  onAdd,
+  onUpdate,
+  onRemove,
+}: {
+  tracks: TrackInput[];
+  onAdd: () => void;
+  onUpdate: (index: number, patch: Partial<TrackInput>) => void;
+  onRemove: (index: number) => void;
+}) {
+  return (
+    <div className="space-y-4">
+      <p className="text-sm text-gray-600">
+        Add a row for each spur or siding on this module. The label (TRK-1,
+        TRK-2, …) is assigned automatically. Industries served directly off
+        the mainline don&apos;t need a track here.
+      </p>
+      {tracks.map((track, index) => (
+        <div key={index} className="rounded-lg border border-gray-200 bg-white p-4">
+          <div className="mb-3 flex items-center justify-between">
+            <span className="text-sm font-semibold text-gray-900">
+              Track {index + 1} (TRK-{index + 1})
+            </span>
+            <button
+              type="button"
+              onClick={() => onRemove(index)}
+              className="text-xs font-medium text-red-600 hover:underline"
+            >
+              Remove
+            </button>
+          </div>
+          <div className="grid grid-cols-2 gap-4">
+            <label className={labelClass}>
+              Track name (optional)
+              <input
+                className={inputClass}
+                value={track.track_name}
+                onChange={(e) => onUpdate(index, { track_name: e.target.value })}
+                maxLength={120}
+                placeholder="e.g. House Track"
+              />
+            </label>
+            <label className={labelClass}>
+              Capacity (scale feet)
+              <input
+                className={inputClass}
+                type="number"
+                min="1"
+                value={track.capacity_scale_feet}
+                onChange={(e) => onUpdate(index, { capacity_scale_feet: e.target.value })}
+                required
+              />
+            </label>
+          </div>
+          <label className={`${labelClass} mt-4 block`}>
+            Notes
+            <input
+              className={inputClass}
+              value={track.notes}
+              onChange={(e) => onUpdate(index, { notes: e.target.value })}
+              maxLength={500}
+            />
+          </label>
+        </div>
+      ))}
+      <button
+        type="button"
+        onClick={onAdd}
+        className="rounded-md border border-dashed border-gray-300 px-4 py-2 text-sm font-medium text-gray-600 hover:bg-gray-50"
+      >
+        + Add track
+      </button>
+    </div>
+  );
+}
+
 function IndustriesStep({
   industries,
   industryTypes,
+  tracks,
   carTypes,
   setCarTypes,
   onAdd,
@@ -531,6 +648,7 @@ function IndustriesStep({
 }: {
   industries: IndustryInput[];
   industryTypes: ReferenceOption[];
+  tracks: TrackInput[];
   carTypes: ReferenceOption[];
   setCarTypes: React.Dispatch<React.SetStateAction<ReferenceOption[]>>;
   onAdd: () => void;
@@ -590,17 +708,20 @@ function IndustriesStep({
           </div>
           <div className="mt-4 grid grid-cols-2 gap-4">
             <label className={labelClass}>
-              Spur capacity (scale feet)
-              <input
+              Track
+              <select
                 className={inputClass}
-                type="number"
-                min="1"
-                value={industry.spur_capacity_scale_feet}
-                onChange={(e) =>
-                  onUpdate(index, { spur_capacity_scale_feet: e.target.value })
-                }
-                required
-              />
+                value={industry.track_index}
+                onChange={(e) => onUpdate(index, { track_index: e.target.value })}
+              >
+                <option value="">Mainline (no spur)</option>
+                {tracks.map((track, trackIndex) => (
+                  <option key={trackIndex} value={String(trackIndex)}>
+                    TRK-{trackIndex + 1}
+                    {track.track_name ? ` — ${track.track_name}` : ""}
+                  </option>
+                ))}
+              </select>
             </label>
             <label className={labelClass}>
               Notes

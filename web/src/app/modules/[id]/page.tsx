@@ -13,14 +13,17 @@ import {
 import {
   addEndplate,
   addIndustry,
+  addTrack,
   deleteEndplate,
   deleteImage,
   deleteIndustry,
   deleteModule,
+  deleteTrack,
   setIndustryCarTypes,
   updateEndplate,
   updateIndustry,
   updateModuleStatus,
+  updateTrack,
   uploadImage,
 } from "./actions";
 
@@ -37,10 +40,13 @@ const TRACK_CONFIG_OPTIONS = [
 
 export default async function ModuleDetailPage({
   params,
+  searchParams,
 }: {
   params: Promise<{ id: string }>;
+  searchParams: Promise<{ error?: string }>;
 }) {
   const { id } = await params;
+  const { error } = await searchParams;
   const moduleId = Number(id);
   if (!Number.isInteger(moduleId)) notFound();
 
@@ -63,6 +69,7 @@ export default async function ModuleDetailPage({
 
   const [
     { data: endplates },
+    { data: tracks },
     { data: industries },
     { data: images },
     { data: industryTypes },
@@ -74,9 +81,14 @@ export default async function ModuleDetailPage({
       .eq("module_id", moduleId)
       .order("endplate_number"),
     supabase
+      .from("module_tracks")
+      .select("id, track_number, label, track_name, capacity_scale_feet, notes")
+      .eq("module_id", moduleId)
+      .order("track_number"),
+    supabase
       .from("freemon_industries")
       .select(
-        "id, industry_number, label, industry_name, industry_type, spur_capacity_scale_feet, notes, freemon_industry_car_types(id, car_type_id, rail_car_types(value, display_label))",
+        "id, industry_number, label, industry_name, industry_type, track_id, notes, freemon_industry_car_types(id, car_type_id, rail_car_types(value, display_label))",
       )
       .eq("module_id", moduleId)
       .order("industry_number"),
@@ -92,6 +104,15 @@ export default async function ModuleDetailPage({
       .eq("status", "active")
       .order("display_label"),
   ]);
+
+  const trackFieldOptions = [
+    { value: "", label: "Mainline (no spur)" },
+    ...(tracks ?? []).map((t) => ({
+      value: String(t.id),
+      label: t.track_name ? `${t.label} — ${t.track_name}` : t.label,
+    })),
+  ];
+  const trackLabelById = new Map((tracks ?? []).map((t) => [t.id, t.label]));
 
   const carTypeFieldOptions = (carTypeOptions ?? []).map((ct) => ({
     value: String(ct.id),
@@ -112,6 +133,9 @@ export default async function ModuleDetailPage({
       <Link href="/modules" className="text-sm text-blue-600 hover:underline">
         ← Back to my modules
       </Link>
+      {error && (
+        <p className="mt-2 rounded-md bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>
+      )}
       <div className="mt-2 flex items-start justify-between gap-4">
         <div>
           <p className="text-sm text-gray-500">{module.record_number}</p>
@@ -234,6 +258,55 @@ export default async function ModuleDetailPage({
         )}
       </Section>
 
+      {/* ---- Tracks ------------------------------------------------------ */}
+      <Section title="Tracks">
+        <ul className="space-y-3">
+          {(tracks ?? []).map((track) => (
+            <li key={track.id} className="rounded-lg border border-gray-200 bg-white p-4">
+              {isOwner ? (
+                <form action={updateTrack.bind(null, track.id, module.id)} className="space-y-3">
+                  <div className="flex items-center justify-between">
+                    <span className="text-sm font-semibold text-gray-900">{track.label}</span>
+                    <button
+                      formAction={deleteTrack.bind(null, track.id, module.id)}
+                      className="text-xs font-medium text-red-600 hover:underline"
+                    >
+                      Delete
+                    </button>
+                  </div>
+                  <div className="grid grid-cols-2 gap-4 sm:grid-cols-3">
+                    <TextField label="Track name" name="track_name" defaultValue={track.track_name ?? ""} required={false} maxLength={120} />
+                    <NumberField label="Capacity (scale ft)" name="capacity_scale_feet" defaultValue={track.capacity_scale_feet ?? undefined} />
+                    <TextField label="Notes" name="notes" defaultValue={track.notes ?? ""} required={false} />
+                  </div>
+                  <SubmitButton label="Save" variant="secondary" />
+                </form>
+              ) : (
+                <div className="flex items-center justify-between text-sm">
+                  <span className="font-medium text-gray-900">
+                    {track.label}
+                    {track.track_name ? ` — ${track.track_name}` : ""}
+                  </span>
+                  <span className="text-gray-600">capacity {track.capacity_scale_feet} scale ft</span>
+                </div>
+              )}
+            </li>
+          ))}
+        </ul>
+
+        {isOwner && (
+          <form action={addTrack.bind(null, module.id)} className="mt-4 rounded-lg border border-dashed border-gray-300 p-4">
+            <p className="mb-3 text-sm font-medium text-gray-700">Add track</p>
+            <div className="grid grid-cols-2 gap-4 sm:grid-cols-3">
+              <TextField label="Track name" name="track_name" required={false} maxLength={120} placeholder="e.g. House Track" />
+              <NumberField label="Capacity (scale ft)" name="capacity_scale_feet" />
+              <TextField label="Notes" name="notes" required={false} />
+            </div>
+            <SubmitButton label="Add track" />
+          </form>
+        )}
+      </Section>
+
       {/* ---- Industries ------------------------------------------------ */}
       <Section title="Industries">
         <ul className="space-y-4">
@@ -265,7 +338,13 @@ export default async function ModuleDetailPage({
                         />
                       </div>
                       <div className="grid grid-cols-2 gap-4">
-                        <NumberField label="Spur capacity (scale ft)" name="spur_capacity_scale_feet" defaultValue={industry.spur_capacity_scale_feet} />
+                        <SelectField
+                          label="Track"
+                          name="track_id"
+                          defaultValue={industry.track_id != null ? String(industry.track_id) : ""}
+                          required={false}
+                          options={trackFieldOptions}
+                        />
                         <TextField label="Notes" name="notes" defaultValue={industry.notes ?? ""} required={false} />
                       </div>
                       <SubmitButton label="Save" variant="secondary" />
@@ -301,7 +380,10 @@ export default async function ModuleDetailPage({
                       {industry.label} — {industry.industry_name}
                     </p>
                     <p className="mt-1 text-xs text-gray-600">
-                      {industry.industry_type} · spur capacity {industry.spur_capacity_scale_feet} scale ft
+                      {industry.industry_type} ·{" "}
+                      {industry.track_id != null
+                        ? trackLabelById.get(industry.track_id) ?? "Mainline"
+                        : "Mainline"}
                     </p>
                     {(industry.freemon_industry_car_types?.length ?? 0) > 0 && (
                       <p className="mt-1 text-xs text-gray-600">
@@ -331,7 +413,7 @@ export default async function ModuleDetailPage({
                 options={(industryTypes ?? []).map((t) => ({ value: t.value, label: t.display_label }))}
               />
             </div>
-            <NumberField label="Spur capacity (scale ft)" name="spur_capacity_scale_feet" />
+            <SelectField label="Track" name="track_id" required={false} options={trackFieldOptions} />
             <TextField label="Notes" name="notes" required={false} />
             <SubmitButton label="Add industry" />
           </form>

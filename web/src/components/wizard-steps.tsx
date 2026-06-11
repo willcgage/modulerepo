@@ -1,4 +1,4 @@
-const STEP_LABELS = ["Basics", "Endplates", "Industries", "Images"];
+const STEP_LABELS = ["Basics", "Endplates", "Tracks", "Industries", "Images"];
 
 export function WizardSteps({ current }: { current: number }) {
   return (

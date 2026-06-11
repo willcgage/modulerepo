@@ -25,10 +25,16 @@ export type EndplateInput = {
   notes: string;
 };
 
+export type TrackInput = {
+  track_name: string;
+  capacity_scale_feet: string;
+  notes: string;
+};
+
 export type IndustryInput = {
   industry_name: string;
   industry_type: string;
-  spur_capacity_scale_feet: string;
+  track_index: string; // "" = mainline (no spur), otherwise index into tracks[]
   notes: string;
   car_type_values: string[];
 };
@@ -56,6 +62,7 @@ function toNullableNumber(value: string): number | null {
 export async function createModule(
   basics: BasicsInput,
   endplates: EndplateInput[],
+  tracks: TrackInput[],
   industries: IndustryInput[],
 ): Promise<{ error: string } | void> {
   const supabase = await createClient();
@@ -116,14 +123,41 @@ export async function createModule(
     }
   }
 
+  let trackIds: number[] = [];
+  if (tracks.length > 0) {
+    const { data: createdTracks, error: tracksError } = await supabase
+      .from("module_tracks")
+      .insert(
+        tracks.map((track) => ({
+          module_id: moduleId,
+          track_name: track.track_name.trim() || null,
+          capacity_scale_feet: Number(track.capacity_scale_feet),
+          notes: track.notes.trim() || null,
+        })),
+      )
+      .select("id");
+
+    if (tracksError || !createdTracks) {
+      redirect(
+        `/modules/${moduleId}/edit?warning=${encodeURIComponent(
+          `Module created, but tracks could not be saved: ${tracksError?.message ?? "unknown error"}. Add them here.`,
+        )}`,
+      );
+    }
+
+    trackIds = createdTracks.map((t) => t.id);
+  }
+
   for (const industry of industries) {
+    const trackId = industry.track_index === "" ? null : trackIds[Number(industry.track_index)] ?? null;
+
     const { data: createdIndustry, error: industryError } = await supabase
       .from("freemon_industries")
       .insert({
         module_id: moduleId,
         industry_name: industry.industry_name.trim(),
         industry_type: industry.industry_type,
-        spur_capacity_scale_feet: Number(industry.spur_capacity_scale_feet),
+        track_id: trackId,
         notes: industry.notes.trim() || null,
       })
       .select("id")

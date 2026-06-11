@@ -99,6 +99,47 @@ export async function deleteEndplate(endplateId: number, moduleId: number) {
   revalidatePath(path(moduleId));
 }
 
+// ---- Tracks ---------------------------------------------------------------
+
+export async function addTrack(moduleId: number, formData: FormData) {
+  const supabase = await createClient();
+  await requireOwnedModule(supabase, moduleId);
+
+  await supabase.from("module_tracks").insert({
+    module_id: moduleId,
+    track_name: (formData.get("track_name") ?? "").toString().trim() || null,
+    capacity_scale_feet: toNullableNumber(formData.get("capacity_scale_feet")),
+    notes: (formData.get("notes") ?? "").toString().trim() || null,
+  });
+  revalidatePath(path(moduleId));
+}
+
+export async function updateTrack(trackId: number, moduleId: number, formData: FormData) {
+  const supabase = await createClient();
+  await requireOwnedModule(supabase, moduleId);
+
+  await supabase
+    .from("module_tracks")
+    .update({
+      track_name: (formData.get("track_name") ?? "").toString().trim() || null,
+      capacity_scale_feet: toNullableNumber(formData.get("capacity_scale_feet")),
+      notes: (formData.get("notes") ?? "").toString().trim() || null,
+    })
+    .eq("id", trackId);
+  revalidatePath(path(moduleId));
+}
+
+export async function deleteTrack(trackId: number, moduleId: number) {
+  const supabase = await createClient();
+  await requireOwnedModule(supabase, moduleId);
+
+  const { error } = await supabase.from("module_tracks").delete().eq("id", trackId);
+  if (error) {
+    redirect(`${path(moduleId)}?error=${encodeURIComponent(error.message)}`);
+  }
+  revalidatePath(path(moduleId));
+}
+
 // ---- Industries ----------------------------------------------------------
 
 export async function addIndustry(moduleId: number, formData: FormData) {
@@ -109,7 +150,7 @@ export async function addIndustry(moduleId: number, formData: FormData) {
     module_id: moduleId,
     industry_name: (formData.get("industry_name") ?? "").toString().trim(),
     industry_type: (formData.get("industry_type") ?? "").toString(),
-    spur_capacity_scale_feet: toNullableNumber(formData.get("spur_capacity_scale_feet")),
+    track_id: toNullableNumber(formData.get("track_id")),
     notes: (formData.get("notes") ?? "").toString().trim() || null,
   });
   revalidatePath(path(moduleId));
@@ -124,7 +165,7 @@ export async function updateIndustry(industryId: number, moduleId: number, formD
     .update({
       industry_name: (formData.get("industry_name") ?? "").toString().trim(),
       industry_type: (formData.get("industry_type") ?? "").toString(),
-      spur_capacity_scale_feet: toNullableNumber(formData.get("spur_capacity_scale_feet")),
+      track_id: toNullableNumber(formData.get("track_id")),
       notes: (formData.get("notes") ?? "").toString().trim() || null,
     })
     .eq("id", industryId);
