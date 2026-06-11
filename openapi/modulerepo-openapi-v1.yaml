@@ -73,7 +73,7 @@ paths:
                   length_inches: 0
                   endplate_count: 2
                   has_mss: true
-                  mss_block_count: 2
+                  mss_type: "crossover"
                   status: "active"
                   updated_at: "2026-06-06T18:30:00Z"
                   endplates:
@@ -395,9 +395,11 @@ components:
           type: integer
         has_mss:
           type: boolean
-        mss_block_count:
-          type: integer
+        mss_type:
+          type: string
+          enum: [crossover, cascade]
           nullable: true
+          description: Role of this module within the Modular Signal System, when has_mss is true. Null if not applicable or not specified.
         status:
           type: string
           enum: [active, inactive, archived]

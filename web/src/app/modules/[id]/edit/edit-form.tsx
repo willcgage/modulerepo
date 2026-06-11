@@ -174,11 +174,26 @@ export function EditModuleForm({
           checked={values.has_mss}
           onChange={(e) => {
             set("has_mss", e.target.checked);
-            if (!e.target.checked) set("mss_block_count", "");
+            if (!e.target.checked) set("mss_type", "");
           }}
         />
         Has a Modular Signal System (MSS)
       </label>
+
+      {values.has_mss && (
+        <label className={`${labelClass} mb-4 block`}>
+          MSS module type
+          <select
+            className={inputClass}
+            value={values.mss_type}
+            onChange={(e) => set("mss_type", e.target.value)}
+          >
+            <option value="">Select a type… (optional)</option>
+            <option value="crossover">Crossover</option>
+            <option value="cascade">Cascade (signal)</option>
+          </select>
+        </label>
+      )}
 
       <div className="mt-6 flex items-center gap-3">
         <button

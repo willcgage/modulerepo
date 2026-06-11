@@ -60,7 +60,7 @@ Deno.serve(async (req) => {
         length_inches,
         endplate_count,
         has_mss,
-        mss_block_count,
+        mss_type,
         status,
         updated_at,
         freemon_endplates (
@@ -123,7 +123,7 @@ Deno.serve(async (req) => {
       length_inches: m.length_inches,
       endplate_count: m.endplate_count,
       has_mss: m.has_mss,
-      mss_block_count: m.mss_block_count,
+      mss_type: m.mss_type,
       status: m.status,
       updated_at: m.updated_at,
       endplates: (m.freemon_endplates ?? []).map((ep: any) => ({

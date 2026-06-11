@@ -59,7 +59,7 @@ export default async function ModuleDetailPage({
   const { data: module } = await supabase
     .from("freemon_modules")
     .select(
-      "id, record_number, module_name, description, category, geometry_type, geometry_degrees, geometry_offset_inches, length_feet, length_inches, endplate_count, has_mss, mss_block_count, status, owner_id, updated_at",
+      "id, record_number, module_name, description, category, geometry_type, geometry_degrees, geometry_offset_inches, length_feet, length_inches, endplate_count, has_mss, mss_type, status, owner_id, updated_at",
     )
     .eq("id", moduleId)
     .maybeSingle();
@@ -199,7 +199,18 @@ export default async function ModuleDetailPage({
         {module.geometry_offset_inches != null && (
           <Fact label="Offset (in)" value={String(module.geometry_offset_inches)} />
         )}
-        <Fact label="MSS" value={module.has_mss ? "Yes" : "No"} />
+        <Fact
+          label="MSS"
+          value={
+            module.has_mss
+              ? module.mss_type === "crossover"
+                ? "Yes (Crossover)"
+                : module.mss_type === "cascade"
+                  ? "Yes (Cascade — signal)"
+                  : "Yes"
+              : "No"
+          }
+        />
       </dl>
 
       {/* ---- Endplates ------------------------------------------------- */}

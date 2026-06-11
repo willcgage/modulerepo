@@ -35,7 +35,7 @@ const EMPTY_BASICS: BasicsInput = {
   length_feet: "",
   length_inches: "",
   has_mss: false,
-  mss_block_count: "",
+  mss_type: "",
 };
 
 export function ModuleWizard({
@@ -459,11 +459,26 @@ function BasicsStep({
           checked={basics.has_mss}
           onChange={(e) => {
             set("has_mss", e.target.checked);
-            if (!e.target.checked) set("mss_block_count", "");
+            if (!e.target.checked) set("mss_type", "");
           }}
         />
         Has a Modular Signal System (MSS)
       </label>
+
+      {basics.has_mss && (
+        <label className={`${labelClass} mb-4 block`}>
+          MSS module type
+          <select
+            className={inputClass}
+            value={basics.mss_type}
+            onChange={(e) => set("mss_type", e.target.value)}
+          >
+            <option value="">Select a type… (optional)</option>
+            <option value="crossover">Crossover</option>
+            <option value="cascade">Cascade (signal)</option>
+          </select>
+        </label>
+      )}
     </div>
   );
 }

@@ -14,7 +14,7 @@ export type BasicsInput = {
   length_feet: string;
   length_inches: string;
   has_mss: boolean;
-  mss_block_count: string;
+  mss_type: string; // "" | "crossover" | "cascade" — only meaningful when has_mss
 };
 
 export type EndplateInput = {
@@ -87,9 +87,7 @@ export async function createModule(
       length_feet: Number(basics.length_feet),
       length_inches: Number(basics.length_inches),
       has_mss: basics.has_mss,
-      mss_block_count: basics.has_mss
-        ? toNullableNumber(basics.mss_block_count)
-        : null,
+      mss_type: basics.has_mss ? basics.mss_type.trim() || null : null,
     })
     .select("id")
     .single();

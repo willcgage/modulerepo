@@ -22,7 +22,7 @@ export default async function EditModulePage({
   const { data: module } = await supabase
     .from("freemon_modules")
     .select(
-      "id, owner_id, module_name, description, category, geometry_type, geometry_degrees, geometry_offset_inches, length_feet, length_inches, has_mss, mss_block_count",
+      "id, owner_id, module_name, description, category, geometry_type, geometry_degrees, geometry_offset_inches, length_feet, length_inches, has_mss, mss_type",
     )
     .eq("id", moduleId)
     .maybeSingle();
@@ -49,7 +49,7 @@ export default async function EditModulePage({
     length_feet: String(module.length_feet),
     length_inches: String(module.length_inches),
     has_mss: module.has_mss,
-    mss_block_count: module.mss_block_count != null ? String(module.mss_block_count) : "",
+    mss_type: module.mss_type ?? "",
   };
 
   return (

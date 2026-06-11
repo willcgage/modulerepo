@@ -15,7 +15,7 @@ export type BasicsUpdate = {
   length_feet: string;
   length_inches: string;
   has_mss: boolean;
-  mss_block_count: string;
+  mss_type: string; // "" | "crossover" | "cascade" — only meaningful when has_mss
 };
 
 function toNullableNumber(value: string): number | null {
@@ -65,7 +65,7 @@ export async function updateModuleBasics(
       length_feet: Number(input.length_feet),
       length_inches: Number(input.length_inches),
       has_mss: input.has_mss,
-      mss_block_count: input.has_mss ? toNullableNumber(input.mss_block_count) : null,
+      mss_type: input.has_mss ? input.mss_type.trim() || null : null,
     })
     .eq("id", moduleId);
 
