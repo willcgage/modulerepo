@@ -12,11 +12,14 @@
   --font-mono: var(--font-geist-mono);
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+/*
+ * The UI is styled for a light theme only (no `dark:` variants in use).
+ * Force light rendering regardless of OS/browser preference so native
+ * form controls and the page background don't switch to dark and clash
+ * with the light Tailwind classes used throughout.
+ */
+:root {
+  color-scheme: light;
 }
 
 body {
