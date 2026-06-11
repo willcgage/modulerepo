@@ -18,7 +18,10 @@ Repository. See `github.com/willcgage/modulerepo`.
 │       └── modules-validate-name/   POST /api/v1/modules/validate-name
 ├── web/                         # Owner portal — Next.js + Tailwind frontend
 │   ├── src/app/                     # Pages: /, /login, /register, /dashboard,
-│   │                                #   /forgot-password, /reset-password
+│   │                                #   /forgot-password, /reset-password, /profile,
+│   │                                #   /modules, /modules/new, /modules/[id],
+│   │                                #   /modules/[id]/edit, /admin (users, grants,
+│   │                                #   audit-log, car-types, lookups)
 │   └── src/lib/supabase/            # Browser/server Supabase clients + session proxy
 ├── openapi/
 │   └── modulerepo-openapi-v1.yaml   # REST contract for Free Dispatcher
@@ -83,8 +86,12 @@ and run `supabase db push` against the linked project when ready.
 
 ## Frontend (Owner Portal)
 
-`web/` is a Next.js + Tailwind app providing email/password auth — registration,
-login, logout, and password reset — backed directly by Supabase Auth.
+`web/` is a Next.js + Tailwind app providing email/password auth (registration,
+login, logout, password reset) backed directly by Supabase Auth, an owner
+portal for managing modules (`/modules`, including a multi-step add/edit
+wizard with images), a profile page (`/profile`), and an admin GUI
+(`/admin`) for car-type suggestion review, lookup management, show master
+grants, user management, and the audit log.
 
 ```bash
 cd web
