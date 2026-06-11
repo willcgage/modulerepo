@@ -23,7 +23,10 @@ export default async function ModulesPage() {
 
   return (
     <div className="mx-auto max-w-4xl px-4 py-12">
-      <div className="flex items-center justify-between">
+      <Link href="/dashboard" className="text-sm text-blue-600 hover:underline">
+        ← Back to dashboard
+      </Link>
+      <div className="mt-2 flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-semibold text-gray-900">My modules</h1>
           <p className="mt-1 text-sm text-gray-600">

@@ -19,7 +19,7 @@ export default async function ProfilePage({
 
   const { data: profile } = await supabase
     .from("owner_profiles")
-    .select("display_name, contact_email, location, role")
+    .select("display_name, contact_email, phone, location, role")
     .eq("id", user.id)
     .single();
 
@@ -43,6 +43,14 @@ export default async function ProfilePage({
             type="email"
             defaultValue={profile?.contact_email ?? ""}
             required={false}
+          />
+          <TextField
+            label="Phone"
+            name="phone"
+            type="tel"
+            defaultValue={profile?.phone ?? ""}
+            required={false}
+            placeholder="(555) 555-5555"
           />
           <TextField
             label="Location"

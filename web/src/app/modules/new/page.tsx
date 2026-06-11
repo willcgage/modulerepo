@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { fetchCarTypes, fetchIndustryTypes } from "@/lib/edge";
@@ -29,7 +30,10 @@ export default async function NewModulePage() {
 
   return (
     <div className="mx-auto max-w-3xl px-4 py-12">
-      <h1 className="text-2xl font-semibold text-gray-900">New module</h1>
+      <Link href="/modules" className="text-sm text-blue-600 hover:underline">
+        ← Back to my modules
+      </Link>
+      <h1 className="mt-2 text-2xl font-semibold text-gray-900">New module</h1>
       <p className="mt-1 text-sm text-gray-600">
         Walk through the steps below to register a new Free-moN module.
       </p>

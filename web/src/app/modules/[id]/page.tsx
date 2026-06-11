@@ -109,7 +109,10 @@ export default async function ModuleDetailPage({
 
   return (
     <div className="mx-auto max-w-3xl px-4 py-12">
-      <div className="flex items-start justify-between gap-4">
+      <Link href="/modules" className="text-sm text-blue-600 hover:underline">
+        ← Back to my modules
+      </Link>
+      <div className="mt-2 flex items-start justify-between gap-4">
         <div>
           <p className="text-sm text-gray-500">{module.record_number}</p>
           <h1 className="text-2xl font-semibold text-gray-900">{module.module_name}</h1>

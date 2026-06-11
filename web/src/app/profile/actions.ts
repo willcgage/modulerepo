@@ -13,6 +13,7 @@ export async function updateProfile(formData: FormData) {
 
   const displayName = (formData.get("display_name") ?? "").toString().trim();
   const contactEmail = (formData.get("contact_email") ?? "").toString().trim();
+  const phone = (formData.get("phone") ?? "").toString().trim();
   const location = (formData.get("location") ?? "").toString().trim();
 
   if (!displayName) {
@@ -24,6 +25,7 @@ export async function updateProfile(formData: FormData) {
     .update({
       display_name: displayName,
       contact_email: contactEmail || null,
+      phone: phone || null,
       location: location || null,
     })
     .eq("id", user.id);
