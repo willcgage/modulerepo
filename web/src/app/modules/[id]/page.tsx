@@ -18,6 +18,7 @@ import {
   deleteImage,
   deleteIndustry,
   deleteModule,
+  deleteSchematic,
   deleteTrack,
   setIndustryCarTypes,
   updateEndplate,
@@ -25,6 +26,7 @@ import {
   updateModuleStatus,
   updateTrack,
   uploadImage,
+  uploadSchematic,
 } from "./actions";
 
 const STATUS_OPTIONS = [
@@ -37,6 +39,19 @@ const TRACK_CONFIG_OPTIONS = [
   { value: "single", label: "Single" },
   { value: "double", label: "Double" },
 ];
+
+const SCHEMATIC_FORMAT_LABELS: Record<string, string> = {
+  dwg: "AutoCAD (DWG)",
+  dxf: "DXF",
+  anyrail: "AnyRail",
+  scarm: "SCARM",
+  xtrackcad: "XTrackCAD",
+  templot: "Templot",
+  railmodeller: "RailModeller",
+  thirdplanit: "3rd PlanIt",
+  pdf: "PDF",
+  other: "Other",
+};
 
 export default async function ModuleDetailPage({
   params,
@@ -72,6 +87,7 @@ export default async function ModuleDetailPage({
     { data: tracks },
     { data: industries },
     { data: images },
+    { data: schematics },
     { data: industryTypes },
     { data: carTypeOptions },
   ] = await Promise.all([
@@ -95,6 +111,11 @@ export default async function ModuleDetailPage({
     supabase
       .from("module_images")
       .select("id, storage_path, caption, display_order")
+      .eq("module_id", moduleId)
+      .order("display_order"),
+    supabase
+      .from("module_schematics")
+      .select("id, storage_path, file_name, file_format, caption, display_order")
       .eq("module_id", moduleId)
       .order("display_order"),
     supabase.from("industry_types").select("value, display_label").order("display_label"),
@@ -125,6 +146,15 @@ export default async function ModuleDetailPage({
         .from("module-images")
         .createSignedUrl(image.storage_path, 3600);
       return { ...image, url: signed?.signedUrl ?? null };
+    }),
+  );
+
+  const schematicsWithUrls = await Promise.all(
+    (schematics ?? []).map(async (schematic) => {
+      const { data: signed } = await supabase.storage
+        .from("module-schematics")
+        .createSignedUrl(schematic.storage_path, 3600);
+      return { ...schematic, url: signed?.signedUrl ?? null };
     }),
   );
 
@@ -474,6 +504,66 @@ export default async function ModuleDetailPage({
               required
               className="block w-full text-sm text-gray-700 file:mr-3 file:rounded-md file:border-0 file:bg-blue-50 file:px-3 file:py-2 file:text-sm file:font-medium file:text-blue-700 hover:file:bg-blue-100"
             />
+            <div className="mt-3">
+              <TextField label="Caption" name="caption" required={false} />
+            </div>
+            <SubmitButton label="Upload" />
+          </form>
+        )}
+      </Section>
+
+      {/* ---- Schematics (CAD drawings) ---------------------------------- */}
+      <Section title="Schematics & CAD drawings">
+        {schematicsWithUrls.length > 0 && (
+          <ul className="mb-4 divide-y divide-gray-200 rounded-lg border border-gray-200 bg-white">
+            {schematicsWithUrls.map((schematic) => (
+              <li key={schematic.id} className="flex items-center justify-between gap-3 p-3 text-sm">
+                <div className="min-w-0">
+                  {schematic.url ? (
+                    <a
+                      href={schematic.url}
+                      download={schematic.file_name}
+                      className="truncate font-medium text-blue-600 hover:underline"
+                    >
+                      {schematic.file_name}
+                    </a>
+                  ) : (
+                    <span className="truncate text-gray-400">{schematic.file_name} (unavailable)</span>
+                  )}
+                  <p className="text-xs text-gray-500">
+                    {SCHEMATIC_FORMAT_LABELS[schematic.file_format] ?? schematic.file_format}
+                    {schematic.caption ? ` · ${schematic.caption}` : ""}
+                  </p>
+                </div>
+                {isOwner && (
+                  <form action={deleteSchematic.bind(null, schematic.id, module.id, schematic.storage_path)}>
+                    <button type="submit" className="shrink-0 text-xs font-medium text-red-600 hover:underline">
+                      Delete
+                    </button>
+                  </form>
+                )}
+              </li>
+            ))}
+          </ul>
+        )}
+
+        {isOwner && (
+          <form
+            action={uploadSchematic.bind(null, module.id)}
+            encType="multipart/form-data"
+            className="rounded-lg border border-dashed border-gray-300 p-4"
+          >
+            <p className="mb-3 text-sm font-medium text-gray-700">Upload schematic</p>
+            <input
+              type="file"
+              name="file"
+              accept=".dwg,.dxf,.any,.scarm,.xtc,.trk,.box,.rmz,.3pi,.pdf"
+              required
+              className="block w-full text-sm text-gray-700 file:mr-3 file:rounded-md file:border-0 file:bg-blue-50 file:px-3 file:py-2 file:text-sm file:font-medium file:text-blue-700 hover:file:bg-blue-100"
+            />
+            <p className="mt-2 text-xs text-gray-500">
+              DWG, DXF, AnyRail, SCARM, XTrackCAD, Templot, RailModeller, 3rd PlanIt, or PDF.
+            </p>
             <div className="mt-3">
               <TextField label="Caption" name="caption" required={false} />
             </div>

@@ -15,7 +15,7 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
-const SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+const ANON_KEY = Deno.env.get("SUPABASE_ANON_KEY")!;
 
 Deno.serve(async (req) => {
   if (req.method !== "GET") {
@@ -28,17 +28,22 @@ Deno.serve(async (req) => {
     const category = url.searchParams.get("category");
     const updatedSince = url.searchParams.get("updated_since");
 
-    // Forward the caller's JWT so RLS applies as that user would see it.
-    // Falls back to anon-level access if no Authorization header is present.
+    // Base the client on the anon key so RLS is always enforced. When the
+    // caller supplies a real user JWT (3-part token), forward it so RLS
+    // applies as that user (e.g. an admin can request inactive modules).
+    // A non-JWT credential — such as a `sb_publishable_…` key — is ignored
+    // for auth purposes and the request runs at anon level.
     const authHeader = req.headers.get("Authorization") ?? "";
-    const supabase = createClient(SUPABASE_URL, SERVICE_ROLE_KEY, {
-      global: { headers: { Authorization: authHeader } },
+    const token = authHeader.replace(/^Bearer\s+/i, "").trim();
+    const isJwt = token.split(".").length === 3;
+    const supabase = createClient(SUPABASE_URL, ANON_KEY, {
+      global: isJwt ? { headers: { Authorization: authHeader } } : {},
     });
 
     // Non-admins may only request status=active. We don't know the caller's
     // role here without a lookup, so we defer the real enforcement to RLS —
     // this guard just prevents an obviously-wrong request from an anon caller.
-    if (status !== "active" && !authHeader) {
+    if (status !== "active" && !isJwt) {
       return jsonResponse(
         { error: "forbidden", message: "Only active modules are visible without authentication." },
         403,
@@ -76,6 +81,13 @@ Deno.serve(async (req) => {
           track_name,
           capacity_scale_feet,
           notes
+        ),
+        module_schematics (
+          storage_path,
+          file_name,
+          file_format,
+          caption,
+          display_order
         ),
         freemon_industries (
           industry_number,
@@ -140,6 +152,14 @@ Deno.serve(async (req) => {
         capacity_scale_feet: t.capacity_scale_feet,
         notes: t.notes,
       })),
+      schematics: (m.module_schematics ?? [])
+        .sort((a: any, b: any) => a.display_order - b.display_order)
+        .map((s: any) => ({
+          storage_path: s.storage_path,
+          file_name: s.file_name,
+          file_format: s.file_format,
+          caption: s.caption,
+        })),
       industries: (m.freemon_industries ?? []).map((ind: any) => ({
         industry_number: ind.industry_number,
         label: ind.label,

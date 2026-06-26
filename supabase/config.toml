@@ -22,7 +22,7 @@ max_rows = 1000
 
 [db]
 port = 54322
-major_version = 15
+major_version = 17
 
 [studio]
 enabled = true
@@ -37,6 +37,9 @@ enabled = true
 file_size_limit = "50MiB"
 
 [storage.buckets.module-images]
+public = false
+
+[storage.buckets.module-schematics]
 public = false
 
 [auth]

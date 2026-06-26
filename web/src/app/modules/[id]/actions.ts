@@ -258,3 +258,79 @@ export async function deleteImage(imageId: number, moduleId: number, storagePath
   await supabase.storage.from("module-images").remove([storagePath]);
   revalidatePath(path(moduleId));
 }
+
+// ---- Schematics (CAD drawings) --------------------------------------------
+
+// Maps a filename extension to the file_format values allowed by the
+// module_schematics CHECK constraint. Unknown extensions fall back to "other".
+function schematicFormat(fileName: string): string {
+  const ext = fileName.split(".").pop()?.toLowerCase() ?? "";
+  switch (ext) {
+    case "dwg":
+      return "dwg";
+    case "dxf":
+      return "dxf";
+    case "any":
+      return "anyrail";
+    case "scarm":
+      return "scarm";
+    case "xtc":
+    case "trk":
+      return "xtrackcad";
+    case "box":
+      return "templot";
+    case "rmz":
+      return "railmodeller";
+    case "3pi":
+      return "thirdplanit";
+    case "pdf":
+      return "pdf";
+    default:
+      return "other";
+  }
+}
+
+export async function uploadSchematic(moduleId: number, formData: FormData) {
+  const supabase = await createClient();
+  await requireOwnedModule(supabase, moduleId);
+
+  const file = formData.get("file");
+  if (!(file instanceof File) || file.size === 0) {
+    return;
+  }
+
+  const caption = (formData.get("caption") ?? "").toString().trim() || null;
+  const storagePath = `${moduleId}/${randomUUID()}-${file.name}`;
+
+  const { error: uploadError } = await supabase.storage
+    .from("module-schematics")
+    .upload(storagePath, file, { contentType: file.type || undefined });
+
+  if (uploadError) {
+    return;
+  }
+
+  const { count } = await supabase
+    .from("module_schematics")
+    .select("id", { count: "exact", head: true })
+    .eq("module_id", moduleId);
+
+  await supabase.from("module_schematics").insert({
+    module_id: moduleId,
+    storage_path: storagePath,
+    file_name: file.name,
+    file_format: schematicFormat(file.name),
+    caption,
+    display_order: count ?? 0,
+  });
+  revalidatePath(path(moduleId));
+}
+
+export async function deleteSchematic(schematicId: number, moduleId: number, storagePath: string) {
+  const supabase = await createClient();
+  await requireOwnedModule(supabase, moduleId);
+
+  await supabase.from("module_schematics").delete().eq("id", schematicId);
+  await supabase.storage.from("module-schematics").remove([storagePath]);
+  revalidatePath(path(moduleId));
+}
