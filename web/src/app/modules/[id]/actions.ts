@@ -67,6 +67,7 @@ export async function addEndplate(moduleId: number, formData: FormData) {
   await supabase.from("freemon_endplates").insert({
     module_id: moduleId,
     endplate_number: (count ?? 0) + 1,
+    label: (formData.get("label") ?? "").toString().trim() || null,
     track_config: (formData.get("track_config") ?? "single").toString(),
     width_inches: toNullableNumber(formData.get("width_inches")),
     height_inches: toNullableNumber(formData.get("height_inches")),
@@ -79,9 +80,11 @@ export async function updateEndplate(endplateId: number, moduleId: number, formD
   const supabase = await createClient();
   await requireOwnedModule(supabase, moduleId);
 
+  const labelRaw = (formData.get("label") ?? "").toString().trim();
   await supabase
     .from("freemon_endplates")
     .update({
+      label: labelRaw || null,
       track_config: (formData.get("track_config") ?? "single").toString(),
       width_inches: toNullableNumber(formData.get("width_inches")),
       height_inches: toNullableNumber(formData.get("height_inches")),
@@ -226,14 +229,15 @@ export async function uploadImage(moduleId: number, formData: FormData) {
   }
 
   const caption = (formData.get("caption") ?? "").toString().trim() || null;
-  const storagePath = `${moduleId}/${randomUUID()}-${file.name}`;
+  const safeName = file.name.replace(/[^a-zA-Z0-9._-]/g, "_");
+  const storagePath = `${moduleId}/${randomUUID()}-${safeName}`;
 
   const { error: uploadError } = await supabase.storage
     .from("module-images")
-    .upload(storagePath, file, { contentType: file.type || undefined });
+    .upload(storagePath, file, { contentType: file.type || "application/octet-stream" });
 
   if (uploadError) {
-    return;
+    redirect(`${path(moduleId)}?error=${encodeURIComponent(`Image upload failed: ${uploadError.message}`)}`);
   }
 
   const { count } = await supabase

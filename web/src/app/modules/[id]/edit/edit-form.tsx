@@ -142,30 +142,40 @@ export function EditModuleForm({
         </label>
       )}
 
-      <div className="mb-4 grid grid-cols-2 gap-4">
-        <label className={labelClass}>
-          Length (feet)
+      <div className="mb-1">
+        <label className={`${labelClass} mb-1 block`}>
+          Module footprint length (inches)
           <input
             className={inputClass}
             type="number"
-            min="0"
-            value={values.length_feet}
-            onChange={(e) => set("length_feet", e.target.value)}
+            min="0.001"
+            step="0.001"
+            value={values.length_total_inches}
+            onChange={(e) => set("length_total_inches", e.target.value)}
             required
           />
         </label>
-        <label className={labelClass}>
-          Length (inches, 0-11)
+        <p className="mb-4 text-xs text-gray-500">
+          The physical end-to-end length of the module itself.
+        </p>
+      </div>
+
+      <div className="mb-1">
+        <label className={`${labelClass} mb-1 block`}>
+          Mainline track length (inches) — optional
           <input
             className={inputClass}
             type="number"
-            min="0"
-            max="11"
-            value={values.length_inches}
-            onChange={(e) => set("length_inches", e.target.value)}
-            required
+            min="0.001"
+            step="0.001"
+            value={values.mainline_length_inches}
+            onChange={(e) => set("mainline_length_inches", e.target.value)}
           />
         </label>
+        <p className="mb-4 text-xs text-gray-500">
+          The length of the mainline track through this module. Leave blank if
+          it matches the footprint. Enter a different value for curves or wyes.
+        </p>
       </div>
 
       <label className="mb-4 flex items-center gap-2 text-sm font-medium text-gray-700">
@@ -178,7 +188,7 @@ export function EditModuleForm({
             if (!e.target.checked) set("mss_type", "");
           }}
         />
-        Has a Modular Signal System (MSS)
+        Supports Modular Signal System (MSS)
       </label>
 
       {values.has_mss && (

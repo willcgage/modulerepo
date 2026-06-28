@@ -11,14 +11,15 @@ export type BasicsInput = {
   geometry_type: string;
   geometry_degrees: string;
   geometry_offset_inches: string;
-  length_feet: string;
-  length_inches: string;
+  length_total_inches: string;
+  mainline_length_inches: string;
   has_mss: boolean;
   mss_type: string; // "" | "crossover" | "cascade" — only meaningful when has_mss
 };
 
 export type EndplateInput = {
   endplate_number: number;
+  label: string;
   track_config: string;
   width_inches: string;
   height_inches: string;
@@ -84,8 +85,8 @@ export async function createModule(
       geometry_type: basics.geometry_type,
       geometry_degrees: toNullableNumber(basics.geometry_degrees),
       geometry_offset_inches: toNullableNumber(basics.geometry_offset_inches),
-      length_feet: Number(basics.length_feet),
-      length_inches: Number(basics.length_inches),
+      length_total_inches: Number(basics.length_total_inches),
+      mainline_length_inches: toNullableNumber(basics.mainline_length_inches),
       has_mss: basics.has_mss,
       mss_type: basics.has_mss ? basics.mss_type.trim() || null : null,
     })
@@ -105,6 +106,7 @@ export async function createModule(
         endplates.map((ep) => ({
           module_id: moduleId,
           endplate_number: ep.endplate_number,
+          label: ep.label.trim() || null,
           track_config: ep.track_config,
           width_inches: toNullableNumber(ep.width_inches),
           height_inches: toNullableNumber(ep.height_inches),

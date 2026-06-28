@@ -74,7 +74,7 @@ export default async function ModuleDetailPage({
   const { data: module } = await supabase
     .from("freemon_modules")
     .select(
-      "id, record_number, module_name, description, category, geometry_type, geometry_degrees, geometry_offset_inches, length_feet, length_inches, endplate_count, has_mss, mss_type, status, owner_id, updated_at",
+      "id, record_number, module_name, description, category, geometry_type, geometry_degrees, geometry_offset_inches, length_total_inches, mainline_length_inches, endplate_count, has_mss, mss_type, status, owner_id, updated_at",
     )
     .eq("id", moduleId)
     .maybeSingle();
@@ -221,7 +221,10 @@ export default async function ModuleDetailPage({
       )}
 
       <dl className="mt-6 grid grid-cols-2 gap-x-4 gap-y-2 rounded-lg border border-gray-200 bg-white p-4 text-sm sm:grid-cols-3">
-        <Fact label="Length" value={`${module.length_feet}' ${module.length_inches}"`} />
+        <Fact label="Module length" value={`${module.length_total_inches}"`} />
+        {module.mainline_length_inches != null && module.mainline_length_inches !== module.length_total_inches && (
+          <Fact label="Mainline length" value={`${module.mainline_length_inches}"`} />
+        )}
         <Fact label="Endplates" value={String(module.endplate_count)} />
         {module.geometry_degrees != null && (
           <Fact label="Curve degrees" value={String(module.geometry_degrees)} />
@@ -260,6 +263,7 @@ export default async function ModuleDetailPage({
                     </button>
                   </div>
                   <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
+                    <TextField label="Label" name="label" defaultValue={ep.label} maxLength={30} />
                     <SelectField
                       label="Track"
                       name="track_config"
@@ -289,6 +293,7 @@ export default async function ModuleDetailPage({
           <form action={addEndplate.bind(null, module.id)} className="mt-4 rounded-lg border border-dashed border-gray-300 p-4">
             <p className="mb-3 text-sm font-medium text-gray-700">Add endplate</p>
             <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
+              <TextField label="Label (e.g. West)" name="label" required={false} maxLength={30} />
               <SelectField label="Track" name="track_config" defaultValue="single" options={TRACK_CONFIG_OPTIONS} />
               <NumberField label="Width (in)" name="width_inches" step="0.01" />
               <NumberField label="Height (in)" name="height_inches" step="0.01" required={false} />

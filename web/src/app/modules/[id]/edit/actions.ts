@@ -12,8 +12,8 @@ export type BasicsUpdate = {
   geometry_type: string;
   geometry_degrees: string;
   geometry_offset_inches: string;
-  length_feet: string;
-  length_inches: string;
+  length_total_inches: string;
+  mainline_length_inches: string;
   has_mss: boolean;
   mss_type: string; // "" | "crossover" | "cascade" — only meaningful when has_mss
 };
@@ -62,8 +62,8 @@ export async function updateModuleBasics(
       geometry_type: input.geometry_type,
       geometry_degrees: toNullableNumber(input.geometry_degrees),
       geometry_offset_inches: toNullableNumber(input.geometry_offset_inches),
-      length_feet: Number(input.length_feet),
-      length_inches: Number(input.length_inches),
+      length_total_inches: Number(input.length_total_inches),
+      mainline_length_inches: toNullableNumber(input.mainline_length_inches),
       has_mss: input.has_mss,
       mss_type: input.has_mss ? input.mss_type.trim() || null : null,
     })

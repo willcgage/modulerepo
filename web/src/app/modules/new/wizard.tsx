@@ -32,8 +32,8 @@ const EMPTY_BASICS: BasicsInput = {
   geometry_type: "",
   geometry_degrees: "",
   geometry_offset_inches: "",
-  length_feet: "",
-  length_inches: "",
+  length_total_inches: "",
+  mainline_length_inches: "",
   has_mss: false,
   mss_type: "",
 };
@@ -86,8 +86,7 @@ export function ModuleWizard({
         !basics.module_name.trim() ||
         !basics.category ||
         !basics.geometry_type ||
-        !basics.length_feet ||
-        !basics.length_inches
+        !basics.length_total_inches
       ) {
         setError("Please fill in the required fields before continuing.");
         return;
@@ -120,6 +119,7 @@ export function ModuleWizard({
       ...rows,
       {
         endplate_number: rows.length + 1,
+        label: "",
         track_config: "single",
         width_inches: "",
         height_inches: "",
@@ -427,30 +427,42 @@ function BasicsStep({
         </label>
       )}
 
-      <div className="mb-4 grid grid-cols-2 gap-4">
-        <label className={labelClass}>
-          Length (feet)
+      <div className="mb-1">
+        <label className={`${labelClass} mb-1 block`}>
+          Module footprint length (inches)
           <input
             className={inputClass}
             type="number"
-            min="0"
-            value={basics.length_feet}
-            onChange={(e) => set("length_feet", e.target.value)}
+            min="0.001"
+            step="0.001"
+            value={basics.length_total_inches}
+            onChange={(e) => set("length_total_inches", e.target.value)}
             required
           />
         </label>
-        <label className={labelClass}>
-          Length (inches, 0-11)
+        <p className="mb-4 text-xs text-gray-500">
+          The physical end-to-end length of the module itself.
+        </p>
+      </div>
+
+      <div className="mb-1">
+        <label className={`${labelClass} mb-1 block`}>
+          Mainline track length (inches) — optional
           <input
             className={inputClass}
             type="number"
-            min="0"
-            max="11"
-            value={basics.length_inches}
-            onChange={(e) => set("length_inches", e.target.value)}
-            required
+            min="0.001"
+            step="0.001"
+            value={basics.mainline_length_inches}
+            onChange={(e) => set("mainline_length_inches", e.target.value)}
           />
         </label>
+        <p className="mb-4 text-xs text-gray-500">
+          The length of the mainline track running through this module. Leave blank if
+          it equals the module footprint (common for straight modules). Enter a
+          different value for curves or wyes where the rail distance differs from the
+          straight-line footprint.
+        </p>
       </div>
 
       <label className="mb-4 flex items-center gap-2 text-sm font-medium text-gray-700">
@@ -463,7 +475,7 @@ function BasicsStep({
             if (!e.target.checked) set("mss_type", "");
           }}
         />
-        Has a Modular Signal System (MSS)
+        Supports Modular Signal System (MSS)
       </label>
 
       {basics.has_mss && (
@@ -498,8 +510,9 @@ function EndplatesStep({
   return (
     <div className="space-y-4">
       <p className="text-sm text-gray-600">
-        Add a row for each endplate on this module. The label (EP-1, EP-2, …)
-        is assigned automatically.
+        Add a row for each endplate on this module. Give each one a meaningful
+        label such as "West" or "East" — if you leave the label blank it
+        defaults to EP-1, EP-2, etc.
       </p>
       {endplates.map((ep, index) => (
         <div key={index} className="rounded-lg border border-gray-200 bg-white p-4">
@@ -516,6 +529,16 @@ function EndplatesStep({
             </button>
           </div>
           <div className="grid grid-cols-2 gap-4">
+            <label className={labelClass}>
+              Label (e.g. West)
+              <input
+                className={inputClass}
+                value={ep.label}
+                onChange={(e) => onUpdate(index, { label: e.target.value })}
+                maxLength={30}
+                placeholder="EP-1 (auto)"
+              />
+            </label>
             <label className={labelClass}>
               Track configuration
               <select
