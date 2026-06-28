@@ -119,8 +119,9 @@ export function EditModuleForm({
           <input
             className={inputClass}
             type="number"
-            min="0.01"
-            step="0.01"
+            min="1"
+            max="359"
+            step="0.001"
             value={values.geometry_degrees}
             onChange={(e) => set("geometry_degrees", e.target.value)}
             required

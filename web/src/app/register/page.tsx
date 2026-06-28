@@ -4,9 +4,27 @@ import { register } from "./actions";
 export default async function RegisterPage({
   searchParams,
 }: {
-  searchParams: Promise<{ error?: string }>;
+  searchParams: Promise<{ error?: string; confirmed?: string }>;
 }) {
-  const { error } = await searchParams;
+  const { error, confirmed } = await searchParams;
+
+  if (confirmed) {
+    return (
+      <AuthCard
+        title="Check your email"
+        footer={{
+          href: "/login",
+          label: "Already confirmed?",
+          linkText: "Log in",
+        }}
+      >
+        <p className="text-sm text-gray-600">
+          We sent a confirmation link to your email address. Click the link to
+          activate your account.
+        </p>
+      </AuthCard>
+    );
+  }
 
   return (
     <AuthCard

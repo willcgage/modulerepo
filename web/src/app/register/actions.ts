@@ -22,8 +22,5 @@ export async function register(formData: FormData) {
     redirect(`/register?error=${encodeURIComponent(error.message)}`);
   }
 
-  // Email confirmations are disabled for this project, so signUp returns an
-  // active session immediately and the handle_new_user trigger has already
-  // created the owner_profiles row.
-  redirect("/dashboard");
+  redirect("/register?confirmed=1");
 }
