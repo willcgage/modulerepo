@@ -3,6 +3,20 @@
 Backend (Supabase/PostgreSQL + Edge Functions) for the Free-moN Module
 Repository. See `github.com/willcgage/modulerepo`.
 
+## Screenshots
+
+| | |
+|---|---|
+| ![Log in](docs/screenshots/login.png) | ![Register](docs/screenshots/register.png) |
+| *Log in* | *Create an account* |
+| ![Dashboard](docs/screenshots/dashboard.png) | ![My modules](docs/screenshots/modules.png) |
+| *Owner dashboard* | *My modules list* |
+| ![Module detail](docs/screenshots/module-detail.png) | ![New module wizard](docs/screenshots/module-new.png) |
+| *Module detail & endplates* | *New module wizard* |
+
+![Admin dashboard](docs/screenshots/admin.png)
+*Admin dashboard — suggestions, grants, users, audit log*
+
 ## Project layout
 
 ```
