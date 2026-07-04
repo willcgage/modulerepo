@@ -1,14 +1,14 @@
 // =============================================================================
-// Edge Function: GET /api/v1/modules/full
-// Module Repository — Milestone 2
+// Edge Function: GET /functions/v1/modules-full
+// Module Repository — active modules with owner, standard, endplates, tracks and
+// industries nested inline. Read-only integration endpoint for Free Dispatcher.
 //
-// Returns active modules with endplates, tracks, and industries (each
-// industry carrying its accepted car_types and the label of the track it
-// sits on, if any) nested inline. This is the primary integration endpoint
-// for Free Dispatcher (read-only, per ADR-001).
+// owner is resolved from owner_profiles via owner_id (service role, since RLS
+// hides other users' profiles; display_name only). standard is derived from the
+// record_number prefix via module_standards (e.g. FMN -> freemon, TTK -> ttrak).
 //
 // Deploy: supabase functions deploy modules-full
-// Invoke: GET /functions/v1/api/v1/modules/full
+// Invoke: GET /functions/v1/modules-full
 //         ?status=active&category=industry_spur&updated_since=2026-01-01T00:00:00Z
 // =============================================================================
 
@@ -16,6 +16,7 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
 const ANON_KEY = Deno.env.get("SUPABASE_ANON_KEY")!;
+const SERVICE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
 
 Deno.serve(async (req) => {
   if (req.method !== "GET") {
@@ -28,21 +29,18 @@ Deno.serve(async (req) => {
     const category = url.searchParams.get("category");
     const updatedSince = url.searchParams.get("updated_since");
 
-    // Base the client on the anon key so RLS is always enforced. When the
-    // caller supplies a real user JWT (3-part token), forward it so RLS
-    // applies as that user (e.g. an admin can request inactive modules).
-    // A non-JWT credential — such as a `sb_publishable_…` key — is ignored
-    // for auth purposes and the request runs at anon level.
     const authHeader = req.headers.get("Authorization") ?? "";
     const token = authHeader.replace(/^Bearer\s+/i, "").trim();
     const isJwt = token.split(".").length === 3;
     const supabase = createClient(SUPABASE_URL, ANON_KEY, {
       global: isJwt ? { headers: { Authorization: authHeader } } : {},
     });
+    const admin = SERVICE_KEY
+      ? createClient(SUPABASE_URL, SERVICE_KEY, {
+          auth: { persistSession: false, autoRefreshToken: false },
+        })
+      : supabase;
 
-    // Non-admins may only request status=active. We don't know the caller's
-    // role here without a lookup, so we defer the real enforcement to RLS —
-    // this guard just prevents an obviously-wrong request from an anon caller.
     if (status !== "active" && !isJwt) {
       return jsonResponse(
         { error: "forbidden", message: "Only active modules are visible without authentication." },
@@ -68,6 +66,7 @@ Deno.serve(async (req) => {
         mss_type,
         status,
         updated_at,
+        owner_id,
         freemon_endplates (
           endplate_number,
           label,
@@ -115,17 +114,51 @@ Deno.serve(async (req) => {
 
     if (error) {
       console.error("modules/full query error:", error);
-      return jsonResponse(
-        { error: "query_failed", message: error.message },
-        500,
-      );
+      return jsonResponse({ error: "query_failed", message: error.message }, 500);
     }
 
-    // Reshape: flatten the car_types junction rows into { value, display_label, notes }
+    // Owner display names (service role; display_name only).
+    const ownerIds = [
+      ...new Set((data ?? []).map((m: any) => m.owner_id).filter(Boolean)),
+    ];
+    const ownerMap = new Map<string, string>();
+    if (ownerIds.length > 0) {
+      const { data: owners, error: ownerErr } = await admin
+        .from("owner_profiles")
+        .select("id, display_name, first_name, last_name")
+        .in("id", ownerIds);
+      if (ownerErr) console.error("owner_profiles lookup error:", ownerErr);
+      for (const o of owners ?? []) {
+        const name =
+          o.display_name ||
+          [o.first_name, o.last_name].filter(Boolean).join(" ") ||
+          null;
+        if (name) ownerMap.set(o.id, name);
+      }
+    }
+
+    // Standard by record prefix (FMN -> freemon, TTK -> ttrak, ...).
+    const stdByPrefix = new Map<string, string>();
+    {
+      const { data: stds, error: stdErr } = await admin
+        .from("module_standards")
+        .select("value, record_prefix");
+      if (stdErr) console.error("module_standards lookup error:", stdErr);
+      for (const s of stds ?? []) {
+        if (s.record_prefix) stdByPrefix.set(s.record_prefix, s.value);
+      }
+    }
+    const standardOf = (recordNumber: string | null): string | null => {
+      if (!recordNumber) return null;
+      const prefix = recordNumber.split("-")[0];
+      return stdByPrefix.get(prefix) ?? null;
+    };
+
     const modules = (data ?? []).map((m: any) => ({
       id: m.id,
       record_number: m.record_number,
       module_name: m.module_name,
+      standard: standardOf(m.record_number),
       description: m.description,
       category: m.category,
       geometry_type: m.geometry_type,
@@ -138,6 +171,7 @@ Deno.serve(async (req) => {
       mss_type: m.mss_type,
       status: m.status,
       updated_at: m.updated_at,
+      owner: m.owner_id ? (ownerMap.get(m.owner_id) ?? null) : null,
       endplates: (m.freemon_endplates ?? []).map((ep: any) => ({
         endplate_number: ep.endplate_number,
         label: ep.label,
@@ -178,10 +212,7 @@ Deno.serve(async (req) => {
     return jsonResponse(modules, 200);
   } catch (err) {
     console.error("modules/full unexpected error:", err);
-    return jsonResponse(
-      { error: "internal_error", message: "Unexpected server error" },
-      500,
-    );
+    return jsonResponse({ error: "internal_error", message: "Unexpected server error" }, 500);
   }
 });
 
@@ -190,7 +221,6 @@ function jsonResponse(body: unknown, status: number): Response {
     status,
     headers: {
       "Content-Type": "application/json",
-      // Cache hint for Free Dispatcher's polling sync — short TTL, must-revalidate
       "Cache-Control": "public, max-age=30, must-revalidate",
     },
   });
