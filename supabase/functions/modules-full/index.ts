@@ -67,6 +67,8 @@ Deno.serve(async (req) => {
         status,
         updated_at,
         owner_id,
+        schematic,
+        schematic_version,
         freemon_endplates (
           endplate_number,
           label,
@@ -172,6 +174,8 @@ Deno.serve(async (req) => {
       status: m.status,
       updated_at: m.updated_at,
       owner: m.owner_id ? (ownerMap.get(m.owner_id) ?? null) : null,
+      schematic: m.schematic ?? null,
+      schematic_version: m.schematic_version ?? null,
       endplates: (m.freemon_endplates ?? []).map((ep: any) => ({
         endplate_number: ep.endplate_number,
         label: ep.label,
