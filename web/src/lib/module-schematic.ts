@@ -47,6 +47,17 @@ export interface SchematicSignal {
   /** Turnout this control point is attached to (absent = standalone block signal). */
   turnout?: string;
 }
+/**
+ * A control point is an interlocking: a named group of one or more signals and
+ * zero or more turnouts. A passing siding has two (West/East); a lone block
+ * signal is a control point with one signal and no turnouts.
+ */
+export interface SchematicControlPoint {
+  id: string;
+  name: string;
+  turnouts: string[]; // turnout ids
+  signals: { id: string; pos: number; track: string; facing: SignalFacing; kind: "mast" | "dwarf" }[];
+}
 export interface ModuleSchematicDoc {
   version: number;
   module?: string;
@@ -54,6 +65,8 @@ export interface ModuleSchematicDoc {
   endplates: SchematicEndplate[];
   tracks: SchematicTrack[];
   turnouts?: SchematicTurnout[];
+  controlPoints?: SchematicControlPoint[];
+  /** @deprecated pre-grouping flat signals; read for back-compat. */
   signals?: SchematicSignal[];
 }
 
@@ -75,14 +88,17 @@ export interface EditorTurnout {
   divergeTrack: string;
   kind: TurnoutKind;
 }
-export interface EditorSignal {
+export interface EditorCpSignal {
   id: string;
-  name: string;
   pos: number;
   track: string;
   facing: SignalFacing;
-  /** Turnout id this control point governs, or "" for a standalone block signal. */
-  turnout: string;
+}
+export interface EditorControlPoint {
+  id: string;
+  name: string;
+  turnouts: string[]; // turnout ids grouped under this control point
+  signals: EditorCpSignal[];
 }
 export interface EditorState {
   lengthInches: number;
@@ -90,10 +106,21 @@ export interface EditorState {
   configB: TrackConfig;
   extraTracks: EditorTrack[]; // sidings/spurs/…; the main track is implicit
   turnouts: EditorTurnout[];
-  signals: EditorSignal[];
+  controlPoints: EditorControlPoint[];
 }
 
 export const MAIN_TRACK_ID = "main";
+
+// North American N scale (1:160): 396 real inches → 5280 scale feet = one mile.
+export const N_SCALE_RATIO = 160;
+/** Real inches on the module → scale feet of prototype track represented. */
+export function inchesToScaleFeet(inches: number, ratio = N_SCALE_RATIO): number {
+  return (inches * ratio) / 12;
+}
+/** Scale feet of prototype track → real inches on the module. */
+export function scaleFeetToInches(feet: number, ratio = N_SCALE_RATIO): number {
+  return (feet * 12) / ratio;
+}
 
 /** Parse a jsonb value into a schematic doc, or null if it isn't one. */
 export function asModuleSchematic(x: unknown): ModuleSchematicDoc | null {
@@ -112,7 +139,7 @@ export function emptyEditorState(lengthInches: number): EditorState {
     configB: "single",
     extraTracks: [],
     turnouts: [],
-    signals: [],
+    controlPoints: [],
   };
 }
 
@@ -148,14 +175,17 @@ export function stateToDoc(
       kind: t.kind,
       name: t.name || undefined,
     })),
-    signals: state.signals.map((s) => ({
-      id: s.id,
-      pos: s.pos,
-      track: s.track,
-      facing: s.facing,
-      kind: "mast" as const,
-      name: s.name || undefined,
-      turnout: s.turnout || undefined,
+    controlPoints: state.controlPoints.map((c) => ({
+      id: c.id,
+      name: c.name,
+      turnouts: c.turnouts,
+      signals: c.signals.map((s) => ({
+        id: s.id,
+        pos: s.pos,
+        track: s.track,
+        facing: s.facing,
+        kind: "mast" as const,
+      })),
     })),
   };
 }
@@ -196,15 +226,43 @@ export function docToState(
       divergeTrack: t.divergeTrack,
       kind: (t.kind as TurnoutKind) ?? "right",
     })),
-    signals: (d.signals ?? []).map((s) => ({
+    controlPoints: readControlPoints(d),
+  };
+}
+
+/** Control points from a doc, migrating pre-grouping flat signals into groups. */
+function readControlPoints(d: ModuleSchematicDoc): EditorControlPoint[] {
+  if (Array.isArray(d.controlPoints)) {
+    return d.controlPoints.map((c) => ({
+      id: c.id,
+      name: c.name ?? "",
+      turnouts: c.turnouts ?? [],
+      signals: (c.signals ?? []).map((s) => ({
+        id: s.id,
+        pos: s.pos,
+        track: s.track,
+        facing: (s.facing as SignalFacing) ?? "AtoB",
+      })),
+    }));
+  }
+  // Back-compat: group old flat signals by their turnout (or standalone).
+  const groups = new Map<string, EditorControlPoint>();
+  let n = 0;
+  for (const s of d.signals ?? []) {
+    const key = s.turnout || `blk-${s.id}`;
+    let cp = groups.get(key);
+    if (!cp) {
+      cp = { id: `cp${++n}`, name: s.name ?? "", turnouts: s.turnout ? [s.turnout] : [], signals: [] };
+      groups.set(key, cp);
+    }
+    cp.signals.push({
       id: s.id,
-      name: s.name ?? "",
       pos: s.pos,
       track: s.track,
       facing: (s.facing as SignalFacing) ?? "AtoB",
-      turnout: s.turnout ?? "",
-    })),
-  };
+    });
+  }
+  return [...groups.values()];
 }
 
 /** Find an unused `${prefix}${n}` id given the ones already present. */
@@ -222,7 +280,7 @@ export function nextId(prefix: string, existing: string[]): string {
 export function buildPassingSiding(state: EditorState): {
   track: EditorTrack;
   turnouts: EditorTurnout[];
-  signals: EditorSignal[];
+  controlPoints: EditorControlPoint[];
 } {
   const len = state.lengthInches > 0 ? state.lengthInches : 24;
   const inset = Math.max(6, Math.round(len * 0.08));
@@ -249,26 +307,23 @@ export function buildPassingSiding(state: EditorState): {
     { id: swE, name: "East Siding", pos: toPos, onTrack: MAIN_TRACK_ID, divergeTrack: sidId, kind: "left" },
   ];
 
-  // Both directions at each control point, on the main.
-  const used = state.signals.map((s) => s.id);
-  const cp = (
-    name: string,
-    pos: number,
-    facing: SignalFacing,
-    turnout: string,
-  ): EditorSignal => {
-    const id = nextId("cp", used);
-    used.push(id);
-    return { id, name, pos, track: MAIN_TRACK_ID, facing, turnout };
-  };
-  const signals: EditorSignal[] = [
-    cp("West Siding", fromPos, "AtoB", swW),
-    cp("West Siding", fromPos, "BtoA", swW),
-    cp("East Siding", toPos, "AtoB", swE),
-    cp("East Siding", toPos, "BtoA", swE),
+  // One control point at each end, each grouping its switch and both-direction
+  // signals on the main (prototype Station Entering Signal).
+  const cpIds = state.controlPoints.map((c) => c.id);
+  const cpW = nextId("cp", cpIds);
+  const cpE = nextId("cp", [...cpIds, cpW]);
+  const sig = (cpId: string, pos: number, facing: SignalFacing): EditorCpSignal => ({
+    id: `${cpId}-${facing}`,
+    pos,
+    track: MAIN_TRACK_ID,
+    facing,
+  });
+  const controlPoints: EditorControlPoint[] = [
+    { id: cpW, name: "West Siding", turnouts: [swW], signals: [sig(cpW, fromPos, "AtoB"), sig(cpW, fromPos, "BtoA")] },
+    { id: cpE, name: "East Siding", turnouts: [swE], signals: [sig(cpE, toPos, "AtoB"), sig(cpE, toPos, "BtoA")] },
   ];
 
-  return { track, turnouts, signals };
+  return { track, turnouts, controlPoints };
 }
 
 // ---- Pure feature resolver (the preview draws these) ----------------------
@@ -350,13 +405,25 @@ export function moduleFeatures(doc: ModuleSchematicDoc): ModuleFeatures {
     onLane: trackLane.get(t.onTrack) ?? 0,
     divergeLane: trackLane.get(t.divergeTrack) ?? 1,
   }));
-  const signals: DrawSignal[] = (doc.signals ?? []).map((s) => ({
-    id: s.id,
-    name: s.name ?? "",
-    posFrac: clampFrac(s.pos),
-    lane: trackLane.get(s.track) ?? 0,
-    facing: s.facing,
-  }));
+  // Signals come from control-point groups; fall back to pre-grouping flat
+  // signals for docs authored before the model changed.
+  const signals: DrawSignal[] = Array.isArray(doc.controlPoints)
+    ? doc.controlPoints.flatMap((c) =>
+        c.signals.map((s) => ({
+          id: s.id,
+          name: c.name,
+          posFrac: clampFrac(s.pos),
+          lane: trackLane.get(s.track) ?? 0,
+          facing: s.facing,
+        })),
+      )
+    : (doc.signals ?? []).map((s) => ({
+        id: s.id,
+        name: s.name ?? "",
+        posFrac: clampFrac(s.pos),
+        lane: trackLane.get(s.track) ?? 0,
+        facing: s.facing,
+      }));
 
   return { doubleMain, extraTracks, turnouts, signals };
 }

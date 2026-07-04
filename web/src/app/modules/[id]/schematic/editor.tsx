@@ -7,6 +7,7 @@ import {
   stateToDoc,
   buildPassingSiding,
   nextId,
+  inchesToScaleFeet,
   type EditorState,
   type TrackRole,
   type TurnoutKind,
@@ -66,10 +67,10 @@ export function SchematicEditor({
 
   function addPassingSiding() {
     patch((s) => {
-      const { track, turnouts, signals } = buildPassingSiding(s);
+      const { track, turnouts, controlPoints } = buildPassingSiding(s);
       s.extraTracks.push(track);
       s.turnouts.push(...turnouts);
-      s.signals.push(...signals);
+      s.controlPoints.push(...controlPoints);
     });
   }
   function addSpur() {
@@ -100,13 +101,14 @@ export function SchematicEditor({
   }
   function addControlPoint() {
     patch((s) => {
-      s.signals.push({
-        id: nextId("cp", s.signals.map((t) => t.id)),
+      const id = nextId("cp", s.controlPoints.map((c) => c.id));
+      s.controlPoints.push({
+        id,
         name: "",
-        pos: Math.round(s.lengthInches * 0.25),
-        track: MAIN_TRACK_ID,
-        facing: "AtoB",
-        turnout: "",
+        turnouts: [],
+        signals: [
+          { id: `${id}-AtoB`, pos: Math.round(s.lengthInches * 0.25), track: MAIN_TRACK_ID, facing: "AtoB" },
+        ],
       });
     });
   }
@@ -209,7 +211,7 @@ export function SchematicEditor({
         ) : (
           <div className="space-y-2">
             {state.extraTracks.map((t, i) => (
-              <div key={t.id} className="grid grid-cols-2 items-end gap-2 sm:grid-cols-6">
+              <div key={t.id} className="grid grid-cols-2 items-end gap-2 sm:grid-cols-7">
                 <Field label="ID">
                   <input value={t.id} readOnly className={`${inp} bg-gray-50`} />
                 </Field>
@@ -252,6 +254,11 @@ export function SchematicEditor({
                     onChange={(e) => patch((s) => (s.extraTracks[i].toPos = Number(e.target.value) || 0))}
                     className={inp}
                   />
+                </Field>
+                <Field label="Capacity (N)">
+                  <div className={`${inp} bg-gray-50 text-gray-600`}>
+                    {Math.round(inchesToScaleFeet(Math.abs(t.toPos - t.fromPos)))} ft
+                  </div>
                 </Field>
                 <div className="pb-1">
                   <button
@@ -362,78 +369,129 @@ export function SchematicEditor({
           </button>
         </div>
         <p className="mb-3 text-xs text-gray-500">
-          A control point is a signal — attached to a turnout, or a standalone
-          block signal. These become the Section &amp; District boundaries the
-          layout builder works from.
+          A control point is an interlocking — a named group of signals and the
+          turnout(s) it governs (a standalone block signal is a control point with
+          no turnout). These become the Section &amp; District boundaries the layout
+          builder works from.
         </p>
-        {state.signals.length === 0 ? (
+        {state.controlPoints.length === 0 ? (
           <p className="text-sm text-gray-500">None yet.</p>
         ) : (
-          <div className="space-y-2">
-            {state.signals.map((s, i) => (
-              <div key={s.id} className="grid grid-cols-2 items-end gap-2 sm:grid-cols-6">
-                <Field label="Name">
+          <div className="space-y-3">
+            {state.controlPoints.map((c, ci) => (
+              <div key={c.id} className="rounded-md border border-gray-200 bg-gray-50 p-3">
+                <div className="flex items-center gap-2">
                   <input
-                    value={s.name}
-                    onChange={(e) => patch((st) => (st.signals[i].name = e.target.value))}
-                    className={inp}
-                    placeholder="West Siding"
+                    value={c.name}
+                    onChange={(e) => patch((st) => (st.controlPoints[ci].name = e.target.value))}
+                    className={`${inp} max-w-xs font-medium`}
+                    placeholder="Control point name (e.g. West Siding)"
                   />
-                </Field>
-                <Field label="At turnout">
-                  <select
-                    value={s.turnout}
-                    onChange={(e) => patch((st) => (st.signals[i].turnout = e.target.value))}
-                    className={inp}
-                  >
-                    <option value="">— block signal</option>
-                    {state.turnouts.map((t) => (
-                      <option key={t.id} value={t.id}>
-                        {t.name || t.id}
-                      </option>
-                    ))}
-                  </select>
-                </Field>
-                <Field label="Position (in)">
-                  <input
-                    type="number"
-                    min={0}
-                    value={s.pos}
-                    onChange={(e) => patch((st) => (st.signals[i].pos = Number(e.target.value) || 0))}
-                    className={inp}
-                  />
-                </Field>
-                <Field label="Track">
-                  <select
-                    value={s.track}
-                    onChange={(e) => patch((st) => (st.signals[i].track = e.target.value))}
-                    className={inp}
-                  >
-                    {trackOptions.map((o) => (
-                      <option key={o.value} value={o.value}>
-                        {o.label}
-                      </option>
-                    ))}
-                  </select>
-                </Field>
-                <Field label="Facing">
-                  <select
-                    value={s.facing}
-                    onChange={(e) => patch((st) => (st.signals[i].facing = e.target.value as SignalFacing))}
-                    className={inp}
-                  >
-                    <option value="AtoB">West → East</option>
-                    <option value="BtoA">East → West</option>
-                  </select>
-                </Field>
-                <div className="pb-1">
                   <button
                     type="button"
-                    onClick={() => patch((st) => st.signals.splice(i, 1))}
-                    className={xBtn}
+                    onClick={() => patch((st) => st.controlPoints.splice(ci, 1))}
+                    className={`${xBtn} ml-auto`}
                   >
-                    Remove
+                    Remove CP
                   </button>
+                </div>
+
+                {/* Turnouts governed by this control point */}
+                <div className="mt-2">
+                  <span className="text-xs font-medium text-gray-600">Turnouts</span>
+                  {state.turnouts.length === 0 ? (
+                    <p className="text-xs text-gray-400">Add turnouts above (or a passing siding).</p>
+                  ) : (
+                    <div className="mt-1 flex flex-wrap gap-x-4 gap-y-1">
+                      {state.turnouts.map((t) => (
+                        <label key={t.id} className="flex items-center gap-1 text-xs text-gray-700">
+                          <input
+                            type="checkbox"
+                            checked={c.turnouts.includes(t.id)}
+                            onChange={(e) =>
+                              patch((st) => {
+                                const cp = st.controlPoints[ci];
+                                cp.turnouts = e.target.checked
+                                  ? [...cp.turnouts, t.id]
+                                  : cp.turnouts.filter((x) => x !== t.id);
+                              })
+                            }
+                            className="h-3.5 w-3.5 rounded border-gray-300 text-blue-600"
+                          />
+                          {t.name || t.id}
+                        </label>
+                      ))}
+                    </div>
+                  )}
+                </div>
+
+                {/* Signals in this control point */}
+                <div className="mt-3">
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-medium text-gray-600">Signals</span>
+                    <button
+                      type="button"
+                      onClick={() =>
+                        patch((st) => {
+                          const cp = st.controlPoints[ci];
+                          cp.signals.push({
+                            id: `${cp.id}-${nextId("s", cp.signals.map((x) => x.id))}`,
+                            pos: cp.signals[0]?.pos ?? Math.round(st.lengthInches * 0.25),
+                            track: MAIN_TRACK_ID,
+                            facing: "AtoB",
+                          });
+                        })
+                      }
+                      className="text-xs font-medium text-blue-600 hover:underline"
+                    >
+                      + Signal
+                    </button>
+                  </div>
+                  {c.signals.map((s, si) => (
+                    <div key={s.id} className="mt-1 grid grid-cols-2 items-end gap-2 sm:grid-cols-4">
+                      <Field label="Position (in)">
+                        <input
+                          type="number"
+                          min={0}
+                          value={s.pos}
+                          onChange={(e) => patch((st) => (st.controlPoints[ci].signals[si].pos = Number(e.target.value) || 0))}
+                          className={inp}
+                        />
+                      </Field>
+                      <Field label="Track">
+                        <select
+                          value={s.track}
+                          onChange={(e) => patch((st) => (st.controlPoints[ci].signals[si].track = e.target.value))}
+                          className={inp}
+                        >
+                          {trackOptions.map((o) => (
+                            <option key={o.value} value={o.value}>
+                              {o.label}
+                            </option>
+                          ))}
+                        </select>
+                      </Field>
+                      <Field label="Facing">
+                        <select
+                          value={s.facing}
+                          onChange={(e) => patch((st) => (st.controlPoints[ci].signals[si].facing = e.target.value as SignalFacing))}
+                          className={inp}
+                        >
+                          <option value="AtoB">West → East</option>
+                          <option value="BtoA">East → West</option>
+                        </select>
+                      </Field>
+                      <div className="pb-1">
+                        <button
+                          type="button"
+                          onClick={() => patch((st) => st.controlPoints[ci].signals.splice(si, 1))}
+                          className={xBtn}
+                        >
+                          Remove
+                        </button>
+                      </div>
+                    </div>
+                  ))}
                 </div>
               </div>
             ))}
