@@ -44,6 +44,8 @@ export interface SchematicSignal {
   facing: SignalFacing;
   kind: "mast" | "dwarf";
   name?: string;
+  /** Turnout this control point is attached to (absent = standalone block signal). */
+  turnout?: string;
 }
 export interface ModuleSchematicDoc {
   version: number;
@@ -79,6 +81,8 @@ export interface EditorSignal {
   pos: number;
   track: string;
   facing: SignalFacing;
+  /** Turnout id this control point governs, or "" for a standalone block signal. */
+  turnout: string;
 }
 export interface EditorState {
   lengthInches: number;
@@ -151,6 +155,7 @@ export function stateToDoc(
       facing: s.facing,
       kind: "mast" as const,
       name: s.name || undefined,
+      turnout: s.turnout || undefined,
     })),
   };
 }
@@ -197,8 +202,73 @@ export function docToState(
       pos: s.pos,
       track: s.track,
       facing: (s.facing as SignalFacing) ?? "AtoB",
+      turnout: s.turnout ?? "",
     })),
   };
+}
+
+/** Find an unused `${prefix}${n}` id given the ones already present. */
+export function nextId(prefix: string, existing: string[]): string {
+  let n = 1;
+  while (existing.includes(`${prefix}${n}`)) n += 1;
+  return `${prefix}${n}`;
+}
+
+/**
+ * Build a passing siding as one unit: the siding track, a switch at each end,
+ * and control-point signals for both directions at each end (prototype Station
+ * Entering Signal). Returns the new items to merge into the editor state.
+ */
+export function buildPassingSiding(state: EditorState): {
+  track: EditorTrack;
+  turnouts: EditorTurnout[];
+  signals: EditorSignal[];
+} {
+  const len = state.lengthInches > 0 ? state.lengthInches : 24;
+  const inset = Math.max(6, Math.round(len * 0.08));
+  const fromPos = inset;
+  const toPos = Math.max(fromPos + 1, len - inset);
+  const lane = Math.max(1, ...state.extraTracks.map((t) => t.lane + 1));
+
+  const trackIds = [MAIN_TRACK_ID, ...state.extraTracks.map((t) => t.id)];
+  const sidId = nextId("sid", trackIds);
+  const track: EditorTrack = {
+    id: sidId,
+    role: "siding",
+    lane,
+    fromPos,
+    toPos,
+    capacityFeet: null,
+  };
+
+  const swIds = state.turnouts.map((t) => t.id);
+  const swW = nextId("sw", swIds);
+  const swE = nextId("sw", [...swIds, swW]);
+  const turnouts: EditorTurnout[] = [
+    { id: swW, name: "West Siding", pos: fromPos, onTrack: MAIN_TRACK_ID, divergeTrack: sidId, kind: "right" },
+    { id: swE, name: "East Siding", pos: toPos, onTrack: MAIN_TRACK_ID, divergeTrack: sidId, kind: "left" },
+  ];
+
+  // Both directions at each control point, on the main.
+  const used = state.signals.map((s) => s.id);
+  const cp = (
+    name: string,
+    pos: number,
+    facing: SignalFacing,
+    turnout: string,
+  ): EditorSignal => {
+    const id = nextId("cp", used);
+    used.push(id);
+    return { id, name, pos, track: MAIN_TRACK_ID, facing, turnout };
+  };
+  const signals: EditorSignal[] = [
+    cp("West Siding", fromPos, "AtoB", swW),
+    cp("West Siding", fromPos, "BtoA", swW),
+    cp("East Siding", toPos, "AtoB", swE),
+    cp("East Siding", toPos, "BtoA", swE),
+  ];
+
+  return { track, turnouts, signals };
 }
 
 // ---- Pure feature resolver (the preview draws these) ----------------------
@@ -234,7 +304,11 @@ export interface ModuleFeatures {
 /** Resolve a doc into positioned drawables (fractions of the module length). */
 export function moduleFeatures(doc: ModuleSchematicDoc): ModuleFeatures {
   const len = doc.lengthInches > 0 ? doc.lengthInches : 1;
-  const clampFrac = (p: number) => Math.min(1, Math.max(0, p / len));
+  // Keep to-scale, but hold features off the endplates so a switch a few inches
+  // from the end of a very long module still reads clearly (issue #1).
+  const INSET = 0.08;
+  const clampFrac = (p: number) =>
+    Math.min(1 - INSET, Math.max(INSET, p / len));
 
   const trackLane = new Map<string, number>();
   for (const t of doc.tracks) trackLane.set(t.id, t.lane);

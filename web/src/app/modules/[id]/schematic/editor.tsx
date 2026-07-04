@@ -5,6 +5,8 @@ import Link from "next/link";
 import {
   MAIN_TRACK_ID,
   stateToDoc,
+  buildPassingSiding,
+  nextId,
   type EditorState,
   type TrackRole,
   type TurnoutKind,
@@ -29,13 +31,6 @@ const KIND_OPTIONS: { value: TurnoutKind; label: string }[] = [
   { value: "left", label: "Left" },
   { value: "wye", label: "Wye" },
 ];
-
-/** Find an unused `${prefix}${n}` id given the ones already present. */
-function nextId(prefix: string, existing: string[]): string {
-  let n = 1;
-  while (existing.includes(`${prefix}${n}`)) n += 1;
-  return `${prefix}${n}`;
-}
 
 export function SchematicEditor({
   moduleId,
@@ -69,15 +64,23 @@ export function SchematicEditor({
       return next;
     });
 
-  function addTrack() {
+  function addPassingSiding() {
+    patch((s) => {
+      const { track, turnouts, signals } = buildPassingSiding(s);
+      s.extraTracks.push(track);
+      s.turnouts.push(...turnouts);
+      s.signals.push(...signals);
+    });
+  }
+  function addSpur() {
     patch((s) => {
       const lane = Math.max(1, ...s.extraTracks.map((t) => t.lane + 1));
       s.extraTracks.push({
-        id: nextId("sid", s.extraTracks.map((t) => t.id)),
-        role: "siding",
+        id: nextId("spur", s.extraTracks.map((t) => t.id)),
+        role: "spur",
         lane,
-        fromPos: Math.round(s.lengthInches * 0.2),
-        toPos: Math.round(s.lengthInches * 0.8),
+        fromPos: Math.round(s.lengthInches * 0.4),
+        toPos: Math.round(s.lengthInches * 0.7),
         capacityFeet: null,
       });
     });
@@ -95,14 +98,15 @@ export function SchematicEditor({
       });
     });
   }
-  function addSignal() {
+  function addControlPoint() {
     patch((s) => {
       s.signals.push({
-        id: nextId("sig", s.signals.map((t) => t.id)),
+        id: nextId("cp", s.signals.map((t) => t.id)),
         name: "",
         pos: Math.round(s.lengthInches * 0.25),
         track: MAIN_TRACK_ID,
         facing: "AtoB",
+        turnout: "",
       });
     });
   }
@@ -185,10 +189,19 @@ export function SchematicEditor({
       <section className="rounded-lg border border-gray-200 bg-white p-4">
         <div className="mb-3 flex items-center justify-between">
           <h2 className="text-lg font-semibold text-gray-900">Sidings &amp; spurs</h2>
-          <button type="button" onClick={addTrack} className={addBtn}>
-            + Track
-          </button>
+          <div className="flex gap-2">
+            <button type="button" onClick={addPassingSiding} className={addBtn}>
+              + Passing siding
+            </button>
+            <button type="button" onClick={addSpur} className={addBtn}>
+              + Spur
+            </button>
+          </div>
         </div>
+        <p className="mb-3 text-xs text-gray-500">
+          A passing siding adds a switch at each end and control-point signals for
+          both directions automatically.
+        </p>
         {state.extraTracks.length === 0 ? (
           <p className="text-sm text-gray-500">
             None yet. Add a passing siding or an industry spur.
@@ -340,27 +353,46 @@ export function SchematicEditor({
         )}
       </section>
 
-      {/* Signals */}
+      {/* Control Points (signals — at a turnout, or a standalone block signal) */}
       <section className="rounded-lg border border-gray-200 bg-white p-4">
         <div className="mb-3 flex items-center justify-between">
-          <h2 className="text-lg font-semibold text-gray-900">Signals</h2>
-          <button type="button" onClick={addSignal} className={addBtn}>
-            + Signal
+          <h2 className="text-lg font-semibold text-gray-900">Control Points</h2>
+          <button type="button" onClick={addControlPoint} className={addBtn}>
+            + Control Point
           </button>
         </div>
+        <p className="mb-3 text-xs text-gray-500">
+          A control point is a signal — attached to a turnout, or a standalone
+          block signal. These become the Section &amp; District boundaries the
+          layout builder works from.
+        </p>
         {state.signals.length === 0 ? (
           <p className="text-sm text-gray-500">None yet.</p>
         ) : (
           <div className="space-y-2">
             {state.signals.map((s, i) => (
-              <div key={s.id} className="grid grid-cols-2 items-end gap-2 sm:grid-cols-5">
+              <div key={s.id} className="grid grid-cols-2 items-end gap-2 sm:grid-cols-6">
                 <Field label="Name">
                   <input
                     value={s.name}
                     onChange={(e) => patch((st) => (st.signals[i].name = e.target.value))}
                     className={inp}
-                    placeholder="CP West"
+                    placeholder="West Siding"
                   />
+                </Field>
+                <Field label="At turnout">
+                  <select
+                    value={s.turnout}
+                    onChange={(e) => patch((st) => (st.signals[i].turnout = e.target.value))}
+                    className={inp}
+                  >
+                    <option value="">— block signal</option>
+                    {state.turnouts.map((t) => (
+                      <option key={t.id} value={t.id}>
+                        {t.name || t.id}
+                      </option>
+                    ))}
+                  </select>
                 </Field>
                 <Field label="Position (in)">
                   <input
