@@ -1,0 +1,452 @@
+"use client";
+
+import { useMemo, useState, useTransition } from "react";
+import Link from "next/link";
+import {
+  MAIN_TRACK_ID,
+  stateToDoc,
+  type EditorState,
+  type TrackRole,
+  type TurnoutKind,
+  type SignalFacing,
+} from "@/lib/module-schematic";
+import { SchematicPreview } from "./schematic-preview";
+import { saveModuleSchematic } from "./actions";
+
+const inp =
+  "block w-full rounded-md border border-gray-300 px-2 py-1 text-sm text-gray-900 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500";
+const addBtn =
+  "rounded-md border border-gray-300 px-3 py-1 text-sm font-medium text-gray-700 hover:bg-gray-50";
+const xBtn = "text-xs font-medium text-red-600 hover:underline";
+
+const ROLE_OPTIONS: { value: TrackRole; label: string }[] = [
+  { value: "siding", label: "Passing siding" },
+  { value: "spur", label: "Industry spur" },
+  { value: "yard", label: "Yard track" },
+];
+const KIND_OPTIONS: { value: TurnoutKind; label: string }[] = [
+  { value: "right", label: "Right" },
+  { value: "left", label: "Left" },
+  { value: "wye", label: "Wye" },
+];
+
+/** Find an unused `${prefix}${n}` id given the ones already present. */
+function nextId(prefix: string, existing: string[]): string {
+  let n = 1;
+  while (existing.includes(`${prefix}${n}`)) n += 1;
+  return `${prefix}${n}`;
+}
+
+export function SchematicEditor({
+  moduleId,
+  recordNumber,
+  moduleName,
+  initial,
+  hadSchematic,
+}: {
+  moduleId: number;
+  recordNumber: string;
+  moduleName: string;
+  initial: EditorState;
+  hadSchematic: boolean;
+}) {
+  const [state, setState] = useState<EditorState>(initial);
+  const [error, setError] = useState<string | null>(null);
+  const [saved, setSaved] = useState(false);
+  const [isPending, startTransition] = useTransition();
+
+  const doc = useMemo(() => stateToDoc(state, recordNumber), [state, recordNumber]);
+  const trackIds = useMemo(
+    () => [MAIN_TRACK_ID, ...state.extraTracks.map((t) => t.id)],
+    [state.extraTracks],
+  );
+  const trackOptions = trackIds.map((id) => ({ value: id, label: id }));
+
+  const patch = (fn: (s: EditorState) => void) =>
+    setState((prev) => {
+      const next = structuredClone(prev);
+      fn(next);
+      return next;
+    });
+
+  function addTrack() {
+    patch((s) => {
+      const lane = Math.max(1, ...s.extraTracks.map((t) => t.lane + 1));
+      s.extraTracks.push({
+        id: nextId("sid", s.extraTracks.map((t) => t.id)),
+        role: "siding",
+        lane,
+        fromPos: Math.round(s.lengthInches * 0.2),
+        toPos: Math.round(s.lengthInches * 0.8),
+        capacityFeet: null,
+      });
+    });
+  }
+  function addTurnout() {
+    patch((s) => {
+      const diverge = s.extraTracks[0]?.id ?? MAIN_TRACK_ID;
+      s.turnouts.push({
+        id: nextId("sw", s.turnouts.map((t) => t.id)),
+        name: "",
+        pos: Math.round(s.lengthInches * 0.5),
+        onTrack: MAIN_TRACK_ID,
+        divergeTrack: diverge,
+        kind: "right",
+      });
+    });
+  }
+  function addSignal() {
+    patch((s) => {
+      s.signals.push({
+        id: nextId("sig", s.signals.map((t) => t.id)),
+        name: "",
+        pos: Math.round(s.lengthInches * 0.25),
+        track: MAIN_TRACK_ID,
+        facing: "AtoB",
+      });
+    });
+  }
+
+  function save(clear: boolean) {
+    setError(null);
+    setSaved(false);
+    startTransition(async () => {
+      const result = await saveModuleSchematic(moduleId, clear ? null : doc);
+      if (result && "error" in result) setError(result.error);
+      else setSaved(true);
+    });
+  }
+
+  return (
+    <div className="space-y-5">
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-xl font-semibold text-gray-900">Operations schematic</h1>
+          <p className="text-sm text-gray-500">
+            {recordNumber} · {moduleName}
+          </p>
+        </div>
+        <Link href={`/modules/${moduleId}`} className="text-sm text-blue-600 hover:underline">
+          ← Back to module
+        </Link>
+      </div>
+
+      <p className="text-sm text-gray-600">
+        Depict this module the way a dispatcher reads it: the mainline runs West →
+        East, with any sidings, spurs, turnouts and signals placed by position
+        along the module. Free-Dispatcher imports this directly when the module is
+        added to a layout.
+      </p>
+
+      {/* Live preview */}
+      <SchematicPreview doc={doc} />
+
+      {/* Mainline */}
+      <section className="rounded-lg border border-gray-200 bg-white p-4">
+        <h2 className="mb-3 text-lg font-semibold text-gray-900">Mainline</h2>
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+          <label className="block text-sm font-medium text-gray-700">
+            Module length (inches)
+            <input
+              type="number"
+              min={1}
+              step="0.001"
+              value={state.lengthInches}
+              onChange={(e) => patch((s) => (s.lengthInches = Number(e.target.value) || 0))}
+              className={`mt-1 ${inp}`}
+            />
+          </label>
+          <label className="block text-sm font-medium text-gray-700">
+            West end (A) main track
+            <select
+              value={state.configA}
+              onChange={(e) => patch((s) => (s.configA = e.target.value as "single" | "double"))}
+              className={`mt-1 ${inp}`}
+            >
+              <option value="single">Single</option>
+              <option value="double">Double</option>
+            </select>
+          </label>
+          <label className="block text-sm font-medium text-gray-700">
+            East end (B) main track
+            <select
+              value={state.configB}
+              onChange={(e) => patch((s) => (s.configB = e.target.value as "single" | "double"))}
+              className={`mt-1 ${inp}`}
+            >
+              <option value="single">Single</option>
+              <option value="double">Double</option>
+            </select>
+          </label>
+        </div>
+      </section>
+
+      {/* Tracks */}
+      <section className="rounded-lg border border-gray-200 bg-white p-4">
+        <div className="mb-3 flex items-center justify-between">
+          <h2 className="text-lg font-semibold text-gray-900">Sidings &amp; spurs</h2>
+          <button type="button" onClick={addTrack} className={addBtn}>
+            + Track
+          </button>
+        </div>
+        {state.extraTracks.length === 0 ? (
+          <p className="text-sm text-gray-500">
+            None yet. Add a passing siding or an industry spur.
+          </p>
+        ) : (
+          <div className="space-y-2">
+            {state.extraTracks.map((t, i) => (
+              <div key={t.id} className="grid grid-cols-2 items-end gap-2 sm:grid-cols-6">
+                <Field label="ID">
+                  <input value={t.id} readOnly className={`${inp} bg-gray-50`} />
+                </Field>
+                <Field label="Kind">
+                  <select
+                    value={t.role}
+                    onChange={(e) => patch((s) => (s.extraTracks[i].role = e.target.value as TrackRole))}
+                    className={inp}
+                  >
+                    {ROLE_OPTIONS.map((o) => (
+                      <option key={o.value} value={o.value}>
+                        {o.label}
+                      </option>
+                    ))}
+                  </select>
+                </Field>
+                <Field label="Lane">
+                  <input
+                    type="number"
+                    min={1}
+                    value={t.lane}
+                    onChange={(e) => patch((s) => (s.extraTracks[i].lane = Number(e.target.value) || 1))}
+                    className={inp}
+                  />
+                </Field>
+                <Field label="From (in)">
+                  <input
+                    type="number"
+                    min={0}
+                    value={t.fromPos}
+                    onChange={(e) => patch((s) => (s.extraTracks[i].fromPos = Number(e.target.value) || 0))}
+                    className={inp}
+                  />
+                </Field>
+                <Field label="To (in)">
+                  <input
+                    type="number"
+                    min={0}
+                    value={t.toPos}
+                    onChange={(e) => patch((s) => (s.extraTracks[i].toPos = Number(e.target.value) || 0))}
+                    className={inp}
+                  />
+                </Field>
+                <div className="pb-1">
+                  <button
+                    type="button"
+                    onClick={() => patch((s) => s.extraTracks.splice(i, 1))}
+                    className={xBtn}
+                  >
+                    Remove
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </section>
+
+      {/* Turnouts */}
+      <section className="rounded-lg border border-gray-200 bg-white p-4">
+        <div className="mb-3 flex items-center justify-between">
+          <h2 className="text-lg font-semibold text-gray-900">Turnouts</h2>
+          <button type="button" onClick={addTurnout} className={addBtn}>
+            + Turnout
+          </button>
+        </div>
+        {state.turnouts.length === 0 ? (
+          <p className="text-sm text-gray-500">None yet.</p>
+        ) : (
+          <div className="space-y-2">
+            {state.turnouts.map((t, i) => (
+              <div key={t.id} className="grid grid-cols-2 items-end gap-2 sm:grid-cols-6">
+                <Field label="Name">
+                  <input
+                    value={t.name}
+                    onChange={(e) => patch((s) => (s.turnouts[i].name = e.target.value))}
+                    className={inp}
+                    placeholder="West Siding"
+                  />
+                </Field>
+                <Field label="Position (in)">
+                  <input
+                    type="number"
+                    min={0}
+                    value={t.pos}
+                    onChange={(e) => patch((s) => (s.turnouts[i].pos = Number(e.target.value) || 0))}
+                    className={inp}
+                  />
+                </Field>
+                <Field label="On track">
+                  <select
+                    value={t.onTrack}
+                    onChange={(e) => patch((s) => (s.turnouts[i].onTrack = e.target.value))}
+                    className={inp}
+                  >
+                    {trackOptions.map((o) => (
+                      <option key={o.value} value={o.value}>
+                        {o.label}
+                      </option>
+                    ))}
+                  </select>
+                </Field>
+                <Field label="Diverges to">
+                  <select
+                    value={t.divergeTrack}
+                    onChange={(e) => patch((s) => (s.turnouts[i].divergeTrack = e.target.value))}
+                    className={inp}
+                  >
+                    {trackOptions.map((o) => (
+                      <option key={o.value} value={o.value}>
+                        {o.label}
+                      </option>
+                    ))}
+                  </select>
+                </Field>
+                <Field label="Hand">
+                  <select
+                    value={t.kind}
+                    onChange={(e) => patch((s) => (s.turnouts[i].kind = e.target.value as TurnoutKind))}
+                    className={inp}
+                  >
+                    {KIND_OPTIONS.map((o) => (
+                      <option key={o.value} value={o.value}>
+                        {o.label}
+                      </option>
+                    ))}
+                  </select>
+                </Field>
+                <div className="pb-1">
+                  <button
+                    type="button"
+                    onClick={() => patch((s) => s.turnouts.splice(i, 1))}
+                    className={xBtn}
+                  >
+                    Remove
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </section>
+
+      {/* Signals */}
+      <section className="rounded-lg border border-gray-200 bg-white p-4">
+        <div className="mb-3 flex items-center justify-between">
+          <h2 className="text-lg font-semibold text-gray-900">Signals</h2>
+          <button type="button" onClick={addSignal} className={addBtn}>
+            + Signal
+          </button>
+        </div>
+        {state.signals.length === 0 ? (
+          <p className="text-sm text-gray-500">None yet.</p>
+        ) : (
+          <div className="space-y-2">
+            {state.signals.map((s, i) => (
+              <div key={s.id} className="grid grid-cols-2 items-end gap-2 sm:grid-cols-5">
+                <Field label="Name">
+                  <input
+                    value={s.name}
+                    onChange={(e) => patch((st) => (st.signals[i].name = e.target.value))}
+                    className={inp}
+                    placeholder="CP West"
+                  />
+                </Field>
+                <Field label="Position (in)">
+                  <input
+                    type="number"
+                    min={0}
+                    value={s.pos}
+                    onChange={(e) => patch((st) => (st.signals[i].pos = Number(e.target.value) || 0))}
+                    className={inp}
+                  />
+                </Field>
+                <Field label="Track">
+                  <select
+                    value={s.track}
+                    onChange={(e) => patch((st) => (st.signals[i].track = e.target.value))}
+                    className={inp}
+                  >
+                    {trackOptions.map((o) => (
+                      <option key={o.value} value={o.value}>
+                        {o.label}
+                      </option>
+                    ))}
+                  </select>
+                </Field>
+                <Field label="Facing">
+                  <select
+                    value={s.facing}
+                    onChange={(e) => patch((st) => (st.signals[i].facing = e.target.value as SignalFacing))}
+                    className={inp}
+                  >
+                    <option value="AtoB">West → East</option>
+                    <option value="BtoA">East → West</option>
+                  </select>
+                </Field>
+                <div className="pb-1">
+                  <button
+                    type="button"
+                    onClick={() => patch((st) => st.signals.splice(i, 1))}
+                    className={xBtn}
+                  >
+                    Remove
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </section>
+
+      {error && (
+        <p className="rounded-md bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>
+      )}
+      {saved && !error && (
+        <p className="rounded-md bg-green-50 px-3 py-2 text-sm text-green-700">
+          Schematic saved.
+        </p>
+      )}
+
+      <div className="flex items-center gap-3">
+        <button
+          type="button"
+          onClick={() => save(false)}
+          disabled={isPending}
+          className="rounded-md bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 disabled:opacity-50"
+        >
+          {isPending ? "Saving…" : "Save schematic"}
+        </button>
+        {hadSchematic && (
+          <button
+            type="button"
+            onClick={() => save(true)}
+            disabled={isPending}
+            className="rounded-md border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50"
+          >
+            Clear schematic
+          </button>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function Field({ label, children }: { label: string; children: React.ReactNode }) {
+  return (
+    <label className="block text-xs font-medium text-gray-600">
+      {label}
+      <div className="mt-0.5">{children}</div>
+    </label>
+  );
+}
