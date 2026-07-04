@@ -254,6 +254,32 @@ export default async function ModuleDetailPage({
         />
       </dl>
 
+      {/* ---- Operations schematic (track-graph) — up top, it's the heart -- */}
+      <Section title="Operations schematic">
+        {asModuleSchematic(module.schematic) ? (
+          <div className="space-y-2">
+            <SchematicPreview doc={asModuleSchematic(module.schematic)!} />
+            {isOwner && (
+              <Link
+                href={`/modules/${module.id}/schematic`}
+                className="inline-block text-sm text-blue-600 hover:underline"
+              >
+                Edit schematic →
+              </Link>
+            )}
+          </div>
+        ) : isOwner ? (
+          <Link
+            href={`/modules/${module.id}/schematic`}
+            className="inline-block rounded-md border border-dashed border-gray-300 px-4 py-3 text-sm text-blue-600 hover:bg-gray-50"
+          >
+            Build the operations schematic — sidings, turnouts and signals →
+          </Link>
+        ) : (
+          <p className="text-sm text-gray-500">No operations schematic yet.</p>
+        )}
+      </Section>
+
       {/* ---- Endplates ------------------------------------------------- */}
       <Section title="Endplates">
         <ul className="space-y-3">
@@ -522,32 +548,6 @@ export default async function ModuleDetailPage({
             </div>
             <SubmitButton label="Upload" />
           </form>
-        )}
-      </Section>
-
-      {/* ---- Operations schematic (track-graph) ------------------------- */}
-      <Section title="Operations schematic">
-        {asModuleSchematic(module.schematic) ? (
-          <div className="space-y-2">
-            <SchematicPreview doc={asModuleSchematic(module.schematic)!} />
-            {isOwner && (
-              <Link
-                href={`/modules/${module.id}/schematic`}
-                className="inline-block text-sm text-blue-600 hover:underline"
-              >
-                Edit schematic →
-              </Link>
-            )}
-          </div>
-        ) : isOwner ? (
-          <Link
-            href={`/modules/${module.id}/schematic`}
-            className="inline-block rounded-md border border-dashed border-gray-300 px-4 py-3 text-sm text-blue-600 hover:bg-gray-50"
-          >
-            Build the operations schematic — sidings, turnouts and signals →
-          </Link>
-        ) : (
-          <p className="text-sm text-gray-500">No operations schematic yet.</p>
         )}
       </Section>
 

@@ -7,6 +7,7 @@ import {
   stateToDoc,
   buildPassingSiding,
   nextId,
+  inchesToScaleFeet,
   type EditorState,
   type TrackRole,
   type TurnoutKind,
@@ -209,7 +210,7 @@ export function SchematicEditor({
         ) : (
           <div className="space-y-2">
             {state.extraTracks.map((t, i) => (
-              <div key={t.id} className="grid grid-cols-2 items-end gap-2 sm:grid-cols-6">
+              <div key={t.id} className="grid grid-cols-2 items-end gap-2 sm:grid-cols-7">
                 <Field label="ID">
                   <input value={t.id} readOnly className={`${inp} bg-gray-50`} />
                 </Field>
@@ -252,6 +253,11 @@ export function SchematicEditor({
                     onChange={(e) => patch((s) => (s.extraTracks[i].toPos = Number(e.target.value) || 0))}
                     className={inp}
                   />
+                </Field>
+                <Field label="Capacity (N)">
+                  <div className={`${inp} bg-gray-50 text-gray-600`}>
+                    {Math.round(inchesToScaleFeet(Math.abs(t.toPos - t.fromPos)))} ft
+                  </div>
                 </Field>
                 <div className="pb-1">
                   <button

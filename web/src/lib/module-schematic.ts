@@ -95,6 +95,17 @@ export interface EditorState {
 
 export const MAIN_TRACK_ID = "main";
 
+// North American N scale (1:160): 396 real inches → 5280 scale feet = one mile.
+export const N_SCALE_RATIO = 160;
+/** Real inches on the module → scale feet of prototype track represented. */
+export function inchesToScaleFeet(inches: number, ratio = N_SCALE_RATIO): number {
+  return (inches * ratio) / 12;
+}
+/** Scale feet of prototype track → real inches on the module. */
+export function scaleFeetToInches(feet: number, ratio = N_SCALE_RATIO): number {
+  return (feet * 12) / ratio;
+}
+
 /** Parse a jsonb value into a schematic doc, or null if it isn't one. */
 export function asModuleSchematic(x: unknown): ModuleSchematicDoc | null {
   if (!x || typeof x !== "object") return null;
