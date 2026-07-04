@@ -2,6 +2,8 @@ import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { embeddedOne } from "@/lib/embedded";
+import { asModuleSchematic } from "@/lib/module-schematic";
+import { SchematicPreview } from "./schematic/schematic-preview";
 import { StatusBadge } from "@/components/status-badge";
 import {
   TextField,
@@ -74,7 +76,7 @@ export default async function ModuleDetailPage({
   const { data: module } = await supabase
     .from("freemon_modules")
     .select(
-      "id, record_number, module_name, description, category, geometry_type, geometry_degrees, geometry_offset_inches, length_total_inches, mainline_length_inches, endplate_count, has_mss, mss_type, status, owner_id, updated_at",
+      "id, record_number, module_name, description, category, geometry_type, geometry_degrees, geometry_offset_inches, length_total_inches, mainline_length_inches, endplate_count, has_mss, mss_type, status, owner_id, updated_at, schematic",
     )
     .eq("id", moduleId)
     .maybeSingle();
@@ -520,6 +522,32 @@ export default async function ModuleDetailPage({
             </div>
             <SubmitButton label="Upload" />
           </form>
+        )}
+      </Section>
+
+      {/* ---- Operations schematic (track-graph) ------------------------- */}
+      <Section title="Operations schematic">
+        {asModuleSchematic(module.schematic) ? (
+          <div className="space-y-2">
+            <SchematicPreview doc={asModuleSchematic(module.schematic)!} />
+            {isOwner && (
+              <Link
+                href={`/modules/${module.id}/schematic`}
+                className="inline-block text-sm text-blue-600 hover:underline"
+              >
+                Edit schematic →
+              </Link>
+            )}
+          </div>
+        ) : isOwner ? (
+          <Link
+            href={`/modules/${module.id}/schematic`}
+            className="inline-block rounded-md border border-dashed border-gray-300 px-4 py-3 text-sm text-blue-600 hover:bg-gray-50"
+          >
+            Build the operations schematic — sidings, turnouts and signals →
+          </Link>
+        ) : (
+          <p className="text-sm text-gray-500">No operations schematic yet.</p>
         )}
       </Section>
 
