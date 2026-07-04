@@ -91,6 +91,15 @@ export interface EditorState {
 
 export const MAIN_TRACK_ID = "main";
 
+/** Parse a jsonb value into a schematic doc, or null if it isn't one. */
+export function asModuleSchematic(x: unknown): ModuleSchematicDoc | null {
+  if (!x || typeof x !== "object") return null;
+  const d = x as Record<string, unknown>;
+  if (typeof d.version !== "number") return null;
+  if (!Array.isArray(d.endplates) || !Array.isArray(d.tracks)) return null;
+  return d as unknown as ModuleSchematicDoc;
+}
+
 /** Build the empty editor state for a module of the given length. */
 export function emptyEditorState(lengthInches: number): EditorState {
   return {
