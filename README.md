@@ -149,4 +149,4 @@ VS Code extension for an interactive contract view.
 | M3 — Auth & user management | ✅ Complete |
 | M4 — Owner portal | ✅ Complete |
 | M5 — Admin GUI | ✅ Complete |
-| M6 — Free Dispatcher integration | ⬜ Planned |
+| M6 — Free Dispatcher integration | ✅ Complete |
