@@ -9,9 +9,6 @@ import { moduleFeatures, type ModuleSchematicDoc } from "@/lib/module-schematic"
 
 const LANE_GAP = 12;
 const PAD = 10;
-const Y0 = 46; // Main 1 (lower); higher lanes stack upward
-const HEIGHT = 60;
-const laneY = (lane: number) => Y0 - lane * LANE_GAP;
 
 export function SchematicPreview({ doc }: { doc: ModuleSchematicDoc }) {
   const f = moduleFeatures(doc);
@@ -19,6 +16,13 @@ export function SchematicPreview({ doc }: { doc: ModuleSchematicDoc }) {
   const px = (frac: number) => PAD + frac * (W - 2 * PAD);
   const lengthInches = doc.lengthInches ?? 0;
   const feet = Math.round((lengthInches / 12) * 10) / 10;
+  // Vertical space follows the lane extents — negative lanes (a track outside
+  // Main 1) grow the canvas downward, extra lanes upward (modulerepo#14).
+  const laneTop = Math.max(f.laneMax, f.doubleMain ? 1 : 0);
+  const laneBot = Math.min(f.laneMin, 0);
+  const Y0 = 14 + laneTop * LANE_GAP; // Main 1; higher lanes stack upward
+  const HEIGHT = Y0 - laneBot * LANE_GAP + 14;
+  const laneY = (lane: number) => Y0 - lane * LANE_GAP;
 
   return (
     <div className="rounded-md border border-gray-200 bg-gray-50 p-2">
@@ -31,7 +35,7 @@ export function SchematicPreview({ doc }: { doc: ModuleSchematicDoc }) {
       <svg
         viewBox={`0 0 ${W} ${HEIGHT}`}
         width="100%"
-        height="120"
+        height={HEIGHT * 2}
         preserveAspectRatio="xMidYMid meet"
         className="rounded bg-white"
       >
@@ -55,7 +59,9 @@ export function SchematicPreview({ doc }: { doc: ModuleSchematicDoc }) {
           const x1 = px(t.fromFrac);
           const x2 = px(t.toFrac);
           const yl = laneY(t.lane);
-          const ym = laneY(0);
+          // Diverge from the main the track's turnout sits on — a team track
+          // off Main 2 starts at lane 1, not as a crossover from Main 1.
+          const ym = laneY(t.divergesFromLane);
           const thr = (x2 - x1) * 0.12 + 6;
           const pts =
             t.role === "spur"

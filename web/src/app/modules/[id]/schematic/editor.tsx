@@ -4,6 +4,7 @@ import { useMemo, useState, useTransition } from "react";
 import Link from "next/link";
 import {
   MAIN_TRACK_ID,
+  MAIN2_TRACK_ID,
   stateToDoc,
   buildPassingSiding,
   nextId,
@@ -54,16 +55,20 @@ export function SchematicEditor({
   const [isPending, startTransition] = useTransition();
 
   const doc = useMemo(() => stateToDoc(state, recordNumber), [state, recordNumber]);
-  // Track dropdowns show the owner's track name, not the internal id.
+  const isDouble = state.configA === "double" || state.configB === "double";
+  // Track dropdowns show the owner's track name, not the internal id. On a
+  // double-track module, Main 2 is a real track — a turnout on it diverges
+  // outward instead of drawing a crossover from Main 1 (modulerepo#14).
   const trackOptions = useMemo(
     () => [
-      { value: MAIN_TRACK_ID, label: "Main" },
+      { value: MAIN_TRACK_ID, label: isDouble ? "Main 1" : "Main" },
+      ...(isDouble ? [{ value: MAIN2_TRACK_ID, label: "Main 2" }] : []),
       ...state.extraTracks.map((t) => ({
         value: t.id,
         label: t.trackName || t.id,
       })),
     ],
-    [state.extraTracks],
+    [state.extraTracks, isDouble],
   );
 
   const patch = (fn: (s: EditorState) => void) =>
@@ -83,7 +88,9 @@ export function SchematicEditor({
   }
   function addSpur() {
     patch((s) => {
-      const lane = Math.max(1, ...s.extraTracks.map((t) => t.lane + 1));
+      // Lane 1 is Main 2 on a double module; first free lane is above it.
+      const base = s.configA === "double" || s.configB === "double" ? 2 : 1;
+      const lane = Math.max(base, ...s.extraTracks.map((t) => t.lane + 1));
       s.extraTracks.push({
         id: nextId("spur", s.extraTracks.map((t) => t.id)),
         role: "spur",
@@ -248,12 +255,18 @@ export function SchematicEditor({
                     ))}
                   </select>
                 </Field>
-                <Field label="Lane">
+                <Field label="Lane (−1 = below Main 1)">
                   <input
                     type="number"
-                    min={1}
+                    min={-2}
                     value={t.lane}
-                    onChange={(e) => patch((s) => (s.extraTracks[i].lane = Number(e.target.value) || 1))}
+                    title="Stacking row: 1+ above the main(s), −1 below Main 1 (the outside on a double-track module)"
+                    onChange={(e) =>
+                      patch((s) => {
+                        const n = Number(e.target.value);
+                        s.extraTracks[i].lane = Number.isFinite(n) && n !== 0 ? n : 1;
+                      })
+                    }
                     className={inp}
                   />
                 </Field>
