@@ -114,7 +114,7 @@ export function SchematicEditor({
         name: "",
         turnouts: [],
         signals: [
-          { id: `${id}-AtoB`, pos: Math.round(s.lengthInches * 0.25), track: MAIN_TRACK_ID, facing: "AtoB" },
+          { id: `${id}-AtoB`, pos: Math.round(s.lengthInches * 0.25), track: MAIN_TRACK_ID, facing: "AtoB", side: "above" },
         ],
       });
     });
@@ -450,6 +450,7 @@ export function SchematicEditor({
                             pos: cp.signals[0]?.pos ?? Math.round(st.lengthInches * 0.25),
                             track: MAIN_TRACK_ID,
                             facing: "AtoB",
+                            side: cp.signals.length % 2 === 0 ? "above" : "below",
                           });
                         })
                       }
@@ -459,7 +460,7 @@ export function SchematicEditor({
                     </button>
                   </div>
                   {c.signals.map((s, si) => (
-                    <div key={s.id} className="mt-1 grid grid-cols-2 items-end gap-2 sm:grid-cols-4">
+                    <div key={s.id} className="mt-1 grid grid-cols-2 items-end gap-2 sm:grid-cols-5">
                       <Field label="Position (in)">
                         <input
                           type="number"
@@ -490,6 +491,16 @@ export function SchematicEditor({
                         >
                           <option value="AtoB">West → East</option>
                           <option value="BtoA">East → West</option>
+                        </select>
+                      </Field>
+                      <Field label="Side">
+                        <select
+                          value={s.side}
+                          onChange={(e) => patch((st) => (st.controlPoints[ci].signals[si].side = e.target.value as "above" | "below"))}
+                          className={inp}
+                        >
+                          <option value="above">Above track</option>
+                          <option value="below">Below track</option>
                         </select>
                       </Field>
                       <div className="pb-1">

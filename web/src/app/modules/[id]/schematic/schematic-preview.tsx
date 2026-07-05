@@ -48,47 +48,46 @@ export function SchematicPreview({ doc }: { doc: ModuleSchematicDoc }) {
           <line x1={px(0)} y1={laneY(1)} x2={px(1)} y2={laneY(1)} stroke="#2563eb" strokeWidth={2.4} strokeLinecap="round" />
         )}
 
-        {/* Sidings / spurs */}
-        {f.extraTracks.map((t) => (
-          <line
-            key={t.id}
-            x1={px(t.fromFrac)}
-            y1={laneY(t.lane)}
-            x2={px(t.toFrac)}
-            y2={laneY(t.lane)}
-            stroke="#64748b"
-            strokeWidth={1.8}
-            strokeLinecap="round"
-            strokeDasharray={t.role === "spur" ? "3 2" : undefined}
-          >
-            <title>{t.role}</title>
-          </line>
-        ))}
-
-        {/* Turnouts — diverging connector */}
-        {f.turnouts.map((t) => {
-          const dir = t.posFrac < 0.5 ? 1 : -1;
+        {/* Sidings (passing loops, dipping to the main at each turnout) and
+            spurs (rise + stub). */}
+        {f.extraTracks.map((t) => {
+          const x1 = px(t.fromFrac);
+          const x2 = px(t.toFrac);
+          const yl = laneY(t.lane);
+          const ym = laneY(0);
+          const thr = (x2 - x1) * 0.12 + 6;
+          const pts =
+            t.role === "spur"
+              ? `${x1},${ym} ${x1 + thr},${yl} ${x2},${yl}`
+              : `${x1},${ym} ${x1 + thr},${yl} ${x2 - thr},${yl} ${x2},${ym}`;
           return (
-            <line
+            <polyline
               key={t.id}
-              x1={px(t.posFrac) - dir * 10}
-              y1={laneY(t.onLane)}
-              x2={px(t.posFrac)}
-              y2={laneY(t.divergeLane)}
+              points={pts}
+              fill="none"
               stroke="#64748b"
               strokeWidth={1.8}
+              strokeLinejoin="round"
               strokeLinecap="round"
+              strokeDasharray={t.role === "spur" ? "3 2" : undefined}
             >
-              <title>{t.name || "Turnout"}</title>
-            </line>
+              <title>{t.role}</title>
+            </polyline>
           );
         })}
+
+        {/* Turnout markers on the main */}
+        {f.turnouts.map((t) => (
+          <circle key={t.id} cx={px(t.posFrac)} cy={laneY(t.onLane)} r={2} fill="#64748b">
+            <title>{t.name || "Turnout"}</title>
+          </circle>
+        ))}
 
         {/* Signals — drawn parallel to the track, pointing in the facing
             direction, so two at the same spot (opposite ways) don't stack. */}
         {f.signals.map((s) => {
           const sx = px(s.posFrac);
-          const sy = laneY(s.lane) - 4;
+          const sy = s.side === "below" ? laneY(s.lane) + 4 : laneY(s.lane) - 4;
           const dir = s.facing === "BtoA" ? -1 : 1;
           const L = 10;
           return (
