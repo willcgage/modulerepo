@@ -84,14 +84,21 @@ export function SchematicPreview({ doc }: { doc: ModuleSchematicDoc }) {
           );
         })}
 
-        {/* Signal masts */}
-        {f.signals.map((s) => (
-          <g key={s.id}>
-            <line x1={px(s.posFrac)} y1={laneY(s.lane) - 3} x2={px(s.posFrac)} y2={laneY(s.lane) - 9} stroke="#0f172a" strokeWidth={1} />
-            <circle cx={px(s.posFrac)} cy={laneY(s.lane) - 10} r={2} fill="#0f172a" />
-            <title>{`${s.name || "Signal"} (${s.facing})`}</title>
-          </g>
-        ))}
+        {/* Signals — drawn parallel to the track, pointing in the facing
+            direction, so two at the same spot (opposite ways) don't stack. */}
+        {f.signals.map((s) => {
+          const sx = px(s.posFrac);
+          const sy = laneY(s.lane) - 4;
+          const dir = s.facing === "BtoA" ? -1 : 1;
+          const L = 10;
+          return (
+            <g key={s.id}>
+              <line x1={sx} y1={sy} x2={sx + dir * L} y2={sy} stroke="#0f172a" strokeWidth={1} />
+              <circle cx={sx + dir * L} cy={sy} r={2} fill="#0f172a" />
+              <title>{`${s.name || "Signal"} (${s.facing})`}</title>
+            </g>
+          );
+        })}
       </svg>
     </div>
   );
