@@ -222,7 +222,13 @@ export function docToState(
   const d =
     doc && typeof doc === "object" ? (doc as ModuleSchematicDoc) : null;
   const hasDoc = d && typeof d.lengthInches === "number" && Array.isArray(d.tracks);
-  const len = hasDoc ? d!.lengthInches : fallbackLength;
+  // The module's length is authoritative (the mainline is the module). If the
+  // saved doc used a different length, rescale its feature positions to fit so
+  // the mainline always reads as the module's true length.
+  const len = fallbackLength > 0 ? fallbackLength : hasDoc ? d!.lengthInches : 24;
+  const docLen = hasDoc && d!.lengthInches > 0 ? d!.lengthInches : len;
+  const scale = docLen > 0 ? len / docLen : 1;
+  const sc = (p: number) => Math.round(p * scale);
 
   const nameOf = (id: number | null | undefined): string => {
     const mt = id != null ? moduleTracks.find((m) => m.id === id) : undefined;
@@ -240,8 +246,8 @@ export function docToState(
         id: t.id,
         role: (t.role as TrackRole) ?? "siding",
         lane: t.lane ?? 1,
-        fromPos: t.fromPos ?? 0,
-        toPos: t.toPos ?? len,
+        fromPos: sc(t.fromPos ?? 0),
+        toPos: t.toPos != null ? sc(t.toPos) : len,
         moduleTrackId,
         trackName: t.trackName ?? nameOf(moduleTrackId),
       });
@@ -289,17 +295,20 @@ export function docToState(
     turnouts: (d!.turnouts ?? []).map((t) => ({
       id: t.id,
       name: t.name ?? "",
-      pos: t.pos,
+      pos: sc(t.pos),
       onTrack: t.onTrack,
       divergeTrack: t.divergeTrack,
       kind: (t.kind as TurnoutKind) ?? "right",
     })),
-    controlPoints: readControlPoints(d!),
+    controlPoints: readControlPoints(d!, sc),
   };
 }
 
 /** Control points from a doc, migrating pre-grouping flat signals into groups. */
-function readControlPoints(d: ModuleSchematicDoc): EditorControlPoint[] {
+function readControlPoints(
+  d: ModuleSchematicDoc,
+  sc: (p: number) => number = (p) => p,
+): EditorControlPoint[] {
   if (Array.isArray(d.controlPoints)) {
     return d.controlPoints.map((c) => ({
       id: c.id,
@@ -307,7 +316,7 @@ function readControlPoints(d: ModuleSchematicDoc): EditorControlPoint[] {
       turnouts: c.turnouts ?? [],
       signals: (c.signals ?? []).map((s) => ({
         id: s.id,
-        pos: s.pos,
+        pos: sc(s.pos),
         track: s.track,
         facing: (s.facing as SignalFacing) ?? "AtoB",
       })),
@@ -325,7 +334,7 @@ function readControlPoints(d: ModuleSchematicDoc): EditorControlPoint[] {
     }
     cp.signals.push({
       id: s.id,
-      pos: s.pos,
+      pos: sc(s.pos),
       track: s.track,
       facing: (s.facing as SignalFacing) ?? "AtoB",
     });
