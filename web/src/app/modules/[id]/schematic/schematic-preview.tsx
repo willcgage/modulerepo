@@ -17,14 +17,15 @@ export function SchematicPreview({ doc }: { doc: ModuleSchematicDoc }) {
   const f = moduleFeatures(doc);
   const W = 300; // logical width; positions are fractions of it
   const px = (frac: number) => PAD + frac * (W - 2 * PAD);
-  const feet = Math.round((doc.lengthInches / 12) * 10) / 10;
+  const lengthInches = doc.lengthInches ?? 0;
+  const feet = Math.round((lengthInches / 12) * 10) / 10;
 
   return (
     <div className="rounded-md border border-gray-200 bg-gray-50 p-2">
       <div className="mb-1 flex items-center justify-between text-xs text-gray-500">
         <span>Operations preview (West → East)</span>
         <span>
-          {doc.lengthInches}&Prime; · {feet} ft
+          {lengthInches}&Prime; · {feet} ft
         </span>
       </div>
       <svg
