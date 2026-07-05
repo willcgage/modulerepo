@@ -39,12 +39,14 @@ export function SchematicEditor({
   moduleName,
   initial,
   hadSchematic,
+  newModule = false,
 }: {
   moduleId: number;
   recordNumber: string;
   moduleName: string;
   initial: EditorState;
   hadSchematic: boolean;
+  newModule?: boolean;
 }) {
   const [state, setState] = useState<EditorState>(initial);
   const [error, setError] = useState<string | null>(null);
@@ -132,6 +134,13 @@ export function SchematicEditor({
 
   return (
     <div className="space-y-5">
+      {newModule && (
+        <div className="rounded-lg border border-blue-200 bg-blue-50 px-4 py-3 text-sm text-blue-800">
+          <span className="font-semibold">Module created — last step.</span> Lay
+          out the operations schematic below, then <span className="font-medium">Save</span>.
+          You can always come back to it.
+        </div>
+      )}
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-xl font-semibold text-gray-900">Operations schematic</h1>
@@ -140,7 +149,7 @@ export function SchematicEditor({
           </p>
         </div>
         <Link href={`/modules/${moduleId}`} className="text-sm text-blue-600 hover:underline">
-          ← Back to module
+          {newModule ? "Skip for now →" : "← Back to module"}
         </Link>
       </div>
 
@@ -525,8 +534,16 @@ export function SchematicEditor({
         <p className="rounded-md bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>
       )}
       {saved && !error && (
-        <p className="rounded-md bg-green-50 px-3 py-2 text-sm text-green-700">
-          Schematic saved.
+        <p className="flex items-center justify-between gap-3 rounded-md bg-green-50 px-3 py-2 text-sm text-green-700">
+          <span>Schematic saved.</span>
+          {newModule && (
+            <Link
+              href={`/modules/${moduleId}`}
+              className="shrink-0 font-medium text-green-800 hover:underline"
+            >
+              Done — go to module →
+            </Link>
+          )}
         </p>
       )}
 
