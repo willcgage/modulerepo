@@ -13,6 +13,7 @@ export type TrackConfig = "single" | "double";
 export type TrackRole = "main" | "siding" | "spur" | "yard" | "crossover";
 export type TurnoutKind = "left" | "right" | "wye";
 export type SignalFacing = "AtoB" | "BtoA";
+export type SignalSide = "above" | "below";
 
 export interface SchematicEndplate {
   id: string; // "A" (West) | "B" (East)
@@ -48,6 +49,7 @@ export interface SchematicSignal {
   facing: SignalFacing;
   kind: "mast" | "dwarf";
   name?: string;
+  side?: SignalSide;
   /** Turnout this control point is attached to (absent = standalone block signal). */
   turnout?: string;
 }
@@ -60,7 +62,7 @@ export interface SchematicControlPoint {
   id: string;
   name: string;
   turnouts: string[]; // turnout ids
-  signals: { id: string; pos: number; track: string; facing: SignalFacing; kind: "mast" | "dwarf" }[];
+  signals: { id: string; pos: number; track: string; facing: SignalFacing; kind: "mast" | "dwarf"; side?: SignalSide }[];
 }
 export interface ModuleSchematicDoc {
   version: number;
@@ -107,6 +109,7 @@ export interface EditorCpSignal {
   pos: number;
   track: string;
   facing: SignalFacing;
+  side: SignalSide;
 }
 export interface EditorControlPoint {
   id: string;
@@ -201,6 +204,7 @@ export function stateToDoc(
         track: s.track,
         facing: s.facing,
         kind: "mast" as const,
+        side: s.side,
       })),
     })),
   };
@@ -319,6 +323,7 @@ function readControlPoints(
         pos: sc(s.pos),
         track: s.track,
         facing: (s.facing as SignalFacing) ?? "AtoB",
+        side: (s.side as SignalSide) ?? "above",
       })),
     }));
   }
@@ -337,6 +342,7 @@ function readControlPoints(
       pos: sc(s.pos),
       track: s.track,
       facing: (s.facing as SignalFacing) ?? "AtoB",
+      side: (s.side as SignalSide) ?? "above",
     });
   }
   return [...groups.values()];
@@ -395,6 +401,8 @@ export function buildPassingSiding(state: EditorState): {
     pos,
     track: MAIN_TRACK_ID,
     facing,
+    // opposite directions on opposite sides so they never overlap
+    side: facing === "AtoB" ? "above" : "below",
   });
   const controlPoints: EditorControlPoint[] = [
     { id: cpW, name: "West Siding", turnouts: [swW], signals: [sig(cpW, fromPos, "AtoB"), sig(cpW, fromPos, "BtoA")] },
@@ -426,6 +434,7 @@ export interface DrawSignal {
   posFrac: number;
   lane: number;
   facing: SignalFacing;
+  side: SignalSide;
 }
 export interface ModuleFeatures {
   doubleMain: boolean;
@@ -492,6 +501,7 @@ export function moduleFeatures(doc: ModuleSchematicDoc): ModuleFeatures {
           posFrac: clampFrac(s.pos),
           lane: trackLane.get(s.track) ?? 0,
           facing: s.facing,
+          side: (s.side as SignalSide) ?? "above",
         })),
       )
     : (doc.signals ?? []).map((s) => ({
@@ -500,6 +510,7 @@ export function moduleFeatures(doc: ModuleSchematicDoc): ModuleFeatures {
         posFrac: clampFrac(s.pos),
         lane: trackLane.get(s.track) ?? 0,
         facing: s.facing,
+        side: "above" as SignalSide,
       }));
 
   return { doubleMain, extraTracks, turnouts, signals };
