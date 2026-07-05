@@ -29,9 +29,15 @@ export default async function ModuleSchematicPage({
   if (!module) notFound();
   if (module.owner_id !== user.id) redirect(`/modules/${moduleId}`);
 
+  const { data: moduleTracks } = await supabase
+    .from("module_tracks")
+    .select("id, track_name, capacity_scale_feet")
+    .eq("module_id", moduleId)
+    .order("id");
+
   const fallbackLength =
     Number(module.mainline_length_inches ?? module.length_total_inches) || 24;
-  const initial = docToState(module.schematic, fallbackLength);
+  const initial = docToState(module.schematic, fallbackLength, moduleTracks ?? []);
 
   return (
     <div className="mx-auto max-w-3xl px-4 py-12">
