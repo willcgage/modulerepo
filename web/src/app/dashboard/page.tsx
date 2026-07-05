@@ -47,7 +47,7 @@ export default async function DashboardPage({
         </p>
       )}
 
-      <div className="mt-8 flex gap-3">
+      <div className="mt-8 flex flex-wrap gap-3">
         <Link
           href="/modules"
           className="rounded-md bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700"
@@ -68,6 +68,12 @@ export default async function DashboardPage({
             Admin
           </Link>
         )}
+        <Link
+          href="/help"
+          className="rounded-md border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
+        >
+          Help
+        </Link>
       </div>
 
       <dl className="mt-8 divide-y divide-gray-200 rounded-lg border border-gray-200 bg-white">
