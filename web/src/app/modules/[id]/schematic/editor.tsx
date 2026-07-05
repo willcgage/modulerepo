@@ -82,7 +82,8 @@ export function SchematicEditor({
         lane,
         fromPos: Math.round(s.lengthInches * 0.4),
         toPos: Math.round(s.lengthInches * 0.7),
-        capacityFeet: null,
+        moduleTrackId: null,
+        trackName: "",
       });
     });
   }
@@ -212,8 +213,13 @@ export function SchematicEditor({
           <div className="space-y-2">
             {state.extraTracks.map((t, i) => (
               <div key={t.id} className="grid grid-cols-2 items-end gap-2 sm:grid-cols-7">
-                <Field label="ID">
-                  <input value={t.id} readOnly className={`${inp} bg-gray-50`} />
+                <Field label="Track name">
+                  <input
+                    value={t.trackName}
+                    onChange={(e) => patch((s) => (s.extraTracks[i].trackName = e.target.value))}
+                    className={inp}
+                    placeholder="e.g. Siding 1"
+                  />
                 </Field>
                 <Field label="Kind">
                   <select

@@ -28,6 +28,10 @@ export interface SchematicTrack {
   fromPos?: number;
   toPos?: number;
   capacityFeet?: number | null;
+  /** The module_tracks row this track is (single source of truth); null = new. */
+  moduleTrackId?: number | null;
+  /** Owner's track name, mirrored to module_tracks.track_name. */
+  trackName?: string;
 }
 export interface SchematicTurnout {
   id: string;
@@ -78,7 +82,17 @@ export interface EditorTrack {
   lane: number;
   fromPos: number;
   toPos: number;
-  capacityFeet?: number | null;
+  /** module_tracks row id (single source of truth), or null for a new track. */
+  moduleTrackId: number | null;
+  /** Owner's track name → module_tracks.track_name. */
+  trackName: string;
+}
+
+/** A module_tracks row as loaded for the editor. */
+export interface ModuleTrackRow {
+  id: number;
+  track_name: string | null;
+  capacity_scale_feet: number | null;
 }
 export interface EditorTurnout {
   id: string;
@@ -164,7 +178,9 @@ export function stateToDoc(
         lane: t.lane,
         fromPos: t.fromPos,
         toPos: t.toPos,
-        capacityFeet: t.capacityFeet ?? null,
+        moduleTrackId: t.moduleTrackId,
+        trackName: t.trackName || undefined,
+        capacityFeet: Math.round(inchesToScaleFeet(Math.abs(t.toPos - t.fromPos))),
       })),
     ],
     turnouts: state.turnouts.map((t) => ({
@@ -190,35 +206,75 @@ export function stateToDoc(
   };
 }
 
-/** Derive editor state from an existing doc (or defaults if there is none). */
+/**
+ * Derive editor state from the doc and the module's Track section rows. Tracks
+ * are the single source of truth for name/capacity (module_tracks), while the
+ * schematic doc adds geometry (lane, positions). We merge: doc tracks first
+ * (they carry geometry + their moduleTrackId link), then any module_tracks not
+ * yet positioned in the schematic.
+ */
 export function docToState(
   doc: unknown,
   fallbackLength: number,
+  moduleTracks: ModuleTrackRow[] = [],
 ): EditorState {
   const base = emptyEditorState(fallbackLength);
-  if (!doc || typeof doc !== "object") return base;
-  const d = doc as ModuleSchematicDoc;
-  if (typeof d.lengthInches !== "number" || !Array.isArray(d.tracks)) return base;
+  const d =
+    doc && typeof doc === "object" ? (doc as ModuleSchematicDoc) : null;
+  const hasDoc = d && typeof d.lengthInches === "number" && Array.isArray(d.tracks);
+  const len = hasDoc ? d!.lengthInches : fallbackLength;
 
-  const configOf = (id: string): TrackConfig => {
-    const ep = (d.endplates ?? []).find((e) => e.id === id);
-    return ep?.tracks?.[0]?.config === "double" ? "double" : "single";
+  const nameOf = (id: number | null | undefined): string => {
+    const mt = id != null ? moduleTracks.find((m) => m.id === id) : undefined;
+    return mt?.track_name ?? "";
   };
-  return {
-    lengthInches: d.lengthInches,
-    configA: configOf("A"),
-    configB: configOf("B"),
-    extraTracks: d.tracks
-      .filter((t) => t.role !== "main")
-      .map((t) => ({
+
+  const extraTracks: EditorTrack[] = [];
+  const usedMt = new Set<number>();
+  if (hasDoc) {
+    for (const t of d!.tracks) {
+      if (t.role === "main") continue;
+      const moduleTrackId = t.moduleTrackId ?? null;
+      if (moduleTrackId != null) usedMt.add(moduleTrackId);
+      extraTracks.push({
         id: t.id,
         role: (t.role as TrackRole) ?? "siding",
         lane: t.lane ?? 1,
         fromPos: t.fromPos ?? 0,
-        toPos: t.toPos ?? d.lengthInches,
-        capacityFeet: t.capacityFeet ?? null,
-      })),
-    turnouts: (d.turnouts ?? []).map((t) => ({
+        toPos: t.toPos ?? len,
+        moduleTrackId,
+        trackName: t.trackName ?? nameOf(moduleTrackId),
+      });
+    }
+  }
+  // module_tracks that aren't positioned in the schematic yet.
+  let lane = Math.max(0, ...extraTracks.map((t) => t.lane));
+  for (const mt of moduleTracks) {
+    if (usedMt.has(mt.id)) continue;
+    lane += 1;
+    extraTracks.push({
+      id: `mt${mt.id}`,
+      role: "siding",
+      lane,
+      fromPos: Math.round(len * 0.2),
+      toPos: Math.round(len * 0.8),
+      moduleTrackId: mt.id,
+      trackName: mt.track_name ?? "",
+    });
+  }
+
+  if (!hasDoc) return { ...base, lengthInches: len, extraTracks };
+
+  const configOf = (id: string): TrackConfig => {
+    const ep = (d!.endplates ?? []).find((e) => e.id === id);
+    return ep?.tracks?.[0]?.config === "double" ? "double" : "single";
+  };
+  return {
+    lengthInches: len,
+    configA: configOf("A"),
+    configB: configOf("B"),
+    extraTracks,
+    turnouts: (d!.turnouts ?? []).map((t) => ({
       id: t.id,
       name: t.name ?? "",
       pos: t.pos,
@@ -226,7 +282,7 @@ export function docToState(
       divergeTrack: t.divergeTrack,
       kind: (t.kind as TurnoutKind) ?? "right",
     })),
-    controlPoints: readControlPoints(d),
+    controlPoints: readControlPoints(d!),
   };
 }
 
@@ -296,7 +352,8 @@ export function buildPassingSiding(state: EditorState): {
     lane,
     fromPos,
     toPos,
-    capacityFeet: null,
+    moduleTrackId: null,
+    trackName: "Passing siding",
   };
 
   const swIds = state.turnouts.map((t) => t.id);

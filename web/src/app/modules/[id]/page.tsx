@@ -15,18 +15,15 @@ import {
 import {
   addEndplate,
   addIndustry,
-  addTrack,
   deleteEndplate,
   deleteImage,
   deleteIndustry,
   deleteModule,
   deleteSchematic,
-  deleteTrack,
   setIndustryCarTypes,
   updateEndplate,
   updateIndustry,
   updateModuleStatus,
-  updateTrack,
   uploadImage,
   uploadSchematic,
 } from "./actions";
@@ -338,52 +335,37 @@ export default async function ModuleDetailPage({
         )}
       </Section>
 
-      {/* ---- Tracks ------------------------------------------------------ */}
+      {/* ---- Tracks (derived from the schematic builder) ----------------- */}
       <Section title="Tracks">
-        <ul className="space-y-3">
-          {(tracks ?? []).map((track) => (
-            <li key={track.id} className="rounded-lg border border-gray-200 bg-white p-4">
-              {isOwner ? (
-                <form action={updateTrack.bind(null, track.id, module.id)} className="space-y-3">
-                  <div className="flex items-center justify-between">
-                    <span className="text-sm font-semibold text-gray-900">{track.label}</span>
-                    <button
-                      formAction={deleteTrack.bind(null, track.id, module.id)}
-                      className="text-xs font-medium text-red-600 hover:underline"
-                    >
-                      Delete
-                    </button>
-                  </div>
-                  <div className="grid grid-cols-2 gap-4 sm:grid-cols-3">
-                    <TextField label="Track name" name="track_name" defaultValue={track.track_name ?? ""} required={false} maxLength={120} />
-                    <NumberField label="Capacity (scale ft)" name="capacity_scale_feet" defaultValue={track.capacity_scale_feet ?? undefined} />
-                    <TextField label="Notes" name="notes" defaultValue={track.notes ?? ""} required={false} />
-                  </div>
-                  <SubmitButton label="Save" variant="secondary" />
-                </form>
-              ) : (
-                <div className="flex items-center justify-between text-sm">
-                  <span className="font-medium text-gray-900">
-                    {track.label}
-                    {track.track_name ? ` — ${track.track_name}` : ""}
-                  </span>
-                  <span className="text-gray-600">capacity {track.capacity_scale_feet} scale ft</span>
-                </div>
-              )}
-            </li>
-          ))}
-        </ul>
-
+        <p className="mb-3 text-sm text-gray-500">
+          Tracks are managed in the operations schematic builder — capacity is
+          computed from each track&apos;s length (N scale).
+        </p>
+        {(tracks ?? []).length === 0 ? (
+          <p className="text-sm text-gray-500">No tracks yet.</p>
+        ) : (
+          <ul className="divide-y divide-gray-200 rounded-lg border border-gray-200 bg-white">
+            {(tracks ?? []).map((track) => (
+              <li key={track.id} className="flex items-center justify-between p-3 text-sm">
+                <span className="font-medium text-gray-900">
+                  {track.track_name || track.label || `Track ${track.id}`}
+                </span>
+                <span className="text-gray-600">
+                  {track.capacity_scale_feet != null
+                    ? `${track.capacity_scale_feet} scale ft`
+                    : "—"}
+                </span>
+              </li>
+            ))}
+          </ul>
+        )}
         {isOwner && (
-          <form action={addTrack.bind(null, module.id)} className="mt-4 rounded-lg border border-dashed border-gray-300 p-4">
-            <p className="mb-3 text-sm font-medium text-gray-700">Add track</p>
-            <div className="grid grid-cols-2 gap-4 sm:grid-cols-3">
-              <TextField label="Track name" name="track_name" required={false} maxLength={120} placeholder="e.g. House Track" />
-              <NumberField label="Capacity (scale ft)" name="capacity_scale_feet" />
-              <TextField label="Notes" name="notes" required={false} />
-            </div>
-            <SubmitButton label="Add track" />
-          </form>
+          <Link
+            href={`/modules/${module.id}/schematic`}
+            className="mt-3 inline-block text-sm text-blue-600 hover:underline"
+          >
+            Manage tracks in the schematic builder →
+          </Link>
         )}
       </Section>
 
