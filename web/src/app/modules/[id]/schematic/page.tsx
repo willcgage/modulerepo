@@ -5,10 +5,13 @@ import { SchematicEditor } from "./editor";
 
 export default async function ModuleSchematicPage({
   params,
+  searchParams,
 }: {
   params: Promise<{ id: string }>;
+  searchParams: Promise<{ new?: string }>;
 }) {
   const { id } = await params;
+  const { new: isNew } = await searchParams;
   const moduleId = Number(id);
   if (!Number.isInteger(moduleId)) notFound();
 
@@ -47,6 +50,7 @@ export default async function ModuleSchematicPage({
         moduleName={module.module_name}
         initial={initial}
         hadSchematic={module.schematic != null}
+        newModule={isNew === "1"}
       />
     </div>
   );

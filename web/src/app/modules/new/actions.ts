@@ -190,5 +190,7 @@ export async function createModule(
     }
   }
 
-  redirect(`/modules/${moduleId}`);
+  // Land in the schematic builder — the wizard's final step — where the owner
+  // lays out the mainline, positions their tracks, and adds turnouts and signals.
+  redirect(`/modules/${moduleId}/schematic?new=1`);
 }

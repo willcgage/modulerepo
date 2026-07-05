@@ -255,9 +255,20 @@ export function ModuleWizard({
         />
       )}
       {step === 5 && (
-        <div className="rounded-lg border border-dashed border-gray-300 bg-white p-6 text-sm text-gray-600">
-          You can add photos once the module is created — finish here and
-          you&apos;ll land on the module page, where you can upload images.
+        <div className="rounded-lg border border-gray-200 bg-white p-6 text-sm text-gray-600">
+          <h3 className="mb-2 text-base font-semibold text-gray-900">
+            Last step: the operations schematic
+          </h3>
+          <p className="mb-2">
+            Creating the module takes you straight into the{" "}
+            <span className="font-medium text-gray-800">schematic builder</span>,
+            where you lay out the mainline, position the tracks you just added, and
+            drop in passing sidings, turnouts, control points and signals.
+          </p>
+          <p>
+            It&apos;s how Free-Dispatcher reads your module. You can revisit it any
+            time, and add photos from the module page.
+          </p>
         </div>
       )}
 
@@ -285,7 +296,7 @@ export function ModuleWizard({
             disabled={isPending}
             className="rounded-md bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 disabled:opacity-50"
           >
-            {isPending ? "Creating…" : "Create module"}
+            {isPending ? "Creating…" : "Create & build schematic"}
           </button>
         )}
       </div>
@@ -511,8 +522,8 @@ function EndplatesStep({
     <div className="space-y-4">
       <p className="text-sm text-gray-600">
         Add a row for each endplate on this module. Give each one a meaningful
-        label such as "West" or "East" — if you leave the label blank it
-        defaults to EP-1, EP-2, etc.
+        label such as &ldquo;West&rdquo; or &ldquo;East&rdquo; — if you leave the
+        label blank it defaults to EP-1, EP-2, etc.
       </p>
       {endplates.map((ep, index) => (
         <div key={index} className="rounded-lg border border-gray-200 bg-white p-4">
@@ -611,9 +622,10 @@ function TracksStep({
   return (
     <div className="space-y-4">
       <p className="text-sm text-gray-600">
-        Add a row for each spur or siding on this module. The label (TRK-1,
-        TRK-2, …) is assigned automatically. Industries served directly off
-        the mainline don&apos;t need a track here.
+        Add a row for each spur or siding on this module. You&apos;ll position
+        these — and their capacity is computed from their length — in the
+        schematic builder (the last step). Industries served directly off the
+        mainline don&apos;t need a track here.
       </p>
       {tracks.map((track, index) => (
         <div key={index} className="rounded-lg border border-gray-200 bg-white p-4">
