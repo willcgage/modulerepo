@@ -52,11 +52,17 @@ export function SchematicEditor({
   const [isPending, startTransition] = useTransition();
 
   const doc = useMemo(() => stateToDoc(state, recordNumber), [state, recordNumber]);
-  const trackIds = useMemo(
-    () => [MAIN_TRACK_ID, ...state.extraTracks.map((t) => t.id)],
+  // Track dropdowns show the owner's track name, not the internal id.
+  const trackOptions = useMemo(
+    () => [
+      { value: MAIN_TRACK_ID, label: "Main" },
+      ...state.extraTracks.map((t) => ({
+        value: t.id,
+        label: t.trackName || t.id,
+      })),
+    ],
     [state.extraTracks],
   );
-  const trackOptions = trackIds.map((id) => ({ value: id, label: id }));
 
   const patch = (fn: (s: EditorState) => void) =>
     setState((prev) => {

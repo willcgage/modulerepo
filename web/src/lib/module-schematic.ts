@@ -416,11 +416,10 @@ export interface ModuleFeatures {
 /** Resolve a doc into positioned drawables (fractions of the module length). */
 export function moduleFeatures(doc: ModuleSchematicDoc): ModuleFeatures {
   const len = doc.lengthInches > 0 ? doc.lengthInches : 1;
-  // Keep to-scale, but hold features off the endplates so a switch a few inches
-  // from the end of a very long module still reads clearly (issue #1).
-  const INSET = 0.08;
-  const clampFrac = (p: number) =>
-    Math.min(1 - INSET, Math.max(INSET, p / len));
+  // To-scale: a feature renders at its true position along the module (its
+  // inches from endplate A), clamped only to the module's own extent. Signals
+  // near an end therefore read at their real spot, not bunched at an inset.
+  const clampFrac = (p: number) => Math.min(1, Math.max(0, p / len));
 
   const trackLane = new Map<string, number>();
   for (const t of doc.tracks) trackLane.set(t.id, t.lane);
