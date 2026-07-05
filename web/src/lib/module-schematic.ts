@@ -247,7 +247,19 @@ export function docToState(
       });
     }
   }
-  // module_tracks that aren't positioned in the schematic yet.
+  // Link pre-migration doc tracks (no moduleTrackId yet) to unused module_tracks
+  // by order — keeping the doc track's id so turnout/signal references stay
+  // valid. Only after that do leftover module_tracks become new tracks.
+  const unused = moduleTracks.filter((mt) => !usedMt.has(mt.id));
+  let ui = 0;
+  for (const et of extraTracks) {
+    if (et.moduleTrackId == null && ui < unused.length) {
+      const mt = unused[ui++];
+      et.moduleTrackId = mt.id;
+      if (!et.trackName) et.trackName = mt.track_name ?? "";
+      usedMt.add(mt.id);
+    }
+  }
   let lane = Math.max(0, ...extraTracks.map((t) => t.lane));
   for (const mt of moduleTracks) {
     if (usedMt.has(mt.id)) continue;
