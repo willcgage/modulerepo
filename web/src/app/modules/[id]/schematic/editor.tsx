@@ -159,14 +159,13 @@ export function SchematicEditor({
         <h2 className="mb-3 text-lg font-semibold text-gray-900">Mainline</h2>
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
           <label className="block text-sm font-medium text-gray-700">
-            Module length (inches)
+            Mainline length (inches)
             <input
               type="number"
-              min={1}
-              step="0.001"
               value={state.lengthInches}
-              onChange={(e) => patch((s) => (s.lengthInches = Number(e.target.value) || 0))}
-              className={`mt-1 ${inp}`}
+              readOnly
+              className={`mt-1 ${inp} bg-gray-50 text-gray-600`}
+              title="The module's mainline length — change it in Edit module basics; the schematic is measured against it."
             />
           </label>
           <label className="block text-sm font-medium text-gray-700">
