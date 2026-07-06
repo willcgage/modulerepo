@@ -48,17 +48,38 @@ export function SchematicPreview({ doc }: { doc: ModuleSchematicDoc }) {
           </text>
         )}
 
-        {/* Main 1 — continuous; a loop turns back at a terminal bulb */}
+        {/* Main 1 — continuous; a loop turns back at a terminal bulb, or a
+            Main 2 return joins the two lanes in a U (transit idiom). */}
         <line
           x1={px(0)}
           y1={laneY(0)}
-          x2={f.loop ? px(1) - 7 : px(1)}
+          x2={f.loop && f.loopReturn !== "main2" ? px(1) - 7 : px(1)}
           y2={laneY(0)}
           stroke="#2563eb"
           strokeWidth={2.4}
           strokeLinecap="round"
         />
-        {f.loop && (
+        {f.loop && f.loopReturn === "main2" && (
+          <>
+            {/* Main 2 runs the lead too; the balloon is the U between them */}
+            <line x1={px(0)} y1={laneY(1)} x2={px(1)} y2={laneY(1)} stroke="#2563eb" strokeWidth={2.4} strokeLinecap="round" />
+            <path
+              d={`M ${px(1)} ${laneY(0)} A ${(laneY(0) - laneY(1)) / 2} ${(laneY(0) - laneY(1)) / 2} 0 0 0 ${px(1)} ${laneY(1)}`}
+              fill="none"
+              stroke="#2563eb"
+              strokeWidth={2.4}
+              strokeLinecap="round"
+            >
+              <title>Directional return — out on Main 1, back on Main 2</title>
+            </path>
+            {/* direction arrow on the U */}
+            <polygon
+              points={`${px(1) + (laneY(0) - laneY(1)) / 2 - 1},${(laneY(0) + laneY(1)) / 2 - 3} ${px(1) + (laneY(0) - laneY(1)) / 2 - 1},${(laneY(0) + laneY(1)) / 2 + 3} ${px(1) + (laneY(0) - laneY(1)) / 2 + 3},${(laneY(0) + laneY(1)) / 2}`}
+              fill="#2563eb"
+            />
+          </>
+        )}
+        {f.loop && f.loopReturn !== "main2" && (
           <>
             <circle
               cx={px(1) - 4}
@@ -74,6 +95,12 @@ export function SchematicPreview({ doc }: { doc: ModuleSchematicDoc }) {
                   : "Balloon loop — trains turn back"}
               </title>
             </circle>
+            {/* circulation arrow on the bulb */}
+            <polygon
+              points={`${px(1) - 4 - 3},${laneY(0) - 4.5 - 2} ${px(1) - 4 + 3},${laneY(0) - 4.5 - 2} ${px(1) - 4},${laneY(0) - 4.5 + 2.5}`}
+              fill="#2563eb"
+              transform={`rotate(180 ${px(1) - 4} ${laneY(0) - 4.5})`}
+            />
             {/* A standard endplate B on the balloon = interchange branch */}
             {f.loopInterchange && (
               <>

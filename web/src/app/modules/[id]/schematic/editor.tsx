@@ -221,7 +221,10 @@ export function SchematicEditor({
                 // default to a pure turnback; a standard endplate B on the
                 // balloon (pick Single/Double) makes it an interchange.
                 if (s.loop) s.configB = "none";
-                else if (s.configB === "none") s.configB = "single";
+                else {
+                  if (s.configB === "none") s.configB = "single";
+                  s.loopReturn = "same";
+                }
               })
             }
           />
@@ -229,6 +232,22 @@ export function SchematicEditor({
           (positions past the throat are inside the loop). A standard endplate
           B on the balloon makes it an interchange.
         </label>
+        {state.loop && state.configA === "double" && (
+          <label className="mt-2 block text-sm font-medium text-gray-700 sm:max-w-xs">
+            Loop returns onto
+            <select
+              value={state.loopReturn}
+              onChange={(e) =>
+                patch((s) => (s.loopReturn = e.target.value as "same" | "main2"))
+              }
+              className={`mt-1 ${inp}`}
+              title="On a double-track main, the balloon can be a directional return: out on Main 1, back on Main 2 — drawn as a U joining the two mains."
+            >
+              <option value="same">Same main (turnback)</option>
+              <option value="main2">Main 2 (directional return)</option>
+            </select>
+          </label>
+        )}
       </section>
 
       {/* Tracks */}
@@ -315,6 +334,22 @@ export function SchematicEditor({
                     {Math.round(inchesToScaleFeet(Math.abs(t.toPos - t.fromPos)))} ft
                   </div>
                 </Field>
+                {state.loop && (
+                  <Field label="In loop">
+                    <label
+                      className="flex h-9 items-center justify-center"
+                      title="This track sits inside the balloon (past the throat) — it renders in the loop's ladder and, later, its geometric view."
+                    >
+                      <input
+                        type="checkbox"
+                        checked={t.inLoop ?? false}
+                        onChange={(e) =>
+                          patch((s) => (s.extraTracks[i].inLoop = e.target.checked))
+                        }
+                      />
+                    </label>
+                  </Field>
+                )}
                 <div className="pb-1">
                   <button
                     type="button"
