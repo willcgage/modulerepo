@@ -25,13 +25,31 @@ Deno.serve(async (req) => {
 
   try {
     const url = new URL(req.url);
+    // status=any (authenticated only) returns every status, so a syncer can
+    // mirror inactive/archived states instead of guessing (free-dispatcher#163).
     const status = url.searchParams.get("status") ?? "active";
+    const anyStatus = status === "any" || status === "all";
     const category = url.searchParams.get("category");
     const updatedSince = url.searchParams.get("updated_since");
+    // fields=ids → lightweight [{record_number, status}] of EVERY matching
+    // module (no nested payloads). Lets an incremental syncer reconcile
+    // removals + status flips without refetching full rows.
+    const idsOnly = url.searchParams.get("fields") === "ids";
 
     const authHeader = req.headers.get("Authorization") ?? "";
     const token = authHeader.replace(/^Bearer\s+/i, "").trim();
     const isJwt = token.split(".").length === 3;
+    // A real signed-in user, not the public anon key (which is itself a JWT
+    // with role "anon") — non-active visibility requires this.
+    const isUserJwt = (() => {
+      if (!isJwt) return false;
+      try {
+        const payload = JSON.parse(atob(token.split(".")[1].replace(/-/g, "+").replace(/_/g, "/")));
+        return payload?.role === "authenticated";
+      } catch {
+        return false;
+      }
+    })();
     const supabase = createClient(SUPABASE_URL, ANON_KEY, {
       global: isJwt ? { headers: { Authorization: authHeader } } : {},
     });
@@ -41,11 +59,30 @@ Deno.serve(async (req) => {
         })
       : supabase;
 
-    if (status !== "active" && !isJwt) {
+    if (status !== "active" && !isUserJwt) {
       return jsonResponse(
         { error: "forbidden", message: "Only active modules are visible without authentication." },
         403,
       );
+    }
+
+    if (idsOnly) {
+      // Service-role read: RLS hides other owners' non-active rows from a
+      // regular user, but a syncer diffing removals needs the COMPLETE list —
+      // and {record_number, status} is a minimal disclosure. Requires auth
+      // (the non-active guard above already enforced a JWT for status=any).
+      let idQuery = admin
+        .from("freemon_modules")
+        .select("record_number, status")
+        .order("record_number", { ascending: true });
+      if (!anyStatus) idQuery = idQuery.eq("status", status);
+      if (category) idQuery = idQuery.eq("category", category);
+      const { data: idData, error: idError } = await idQuery;
+      if (idError) {
+        console.error("modules/full ids query error:", idError);
+        return jsonResponse({ error: "query_failed", message: idError.message }, 500);
+      }
+      return jsonResponse(idData ?? [], 200);
     }
 
     let query = supabase
@@ -103,12 +140,12 @@ Deno.serve(async (req) => {
           )
         )
       `)
-      .eq("status", status)
       .order("record_number", { ascending: true })
       .order("endplate_number", { foreignTable: "freemon_endplates", ascending: true })
       .order("track_number", { foreignTable: "module_tracks", ascending: true })
       .order("industry_number", { foreignTable: "freemon_industries", ascending: true });
 
+    if (!anyStatus) query = query.eq("status", status);
     if (category) query = query.eq("category", category);
     if (updatedSince) query = query.gte("updated_at", updatedSince);
 
