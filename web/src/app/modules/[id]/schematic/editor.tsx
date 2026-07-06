@@ -115,6 +115,17 @@ export function SchematicEditor({
       });
     });
   }
+  function addCrossing() {
+    patch((s) => {
+      s.crossings.push({
+        id: nextId("x", s.crossings.map((x) => x.id)),
+        name: "",
+        pos: Math.round(s.lengthInches * 0.5),
+        trackA: MAIN_TRACK_ID,
+        trackB: s.extraTracks[0]?.id ?? MAIN_TRACK_ID,
+      });
+    });
+  }
   function addControlPoint() {
     patch((s) => {
       const id = nextId("cp", s.controlPoints.map((c) => c.id));
@@ -450,6 +461,136 @@ export function SchematicEditor({
         )}
       </section>
 
+      {/* Crossings (diamonds) + branch endplate — junction features (#170) */}
+      <section className="rounded-lg border border-gray-200 bg-white p-4">
+        <div className="mb-3 flex items-center justify-between">
+          <h2 className="text-lg font-semibold text-gray-900">Crossings &amp; branch</h2>
+          <button type="button" onClick={addCrossing} className={addBtn}>
+            + Crossing
+          </button>
+        </div>
+        <p className="mb-3 text-xs text-gray-500">
+          A crossing (diamond) is where two tracks cross at grade with no route
+          choice. A branch endplate is a third connection off the module — a
+          junction to another line, drawn as a named arrow on the schematic.
+        </p>
+        {state.crossings.length > 0 && (
+          <div className="mb-3 space-y-2">
+            {state.crossings.map((x, i) => (
+              <div key={x.id} className="grid grid-cols-2 items-end gap-2 sm:grid-cols-5">
+                <Field label="Name">
+                  <input
+                    value={x.name}
+                    onChange={(e) => patch((s) => (s.crossings[i].name = e.target.value))}
+                    className={inp}
+                    placeholder="Diamond"
+                  />
+                </Field>
+                <Field label="Position (in)">
+                  <input
+                    type="number"
+                    min={0}
+                    value={x.pos}
+                    onChange={(e) => patch((s) => (s.crossings[i].pos = Number(e.target.value) || 0))}
+                    className={inp}
+                  />
+                </Field>
+                <Field label="Track A">
+                  <select
+                    value={x.trackA}
+                    onChange={(e) => patch((s) => (s.crossings[i].trackA = e.target.value))}
+                    className={inp}
+                  >
+                    {trackOptions.map((o) => (
+                      <option key={o.value} value={o.value}>
+                        {o.label}
+                      </option>
+                    ))}
+                  </select>
+                </Field>
+                <Field label="Track B">
+                  <select
+                    value={x.trackB}
+                    onChange={(e) => patch((s) => (s.crossings[i].trackB = e.target.value))}
+                    className={inp}
+                  >
+                    {trackOptions.map((o) => (
+                      <option key={o.value} value={o.value}>
+                        {o.label}
+                      </option>
+                    ))}
+                  </select>
+                </Field>
+                <div className="pb-1">
+                  <button
+                    type="button"
+                    onClick={() => patch((s) => s.crossings.splice(i, 1))}
+                    className={xBtn}
+                  >
+                    Remove
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+        <label className="flex items-center gap-2 text-sm font-medium text-gray-700">
+          <input
+            type="checkbox"
+            checked={state.branch != null}
+            onChange={(e) =>
+              patch((s) => {
+                s.branch = e.target.checked
+                  ? { label: "", pos: Math.round(s.lengthInches / 2), side: "down", config: "single" }
+                  : null;
+              })
+            }
+          />
+          Branch endplate — a third connection (junction) off the module
+        </label>
+        {state.branch && (
+          <div className="mt-2 grid grid-cols-2 items-end gap-2 sm:grid-cols-4">
+            <Field label="Branch name / destination">
+              <input
+                value={state.branch.label}
+                onChange={(e) => patch((s) => (s.branch!.label = e.target.value))}
+                className={inp}
+                placeholder="Bowl Idaho"
+              />
+            </Field>
+            <Field label="Position (in from A)">
+              <input
+                type="number"
+                min={0}
+                value={state.branch.pos}
+                onChange={(e) => patch((s) => (s.branch!.pos = Number(e.target.value) || 0))}
+                className={inp}
+              />
+            </Field>
+            <Field label="Side">
+              <select
+                value={state.branch.side}
+                onChange={(e) => patch((s) => (s.branch!.side = e.target.value as "up" | "down"))}
+                className={inp}
+              >
+                <option value="up">Up (north)</option>
+                <option value="down">Down (south)</option>
+              </select>
+            </Field>
+            <Field label="Endplate track">
+              <select
+                value={state.branch.config}
+                onChange={(e) => patch((s) => (s.branch!.config = e.target.value as "single" | "double"))}
+                className={inp}
+              >
+                <option value="single">Single</option>
+                <option value="double">Double</option>
+              </select>
+            </Field>
+          </div>
+        )}
+      </section>
+
       {/* Control Points (signals — at a turnout, or a standalone block signal) */}
       <section className="rounded-lg border border-gray-200 bg-white p-4">
         <div className="mb-3 flex items-center justify-between">
@@ -514,6 +655,34 @@ export function SchematicEditor({
                     </div>
                   )}
                 </div>
+
+                {/* Crossings protected by this control point (#170) */}
+                {state.crossings.length > 0 && (
+                  <div className="mt-2">
+                    <span className="text-xs font-medium text-gray-600">Crossings</span>
+                    <div className="mt-1 flex flex-wrap gap-x-4 gap-y-1">
+                      {state.crossings.map((x) => (
+                        <label key={x.id} className="flex items-center gap-1 text-xs text-gray-700">
+                          <input
+                            type="checkbox"
+                            checked={(c.crossings ?? []).includes(x.id)}
+                            onChange={(e) =>
+                              patch((st) => {
+                                const cp = st.controlPoints[ci];
+                                const cur = cp.crossings ?? [];
+                                cp.crossings = e.target.checked
+                                  ? [...cur, x.id]
+                                  : cur.filter((v) => v !== x.id);
+                              })
+                            }
+                            className="h-3.5 w-3.5 rounded border-gray-300 text-blue-600"
+                          />
+                          {x.name || x.id}
+                        </label>
+                      ))}
+                    </div>
+                  </div>
+                )}
 
                 {/* Signals in this control point */}
                 <div className="mt-3">

@@ -18,8 +18,11 @@ export function SchematicPreview({ doc }: { doc: ModuleSchematicDoc }) {
   const feet = Math.round((lengthInches / 12) * 10) / 10;
   // Vertical space follows the lane extents — negative lanes (a track outside
   // Main 1) grow the canvas downward, extra lanes upward (modulerepo#14).
-  const laneTop = Math.max(f.laneMax, f.doubleMain ? 1 : 0);
-  const laneBot = Math.min(f.laneMin, 0);
+  // Branch connectors (#170) need a lane of headroom on their side.
+  const hasUpBranch = f.branchConnectors.some((b) => b.side === "up");
+  const hasDownBranch = f.branchConnectors.some((b) => b.side === "down");
+  const laneTop = Math.max(f.laneMax, f.doubleMain ? 1 : 0) + (hasUpBranch ? 1 : 0);
+  const laneBot = Math.min(f.laneMin, 0) - (hasDownBranch ? 1 : 0);
   const Y0 = 14 + laneTop * LANE_GAP; // Main 1; higher lanes stack upward
   const HEIGHT = Y0 - laneBot * LANE_GAP + 14;
   const laneY = (lane: number) => Y0 - lane * LANE_GAP;
@@ -167,6 +170,49 @@ export function SchematicPreview({ doc }: { doc: ModuleSchematicDoc }) {
             <title>{t.name || "Turnout"}</title>
           </circle>
         ))}
+
+        {/* Crossings (diamonds) — an X spanning the two lanes (#170) */}
+        {f.crossings.map((x) => {
+          const cx = px(x.posFrac);
+          const yA = laneY(x.laneA);
+          const yB = laneY(x.laneB);
+          const cy = (yA + yB) / 2;
+          const h = Math.max(Math.abs(yA - yB) / 2, 4);
+          return (
+            <g key={x.id} stroke="#dc2626" strokeWidth={1.6} strokeLinecap="round">
+              <line x1={cx - 4} y1={cy - h} x2={cx + 4} y2={cy + h} />
+              <line x1={cx - 4} y1={cy + h} x2={cx + 4} y2={cy - h} />
+              <title>{`Crossing${x.name ? ` · ${x.name}` : ""}`}</title>
+            </g>
+          );
+        })}
+
+        {/* Branch endplates — named connector arrows off the module (#170) */}
+        {f.branchConnectors.map((b) => {
+          const bx = px(b.posFrac);
+          const dir = b.side === "down" ? 1 : -1;
+          const y0 = laneY(0);
+          const yTip = y0 + dir * (LANE_GAP + 2);
+          return (
+            <g key={b.id}>
+              <line x1={bx} y1={y0} x2={bx + 8 * 0.6} y2={yTip} stroke="#2563eb" strokeWidth={1.8} strokeLinecap="round" />
+              <polygon
+                points={`${bx + 4.8 - 3},${yTip} ${bx + 4.8 + 3},${yTip} ${bx + 4.8},${yTip + dir * 4}`}
+                fill="#2563eb"
+              />
+              <text
+                x={bx + 8}
+                y={yTip + dir * 6}
+                fontSize="6"
+                fill="#64748b"
+                dominantBaseline={b.side === "down" ? "hanging" : "auto"}
+              >
+                {`to ${b.label}`}
+              </text>
+              <title>{`Branch endplate — to ${b.label}`}</title>
+            </g>
+          );
+        })}
 
         {/* Signals — drawn parallel to the track, pointing in the facing
             direction, so two at the same spot (opposite ways) don't stack. */}
