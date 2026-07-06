@@ -59,16 +59,45 @@ export function SchematicPreview({ doc }: { doc: ModuleSchematicDoc }) {
           strokeLinecap="round"
         />
         {f.loop && (
-          <circle
-            cx={px(1) - 4}
-            cy={laneY(0)}
-            r={4.5}
-            fill="none"
-            stroke="#2563eb"
-            strokeWidth={1.6}
-          >
-            <title>Balloon loop — trains turn back</title>
-          </circle>
+          <>
+            <circle
+              cx={px(1) - 4}
+              cy={laneY(0)}
+              r={4.5}
+              fill="none"
+              stroke="#2563eb"
+              strokeWidth={1.6}
+            >
+              <title>
+                {f.loopInterchange
+                  ? "Balloon loop with interchange — a second route connects here"
+                  : "Balloon loop — trains turn back"}
+              </title>
+            </circle>
+            {/* A standard endplate B on the balloon = interchange branch */}
+            {f.loopInterchange && (
+              <>
+                <line
+                  x1={px(1) - 4}
+                  y1={laneY(0) - 4.5}
+                  x2={px(1) - 4}
+                  y2={laneY(0) - 13}
+                  stroke="#2563eb"
+                  strokeWidth={1.6}
+                />
+                <line
+                  x1={px(1) - 8}
+                  y1={laneY(0) - 13}
+                  x2={px(1)}
+                  y2={laneY(0) - 13}
+                  stroke="#94a3b8"
+                  strokeWidth={1.4}
+                >
+                  <title>Interchange endplate (B)</title>
+                </line>
+              </>
+            )}
+          </>
         )}
         {/* Main 2 — full length when double (never on a loop) */}
         {f.doubleMain && !f.loop && (

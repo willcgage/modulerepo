@@ -195,28 +195,39 @@ export function SchematicEditor({
               <option value="double">Double</option>
             </select>
           </label>
-          {!state.loop && (
-            <label className="block text-sm font-medium text-gray-700">
-              East end (B) main track
-              <select
-                value={state.configB}
-                onChange={(e) => patch((s) => (s.configB = e.target.value as "single" | "double"))}
-                className={`mt-1 ${inp}`}
-              >
-                <option value="single">Single</option>
-                <option value="double">Double</option>
-              </select>
-            </label>
-          )}
+          <label className="block text-sm font-medium text-gray-700">
+            {state.loop ? "Interchange (B) endplate on the balloon" : "East end (B) main track"}
+            <select
+              value={state.configB}
+              onChange={(e) =>
+                patch((s) => (s.configB = e.target.value as "single" | "double" | "none"))
+              }
+              className={`mt-1 ${inp}`}
+            >
+              {state.loop && <option value="none">None — pure turnback</option>}
+              <option value="single">Single</option>
+              <option value="double">Double</option>
+            </select>
+          </label>
         </div>
         <label className="mt-3 flex items-center gap-2 text-sm font-medium text-gray-700">
           <input
             type="checkbox"
             checked={state.loop}
-            onChange={(e) => patch((s) => (s.loop = e.target.checked))}
+            onChange={(e) =>
+              patch((s) => {
+                s.loop = e.target.checked;
+                // Toggling loop shouldn't silently create an interchange —
+                // default to a pure turnback; a standard endplate B on the
+                // balloon (pick Single/Double) makes it an interchange.
+                if (s.loop) s.configB = "none";
+                else if (s.configB === "none") s.configB = "single";
+              })
+            }
           />
-          Loop module — single endplate; the main runs the lead and turns back
-          at the balloon (positions past the throat are inside the loop)
+          Loop module — the main runs the lead and turns back at the balloon
+          (positions past the throat are inside the loop). A standard endplate
+          B on the balloon makes it an interchange.
         </label>
       </section>
 
