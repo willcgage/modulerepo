@@ -185,7 +185,7 @@ export function SchematicEditor({
             />
           </label>
           <label className="block text-sm font-medium text-gray-700">
-            West end (A) main track
+            {state.loop ? "Entry (A) main track" : "West end (A) main track"}
             <select
               value={state.configA}
               onChange={(e) => patch((s) => (s.configA = e.target.value as "single" | "double"))}
@@ -195,18 +195,29 @@ export function SchematicEditor({
               <option value="double">Double</option>
             </select>
           </label>
-          <label className="block text-sm font-medium text-gray-700">
-            East end (B) main track
-            <select
-              value={state.configB}
-              onChange={(e) => patch((s) => (s.configB = e.target.value as "single" | "double"))}
-              className={`mt-1 ${inp}`}
-            >
-              <option value="single">Single</option>
-              <option value="double">Double</option>
-            </select>
-          </label>
+          {!state.loop && (
+            <label className="block text-sm font-medium text-gray-700">
+              East end (B) main track
+              <select
+                value={state.configB}
+                onChange={(e) => patch((s) => (s.configB = e.target.value as "single" | "double"))}
+                className={`mt-1 ${inp}`}
+              >
+                <option value="single">Single</option>
+                <option value="double">Double</option>
+              </select>
+            </label>
+          )}
         </div>
+        <label className="mt-3 flex items-center gap-2 text-sm font-medium text-gray-700">
+          <input
+            type="checkbox"
+            checked={state.loop}
+            onChange={(e) => patch((s) => (s.loop = e.target.checked))}
+          />
+          Loop module — single endplate; the main runs the lead and turns back
+          at the balloon (positions past the throat are inside the loop)
+        </label>
       </section>
 
       {/* Tracks */}

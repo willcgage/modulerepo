@@ -40,16 +40,38 @@ export function SchematicPreview({ doc }: { doc: ModuleSchematicDoc }) {
         className="rounded bg-white"
       >
         <text x={2} y={laneY(0) - LANE_GAP / 2} fontSize="7" fill="#94a3b8" dominantBaseline="middle">
-          W
+          {f.loop ? "Entry" : "W"}
         </text>
-        <text x={W - 2} y={laneY(0) - LANE_GAP / 2} fontSize="7" fill="#94a3b8" textAnchor="end" dominantBaseline="middle">
-          E
-        </text>
+        {!f.loop && (
+          <text x={W - 2} y={laneY(0) - LANE_GAP / 2} fontSize="7" fill="#94a3b8" textAnchor="end" dominantBaseline="middle">
+            E
+          </text>
+        )}
 
-        {/* Main 1 — continuous */}
-        <line x1={px(0)} y1={laneY(0)} x2={px(1)} y2={laneY(0)} stroke="#2563eb" strokeWidth={2.4} strokeLinecap="round" />
-        {/* Main 2 — full length when double */}
-        {f.doubleMain && (
+        {/* Main 1 — continuous; a loop turns back at a terminal bulb */}
+        <line
+          x1={px(0)}
+          y1={laneY(0)}
+          x2={f.loop ? px(1) - 7 : px(1)}
+          y2={laneY(0)}
+          stroke="#2563eb"
+          strokeWidth={2.4}
+          strokeLinecap="round"
+        />
+        {f.loop && (
+          <circle
+            cx={px(1) - 4}
+            cy={laneY(0)}
+            r={4.5}
+            fill="none"
+            stroke="#2563eb"
+            strokeWidth={1.6}
+          >
+            <title>Balloon loop — trains turn back</title>
+          </circle>
+        )}
+        {/* Main 2 — full length when double (never on a loop) */}
+        {f.doubleMain && !f.loop && (
           <line x1={px(0)} y1={laneY(1)} x2={px(1)} y2={laneY(1)} stroke="#2563eb" strokeWidth={2.4} strokeLinecap="round" />
         )}
 
