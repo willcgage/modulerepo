@@ -129,9 +129,36 @@ export function SchematicPreview({ doc }: { doc: ModuleSchematicDoc }) {
             )}
           </>
         )}
-        {/* Main 2 — full length when double (never on a loop) */}
-        {f.doubleMain && !f.loop && (
+        {/* Main 2 — full length when both ends are double; on a transition
+            module it runs between the mainline turnout and the double end,
+            with a diverge diagonal at the transition. */}
+        {f.doubleMain && !f.loop && !f.main2Extent && (
           <line x1={px(0)} y1={laneY(1)} x2={px(1)} y2={laneY(1)} stroke="#2563eb" strokeWidth={2.4} strokeLinecap="round" />
+        )}
+        {f.main2Extent && !f.loop && (
+          <>
+            <line
+              x1={px(f.main2Extent.fromFrac)}
+              y1={laneY(1)}
+              x2={px(f.main2Extent.toFrac)}
+              y2={laneY(1)}
+              stroke="#2563eb"
+              strokeWidth={2.4}
+              strokeLinecap="round"
+            />
+            {/* diverge from Main 1 at the transition end */}
+            <line
+              x1={px(f.main2Extent.fromFrac > 0 ? f.main2Extent.fromFrac : f.main2Extent.toFrac) + (f.main2Extent.fromFrac > 0 ? -10 : 10)}
+              y1={laneY(0)}
+              x2={px(f.main2Extent.fromFrac > 0 ? f.main2Extent.fromFrac : f.main2Extent.toFrac)}
+              y2={laneY(1)}
+              stroke="#2563eb"
+              strokeWidth={2}
+              strokeLinecap="round"
+            >
+              <title>Single↔double transition</title>
+            </line>
+          </>
         )}
 
         {/* Sidings (passing loops, dipping to the main at each turnout) and

@@ -7,6 +7,7 @@ import {
   MAIN2_TRACK_ID,
   stateToDoc,
   buildPassingSiding,
+  buildTransition,
   nextId,
   inchesToScaleFeet,
   type EditorState,
@@ -243,6 +244,36 @@ export function SchematicEditor({
           (positions past the throat are inside the loop). A standard endplate
           B on the balloon makes it an interchange.
         </label>
+        {/* Transition module (FMN-0038): one end single, the other double —
+            the main line needs a turnout where Main 2 begins. */}
+        {!state.loop &&
+          (state.configA === "double") !== (state.configB === "double") &&
+          !state.turnouts.some((t) => t.divergeTrack === MAIN2_TRACK_ID) && (
+            <div className="mt-3 flex items-center gap-3 rounded-md border border-amber-300 bg-amber-50 p-2 text-sm text-amber-800">
+              <span>
+                One end is single track and the other double — the main line
+                needs a transition turnout where Main 2{" "}
+                {state.configA === "double" ? "ends" : "begins"}. This adds the
+                switch and an <em>End of Double Track</em> control point with
+                signals; adjust its position afterwards.
+              </span>
+              <button
+                type="button"
+                onClick={() =>
+                  patch((s) => {
+                    const built = buildTransition(s);
+                    if (built) {
+                      s.turnouts.push(built.turnout);
+                      s.controlPoints.push(built.controlPoint);
+                    }
+                  })
+                }
+                className="shrink-0 rounded-md bg-amber-600 px-2.5 py-1 text-xs font-semibold text-white hover:bg-amber-500"
+              >
+                + Add transition
+              </button>
+            </div>
+          )}
         {state.loop && state.configA === "double" && (
           <label className="mt-2 block text-sm font-medium text-gray-700 sm:max-w-xs">
             Loop returns onto
