@@ -511,7 +511,7 @@ export function SchematicEditor({
       {/* Crossings (diamonds) + branch endplate — junction features (#170) */}
       <section className="rounded-lg border border-gray-200 bg-white p-4">
         <div className="mb-3 flex items-center justify-between">
-          <h2 className="text-lg font-semibold text-gray-900">Crossings &amp; branch</h2>
+          <h2 className="text-lg font-semibold text-gray-900">Crossings &amp; additional endplates</h2>
           <button type="button" onClick={addCrossing} className={addBtn}>
             + Crossing
           </button>
@@ -583,9 +583,11 @@ export function SchematicEditor({
         )}
         <div className="flex items-center justify-between">
           <span className="text-sm font-medium text-gray-700">
-            Branch endplates — extra connections (junctions) off the module. A
-            set carrying a second railroad through has two (in at one, out at
-            the other).
+            Additional endplates — every endplate is the same standard Free-moN
+            interface (A/B are just the schematic&rsquo;s drawing axis). A set
+            carrying a second line through has two more (in at one, out at the
+            other); which route is &ldquo;the main&rdquo; is decided by the
+            layout, not the module.
           </span>
           <button
             type="button"
@@ -601,7 +603,7 @@ export function SchematicEditor({
             }
             className={addBtn}
           >
-            + Branch endplate
+            + Endplate
           </button>
         </div>
         {state.branches.map((b, i) => (
