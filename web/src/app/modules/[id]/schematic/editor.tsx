@@ -42,6 +42,7 @@ export function SchematicEditor({
   initial,
   hadSchematic,
   newModule = false,
+  lockedConfigs = { a: false, b: false },
 }: {
   moduleId: number;
   recordNumber: string;
@@ -49,6 +50,9 @@ export function SchematicEditor({
   initial: EditorState;
   hadSchematic: boolean;
   newModule?: boolean;
+  /** True when the module's endplate records define the config — the selects
+   * mirror them read-only (edit endplates on the module page instead). */
+  lockedConfigs?: { a: boolean; b: boolean };
 }) {
   const [state, setState] = useState<EditorState>(initial);
   const [error, setError] = useState<string | null>(null);
@@ -200,8 +204,14 @@ export function SchematicEditor({
             {state.loop ? "Entry (A) main track" : "West end (A) main track"}
             <select
               value={state.configA}
+              disabled={lockedConfigs.a}
+              title={
+                lockedConfigs.a
+                  ? "Mirrors the module's endplate record — change it in the module's Endplates section."
+                  : undefined
+              }
               onChange={(e) => patch((s) => (s.configA = e.target.value as "single" | "double"))}
-              className={`mt-1 ${inp}`}
+              className={`mt-1 ${inp} ${lockedConfigs.a ? "bg-gray-50 text-gray-600" : ""}`}
             >
               <option value="single">Single</option>
               <option value="double">Double</option>
@@ -211,10 +221,16 @@ export function SchematicEditor({
             {state.loop ? "Interchange (B) endplate on the balloon" : "East end (B) main track"}
             <select
               value={state.configB}
+              disabled={lockedConfigs.b && !state.loop}
+              title={
+                lockedConfigs.b && !state.loop
+                  ? "Mirrors the module's endplate record — change it in the module's Endplates section."
+                  : undefined
+              }
               onChange={(e) =>
                 patch((s) => (s.configB = e.target.value as "single" | "double" | "none"))
               }
-              className={`mt-1 ${inp}`}
+              className={`mt-1 ${inp} ${lockedConfigs.b && !state.loop ? "bg-gray-50 text-gray-600" : ""}`}
             >
               {state.loop && <option value="none">None — pure turnback</option>}
               <option value="single">Single</option>

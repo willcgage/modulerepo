@@ -38,9 +38,30 @@ export default async function ModuleSchematicPage({
     .eq("module_id", moduleId)
     .order("id");
 
+  // The module's endplate records are AUTHORITATIVE for the main-track config
+  // (single/double per end) — the schematic mirrors them, like the mainline
+  // length. Without this, a single↔double module (FMN-0038) opened the builder
+  // as single/single and the transition prompt never fired.
+  const { data: endplateRows } = await supabase
+    .from("freemon_endplates")
+    .select("endplate_number, track_config")
+    .eq("module_id", moduleId)
+    .order("endplate_number");
+
+  const cfgOf = (n: number): "single" | "double" | null => {
+    const v = (endplateRows?.[n]?.track_config ?? "").trim().toLowerCase();
+    return v === "double" ? "double" : v === "single" ? "single" : null;
+  };
+  const epA = cfgOf(0);
+  const epB = cfgOf(1);
+
   const fallbackLength =
     Number(module.mainline_length_inches ?? module.length_total_inches) || 24;
   const initial = docToState(module.schematic, fallbackLength, moduleTracks ?? []);
+  // Override the doc with the module's endplate configs (non-loop; a loop's
+  // B carries interchange semantics the endplate rows don't describe).
+  if (epA) initial.configA = epA;
+  if (epB && !initial.loop) initial.configB = epB;
 
   return (
     <div className="mx-auto max-w-3xl px-4 py-12">
@@ -51,6 +72,7 @@ export default async function ModuleSchematicPage({
         initial={initial}
         hadSchematic={module.schematic != null}
         newModule={isNew === "1"}
+        lockedConfigs={{ a: epA != null, b: epB != null && !initial.loop }}
       />
     </div>
   );
