@@ -581,43 +581,52 @@ export function SchematicEditor({
             ))}
           </div>
         )}
-        <label className="flex items-center gap-2 text-sm font-medium text-gray-700">
-          <input
-            type="checkbox"
-            checked={state.branch != null}
-            onChange={(e) =>
-              patch((s) => {
-                s.branch = e.target.checked
-                  ? { label: "", pos: Math.round(s.lengthInches / 2), side: "down", config: "single" }
-                  : null;
-              })
+        <div className="flex items-center justify-between">
+          <span className="text-sm font-medium text-gray-700">
+            Branch endplates — extra connections (junctions) off the module. A
+            set carrying a second railroad through has two (in at one, out at
+            the other).
+          </span>
+          <button
+            type="button"
+            onClick={() =>
+              patch((s) =>
+                s.branches.push({
+                  label: "",
+                  pos: Math.round(s.lengthInches / 2),
+                  side: "down",
+                  config: "single",
+                }),
+              )
             }
-          />
-          Branch endplate — a third connection (junction) off the module
-        </label>
-        {state.branch && (
-          <div className="mt-2 grid grid-cols-2 items-end gap-2 sm:grid-cols-4">
-            <Field label="Branch name / destination">
+            className={addBtn}
+          >
+            + Branch endplate
+          </button>
+        </div>
+        {state.branches.map((b, i) => (
+          <div key={i} className="mt-2 grid grid-cols-2 items-end gap-2 sm:grid-cols-5">
+            <Field label={`Endplate ${String.fromCharCode(67 + i)} — name / destination`}>
               <input
-                value={state.branch.label}
-                onChange={(e) => patch((s) => (s.branch!.label = e.target.value))}
+                value={b.label}
+                onChange={(e) => patch((s) => (s.branches[i].label = e.target.value))}
                 className={inp}
-                placeholder="Bowl Idaho"
+                placeholder="MoPac West"
               />
             </Field>
             <Field label="Position (in from A)">
               <input
                 type="number"
                 min={0}
-                value={state.branch.pos}
-                onChange={(e) => patch((s) => (s.branch!.pos = Number(e.target.value) || 0))}
+                value={b.pos}
+                onChange={(e) => patch((s) => (s.branches[i].pos = Number(e.target.value) || 0))}
                 className={inp}
               />
             </Field>
             <Field label="Side">
               <select
-                value={state.branch.side}
-                onChange={(e) => patch((s) => (s.branch!.side = e.target.value as "up" | "down"))}
+                value={b.side}
+                onChange={(e) => patch((s) => (s.branches[i].side = e.target.value as "up" | "down"))}
                 className={inp}
               >
                 <option value="up">Up (north)</option>
@@ -626,16 +635,25 @@ export function SchematicEditor({
             </Field>
             <Field label="Endplate track">
               <select
-                value={state.branch.config}
-                onChange={(e) => patch((s) => (s.branch!.config = e.target.value as "single" | "double"))}
+                value={b.config}
+                onChange={(e) => patch((s) => (s.branches[i].config = e.target.value as "single" | "double"))}
                 className={inp}
               >
                 <option value="single">Single</option>
                 <option value="double">Double</option>
               </select>
             </Field>
+            <div className="pb-1">
+              <button
+                type="button"
+                onClick={() => patch((s) => s.branches.splice(i, 1))}
+                className={xBtn}
+              >
+                Remove
+              </button>
+            </div>
           </div>
-        )}
+        ))}
       </section>
 
       {/* Control Points (signals — at a turnout, or a standalone block signal) */}
