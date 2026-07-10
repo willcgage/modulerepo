@@ -245,7 +245,9 @@ export function SchematicPreview({ doc }: { doc: ModuleSchematicDoc }) {
             direction, so two at the same spot (opposite ways) don't stack. */}
         {f.signals.map((s) => {
           const sx = px(s.posFrac);
-          const sy = s.side === "below" ? laneY(s.lane) + 4 : laneY(s.lane) - 4;
+          // Fan stacked signals (several at one interlocking) off the track.
+          const off = 4 + s.stack * 4;
+          const sy = s.side === "below" ? laneY(s.lane) + off : laneY(s.lane) - off;
           const dir = s.facing === "BtoA" ? -1 : 1;
           const L = 10;
           return (

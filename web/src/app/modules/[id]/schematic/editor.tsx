@@ -212,9 +212,10 @@ export function SchematicEditor({
         added to a layout.
       </p>
 
-      {/* Live preview */}
-      <SchematicPreview doc={doc} />
-
+      {/* Form (left) + sticky live preview (right) — the preview stays in view
+          while scrolling the form. */}
+      <div className="grid items-start gap-5 lg:grid-cols-[minmax(0,1fr)_340px]">
+        <div className="min-w-0 space-y-5">
       {/* Mainline */}
       <section className="rounded-lg border border-gray-200 bg-white p-4">
         <h2 className="mb-3 text-lg font-semibold text-gray-900">Mainline</h2>
@@ -869,12 +870,17 @@ export function SchematicEditor({
                       onClick={() =>
                         patch((st) => {
                           const cp = st.controlPoints[ci];
+                          // Add the opposite-direction signal of the last one
+                          // so a control point builds a proper both-ways pair
+                          // (above/below) rather than stacking identical masts.
+                          const last = cp.signals[cp.signals.length - 1];
+                          const facing = last?.facing === "AtoB" ? "BtoA" : "AtoB";
                           cp.signals.push({
                             id: `${cp.id}-${nextId("s", cp.signals.map((x) => x.id))}`,
-                            pos: cp.signals[0]?.pos ?? Math.round(st.lengthInches * 0.25),
-                            track: MAIN_TRACK_ID,
-                            facing: "AtoB",
-                            side: cp.signals.length % 2 === 0 ? "above" : "below",
+                            pos: last?.pos ?? Math.round(st.lengthInches * 0.25),
+                            track: last?.track ?? MAIN_TRACK_ID,
+                            facing,
+                            side: facing === "AtoB" ? "above" : "below",
                           });
                         })
                       }
@@ -981,6 +987,16 @@ export function SchematicEditor({
             Clear schematic
           </button>
         )}
+      </div>
+        </div>
+
+        {/* Sticky live preview */}
+        <div className="lg:sticky lg:top-4">
+          <SchematicPreview doc={doc} />
+          <p className="mt-1 px-1 text-xs text-gray-400">
+            Updates live as you edit. West → East.
+          </p>
+        </div>
       </div>
     </div>
   );
