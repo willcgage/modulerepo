@@ -8,6 +8,8 @@ import {
   stateToDoc,
   buildPassingSiding,
   buildTransition,
+  deriveEndplatePoses,
+  poseNeedsManual,
   nextId,
   inchesToScaleFeet,
   type EditorState,
@@ -43,6 +45,7 @@ export function SchematicEditor({
   hadSchematic,
   newModule = false,
   lockedConfigs = { a: false, b: false },
+  geometry = { type: null, degrees: null, offset: null },
 }: {
   moduleId: number;
   recordNumber: string;
@@ -53,6 +56,8 @@ export function SchematicEditor({
   /** True when the module's endplate records define the config — the selects
    * mirror them read-only (edit endplates on the module page instead). */
   lockedConfigs?: { a: boolean; b: boolean };
+  /** The module's physical geometry (drives the derived endplate poses). */
+  geometry?: { type: string | null; degrees: number | null; offset: number | null };
 }) {
   const [state, setState] = useState<EditorState>(initial);
   const [error, setError] = useState<string | null>(null);
@@ -61,6 +66,30 @@ export function SchematicEditor({
 
   const doc = useMemo(() => stateToDoc(state, recordNumber), [state, recordNumber]);
   const isDouble = state.configA === "double" || state.configB === "double";
+  // Derived endplate poses (#175 phase 1b) — the auto-computed geometry the
+  // owner can override for shapes the fields can't express (wye/loop/other).
+  const derivedPoses = useMemo(
+    () =>
+      deriveEndplatePoses({
+        lengthInches: state.lengthInches,
+        geometryType: geometry.type,
+        geometryDegrees: geometry.degrees,
+        geometryOffsetInches: geometry.offset,
+        endplateConfigs: [
+          state.configA,
+          state.configB === "none" ? "single" : state.configB,
+        ],
+        branches: state.branches.map((b, i) => ({
+          id: String.fromCharCode(67 + i),
+          atPos: b.pos,
+          side: b.side,
+          config: b.config,
+        })),
+        poseOverrides: state.poseOverrides,
+      }),
+    [state, geometry],
+  );
+  const wantsManualPose = poseNeedsManual(geometry.type) || state.loop;
   // Track dropdowns show the owner's track name, not the internal id. On a
   // double-track module, Main 2 is a real track — a turnout on it diverges
   // outward instead of drawing a crossover from Main 1 (modulerepo#14).
@@ -656,6 +685,86 @@ export function SchematicEditor({
             </div>
           </div>
         ))}
+      </section>
+
+      {/* Endplate poses (#175 phase 1b) — the layout map's geometry. Auto-
+          derived; owners hand-tune shapes the fields can't express. */}
+      <section className="rounded-lg border border-gray-200 bg-white p-4">
+        <h2 className="mb-1 text-lg font-semibold text-gray-900">Endplate poses</h2>
+        <p className="mb-3 text-sm text-gray-500">
+          Where each endplate sits (inches from endplate A, with an outward
+          heading) — this is what the layout map is built from. Auto-derived
+          from the module&rsquo;s geometry;{" "}
+          {wantsManualPose
+            ? "this shape needs a hand-entered pose — adjust the values below."
+            : "override a value only if the map looks wrong."}
+        </p>
+        <div className="space-y-2">
+          {derivedPoses.map((p) => {
+            const o = state.poseOverrides[p.id];
+            const setField = (k: "x" | "y" | "heading", v: string) =>
+              patch((s) => {
+                const base = s.poseOverrides[p.id] ?? {
+                  x: p.x,
+                  y: p.y,
+                  heading: p.heading,
+                };
+                s.poseOverrides[p.id] = { ...base, [k]: Number(v) || 0 };
+              });
+            return (
+              <div key={p.id} className="grid grid-cols-2 items-end gap-2 sm:grid-cols-5">
+                <div className="text-sm font-medium text-gray-700">
+                  Endplate {p.id}
+                  {o && <span className="ml-1 text-xs text-amber-600">(manual)</span>}
+                </div>
+                <Field label="X (in)">
+                  <input
+                    type="number"
+                    step="0.1"
+                    value={Math.round((o?.x ?? p.x) * 10) / 10}
+                    onChange={(e) => setField("x", e.target.value)}
+                    className={inp}
+                  />
+                </Field>
+                <Field label="Y (in)">
+                  <input
+                    type="number"
+                    step="0.1"
+                    value={Math.round((o?.y ?? p.y) * 10) / 10}
+                    onChange={(e) => setField("y", e.target.value)}
+                    className={inp}
+                  />
+                </Field>
+                <Field label="Heading (°)">
+                  <input
+                    type="number"
+                    step="1"
+                    value={Math.round(o?.heading ?? p.heading)}
+                    onChange={(e) => setField("heading", e.target.value)}
+                    className={inp}
+                  />
+                </Field>
+                <div className="pb-1">
+                  {o ? (
+                    <button
+                      type="button"
+                      onClick={() =>
+                        patch((s) => {
+                          delete s.poseOverrides[p.id];
+                        })
+                      }
+                      className={xBtn}
+                    >
+                      Reset
+                    </button>
+                  ) : (
+                    <span className="text-xs text-gray-400">derived</span>
+                  )}
+                </div>
+              </div>
+            );
+          })}
+        </div>
       </section>
 
       {/* Control Points (signals — at a turnout, or a standalone block signal) */}

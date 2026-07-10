@@ -24,7 +24,7 @@ export default async function ModuleSchematicPage({
   const { data: module } = await supabase
     .from("freemon_modules")
     .select(
-      "id, owner_id, record_number, module_name, length_total_inches, mainline_length_inches, schematic",
+      "id, owner_id, record_number, module_name, length_total_inches, mainline_length_inches, schematic, geometry_type, geometry_degrees, geometry_offset_inches",
     )
     .eq("id", moduleId)
     .maybeSingle();
@@ -73,6 +73,11 @@ export default async function ModuleSchematicPage({
         hadSchematic={module.schematic != null}
         newModule={isNew === "1"}
         lockedConfigs={{ a: epA != null, b: epB != null && !initial.loop }}
+        geometry={{
+          type: module.geometry_type ?? null,
+          degrees: module.geometry_degrees ?? null,
+          offset: module.geometry_offset_inches ?? null,
+        }}
       />
     </div>
   );
