@@ -453,10 +453,14 @@ export function SchematicEditor({
         )}
       </section>
 
-      {/* Turnouts */}
-      <section className="rounded-lg border border-gray-200 bg-white p-4">
-        <div className="mb-3 flex items-center justify-between">
-          <h2 className="text-lg font-semibold text-gray-900">Turnouts</h2>
+      {/* Turnouts (advanced — the one-click builders create these for you) */}
+      <Collapsible
+        title="Turnouts"
+        hint="usually built for you"
+        count={state.turnouts.length}
+        defaultOpen={state.turnouts.length > 0}
+      >
+        <div className="mb-3 flex justify-end">
           <button type="button" onClick={addTurnout} className={addBtn}>
             + Turnout
           </button>
@@ -536,12 +540,16 @@ export function SchematicEditor({
             ))}
           </div>
         )}
-      </section>
+      </Collapsible>
 
       {/* Crossings (diamonds) + branch endplate — junction features (#170) */}
-      <section className="rounded-lg border border-gray-200 bg-white p-4">
-        <div className="mb-3 flex items-center justify-between">
-          <h2 className="text-lg font-semibold text-gray-900">Crossings &amp; additional endplates</h2>
+      <Collapsible
+        title="Crossings & additional endplates"
+        hint="junctions — rare"
+        count={state.crossings.length + state.branches.length}
+        defaultOpen={state.crossings.length + state.branches.length > 0}
+      >
+        <div className="mb-3 flex justify-end">
           <button type="button" onClick={addCrossing} className={addBtn}>
             + Crossing
           </button>
@@ -686,12 +694,11 @@ export function SchematicEditor({
             </div>
           </div>
         ))}
-      </section>
+      </Collapsible>
 
       {/* Endplate poses (#175 phase 1b) — the layout map's geometry. Auto-
           derived; owners hand-tune shapes the fields can't express. */}
-      <section className="rounded-lg border border-gray-200 bg-white p-4">
-        <h2 className="mb-1 text-lg font-semibold text-gray-900">Endplate poses</h2>
+      <Collapsible title="Endplate poses" hint="auto-derived — advanced">
         <p className="mb-3 text-sm text-gray-500">
           Where each endplate sits (inches from endplate A, with an outward
           heading) — this is what the layout map is built from. Auto-derived
@@ -766,7 +773,7 @@ export function SchematicEditor({
             );
           })}
         </div>
-      </section>
+      </Collapsible>
 
       {/* Control Points (signals — at a turnout, or a standalone block signal) */}
       <section className="rounded-lg border border-gray-200 bg-white p-4">
@@ -1008,5 +1015,44 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
       {label}
       <div className="mt-0.5">{children}</div>
     </label>
+  );
+}
+
+/** An advanced section that collapses by default so the common path stays
+ * front-and-centre. Opens automatically when it already holds content. */
+function Collapsible({
+  title,
+  hint,
+  count,
+  defaultOpen = false,
+  children,
+}: {
+  title: string;
+  hint?: string;
+  count?: number;
+  defaultOpen?: boolean;
+  children: React.ReactNode;
+}) {
+  return (
+    <details
+      open={defaultOpen}
+      className="group rounded-lg border border-gray-200 bg-white [&>summary]:list-none"
+    >
+      <summary className="flex cursor-pointer select-none items-center justify-between gap-2 p-4">
+        <span className="flex items-center gap-2">
+          <span className="text-lg font-semibold text-gray-900">{title}</span>
+          {count ? (
+            <span className="rounded-full bg-gray-100 px-2 py-0.5 text-xs font-medium text-gray-600">
+              {count}
+            </span>
+          ) : null}
+          {hint && <span className="text-xs text-gray-400">{hint}</span>}
+        </span>
+        <span className="text-gray-400 transition-transform group-open:rotate-180">
+          ▾
+        </span>
+      </summary>
+      <div className="border-t border-gray-100 p-4 pt-3">{children}</div>
+    </details>
   );
 }
