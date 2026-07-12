@@ -164,17 +164,20 @@ export function SchematicPreview({ doc }: { doc: ModuleSchematicDoc }) {
         {/* Sidings (passing loops, dipping to the main at each turnout) and
             spurs (rise + stub). */}
         {f.extraTracks.map((t) => {
-          const x1 = px(t.fromFrac);
-          const x2 = px(t.toFrac);
           const yl = laneY(t.lane);
           // Diverge from the main the track's turnout sits on — a team track
           // off Main 2 starts at lane 1, not as a crossover from Main 1.
           const ym = laneY(t.divergesFromLane);
-          const thr = (x2 - x1) * 0.12 + 6;
-          const pts =
-            t.role === "spur"
-              ? `${x1},${ym} ${x1 + thr},${yl} ${x2},${yl}`
-              : `${x1},${ym} ${x1 + thr},${yl} ${x2 - thr},${yl} ${x2},${ym}`;
+          const isSpur = t.role === "spur";
+          // A spur's throat is at its turnout (either end, #bug3); the stub runs
+          // to the far end. A siding dips to the main at both ends.
+          const tx = px(isSpur ? t.throatFrac : t.fromFrac);
+          const ex = px(isSpur ? t.stubFrac : t.toFrac);
+          const dir = ex >= tx ? 1 : -1;
+          const thr = Math.min(Math.abs(ex - tx) * 0.3 + 6, Math.abs(ex - tx));
+          const pts = isSpur
+            ? `${tx},${ym} ${tx + dir * thr},${yl} ${ex},${yl}`
+            : `${tx},${ym} ${tx + thr},${yl} ${ex - thr},${yl} ${ex},${ym}`;
           return (
             <polyline
               key={t.id}
@@ -184,12 +187,28 @@ export function SchematicPreview({ doc }: { doc: ModuleSchematicDoc }) {
               strokeWidth={1.8}
               strokeLinejoin="round"
               strokeLinecap="round"
-              strokeDasharray={t.role === "spur" ? "3 2" : undefined}
+              strokeDasharray={isSpur ? "3 2" : undefined}
             >
               <title>{t.role}</title>
             </polyline>
           );
         })}
+
+        {/* Crossovers — a straight diagonal joining the two mains (#bug2) */}
+        {f.crossovers.map((x) => (
+          <line
+            key={x.id}
+            x1={px(x.fromPosFrac)}
+            y1={laneY(x.fromLane)}
+            x2={px(x.toPosFrac)}
+            y2={laneY(x.toLane)}
+            stroke="#64748b"
+            strokeWidth={1.8}
+            strokeLinecap="round"
+          >
+            <title>{x.name || "Crossover"}</title>
+          </line>
+        ))}
 
         {/* Turnout markers on the main */}
         {f.turnouts.map((t) => (

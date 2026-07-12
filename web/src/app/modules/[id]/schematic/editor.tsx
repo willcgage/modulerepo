@@ -8,6 +8,7 @@ import {
   stateToDoc,
   buildPassingSiding,
   buildTransition,
+  buildCrossover,
   deriveEndplatePoses,
   poseNeedsManual,
   nextId,
@@ -134,6 +135,15 @@ export function SchematicEditor({
         moduleTrackId: null,
         trackName: "",
       });
+    });
+  }
+  function addCrossover() {
+    patch((s) => {
+      const built = buildCrossover(s);
+      if (built) {
+        s.extraTracks.push(built.track);
+        s.turnouts.push(...built.turnouts);
+      }
     });
   }
   function addTurnout() {
@@ -349,6 +359,17 @@ export function SchematicEditor({
             <button type="button" onClick={addSpur} className={addBtn}>
               + Spur
             </button>
+            {!state.loop &&
+              (state.configA === "double" || state.configB === "double") && (
+                <button
+                  type="button"
+                  onClick={addCrossover}
+                  className={addBtn}
+                  title="A crossover between Main 1 and Main 2 — a turnout on each main joined by a diagonal."
+                >
+                  + Crossover
+                </button>
+              )}
           </div>
         </div>
         <p className="mb-3 text-xs text-gray-500">
