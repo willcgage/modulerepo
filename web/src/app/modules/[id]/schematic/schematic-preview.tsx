@@ -174,7 +174,10 @@ export function SchematicPreview({ doc }: { doc: ModuleSchematicDoc }) {
           const tx = px(isSpur ? t.throatFrac : t.fromFrac);
           const ex = px(isSpur ? t.stubFrac : t.toFrac);
           const dir = ex >= tx ? 1 : -1;
-          const thr = Math.min(Math.abs(ex - tx) * 0.3 + 6, Math.abs(ex - tx));
+          // Keep the throat short (orig 0.12): on a ladder, turnouts sit ON a
+          // siding/spur, and a long taper would push its flat part past them so
+          // their dots float off the diagonal.
+          const thr = Math.min(Math.abs(ex - tx) * 0.12 + 6, Math.abs(ex - tx));
           const pts = isSpur
             ? `${tx},${ym} ${tx + dir * thr},${yl} ${ex},${yl}`
             : `${tx},${ym} ${tx + thr},${yl} ${ex - thr},${yl} ${ex},${ym}`;
