@@ -9,6 +9,7 @@ import {
   buildPassingSiding,
   buildTransition,
   buildCrossover,
+  isTransitionTurnout,
   deriveEndplatePoses,
   poseNeedsManual,
   nextId,
@@ -304,7 +305,7 @@ export function SchematicEditor({
             the main line needs a turnout where Main 2 begins. */}
         {!state.loop &&
           (state.configA === "double") !== (state.configB === "double") &&
-          !state.turnouts.some((t) => t.divergeTrack === MAIN2_TRACK_ID) && (
+          !state.turnouts.some(isTransitionTurnout) && (
             <div className="mt-3 flex items-center gap-3 rounded-md border border-amber-300 bg-amber-50 p-2 text-sm text-amber-800">
               <span>
                 One end is single track and the other double — the main line
