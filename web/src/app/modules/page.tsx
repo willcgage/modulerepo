@@ -35,6 +35,12 @@ export default async function ModulesPage() {
         </div>
         <div className="flex items-center gap-3">
           <Link
+            href="/catalog"
+            className="text-sm text-gray-500 hover:text-gray-700"
+          >
+            Catalog
+          </Link>
+          <Link
             href="/help#creating-module"
             className="text-sm text-gray-500 hover:text-gray-700"
           >

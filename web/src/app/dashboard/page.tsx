@@ -55,6 +55,12 @@ export default async function DashboardPage({
           My modules
         </Link>
         <Link
+          href="/catalog"
+          className="rounded-md border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
+        >
+          Catalog
+        </Link>
+        <Link
           href="/profile"
           className="rounded-md border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
         >
