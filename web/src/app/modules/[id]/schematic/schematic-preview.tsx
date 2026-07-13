@@ -51,17 +51,49 @@ export function SchematicPreview({ doc }: { doc: ModuleSchematicDoc }) {
           </text>
         )}
 
+        {/* Single↔double transition: the through main (whichever the turnout
+            sits on) runs full length; the branch main exists only on the double
+            side and merges at the junction (#FMN-0043). */}
+        {f.transition &&
+          (() => {
+            const t = f.transition;
+            const thY = laneY(t.throughLane);
+            const brY = laneY(t.branchLane);
+            const jx = px(t.atFrac);
+            const west = t.doubleSide === "west";
+            const G = 12;
+            return (
+              <>
+                <line x1={px(0)} y1={thY} x2={px(1)} y2={thY} stroke="#2563eb" strokeWidth={2.4} strokeLinecap="round" />
+                <line
+                  x1={west ? px(0) : jx + G}
+                  y1={brY}
+                  x2={west ? jx - G : px(1)}
+                  y2={brY}
+                  stroke="#2563eb"
+                  strokeWidth={2.4}
+                  strokeLinecap="round"
+                />
+                <line x1={west ? jx - G : jx + G} y1={brY} x2={jx} y2={thY} stroke="#2563eb" strokeWidth={2}>
+                  <title>Single↔double transition</title>
+                </line>
+              </>
+            );
+          })()}
+
         {/* Main 1 — continuous; a loop turns back at a terminal bulb, or a
             Main 2 return joins the two lanes in a U (transit idiom). */}
-        <line
-          x1={px(0)}
-          y1={laneY(0)}
-          x2={f.loop && f.loopReturn !== "main2" ? px(1) - 7 : px(1)}
-          y2={laneY(0)}
-          stroke="#2563eb"
-          strokeWidth={2.4}
-          strokeLinecap="round"
-        />
+        {!f.transition && (
+          <line
+            x1={px(0)}
+            y1={laneY(0)}
+            x2={f.loop && f.loopReturn !== "main2" ? px(1) - 7 : px(1)}
+            y2={laneY(0)}
+            stroke="#2563eb"
+            strokeWidth={2.4}
+            strokeLinecap="round"
+          />
+        )}
         {f.loop && f.loopReturn === "main2" && (
           <>
             {/* Main 2 runs the lead too; the balloon is the U between them */}
@@ -132,10 +164,10 @@ export function SchematicPreview({ doc }: { doc: ModuleSchematicDoc }) {
         {/* Main 2 — full length when both ends are double; on a transition
             module it runs between the mainline turnout and the double end,
             with a diverge diagonal at the transition. */}
-        {f.doubleMain && !f.loop && !f.main2Extent && (
+        {f.doubleMain && !f.loop && !f.main2Extent && !f.transition && (
           <line x1={px(0)} y1={laneY(1)} x2={px(1)} y2={laneY(1)} stroke="#2563eb" strokeWidth={2.4} strokeLinecap="round" />
         )}
-        {f.main2Extent && !f.loop && (
+        {f.main2Extent && !f.loop && !f.transition && (
           <>
             <line
               x1={px(f.main2Extent.fromFrac)}
