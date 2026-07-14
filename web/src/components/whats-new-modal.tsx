@@ -1,0 +1,123 @@
+"use client";
+
+import { useEffect, useState } from "react";
+import Link from "next/link";
+
+const SEEN_KEY = "mr:changelog:lastSeen";
+
+/**
+ * Post-login "what's new" notice. When the newest changelog entry differs from
+ * the one this browser last acknowledged, a modal pops up with a few highlights
+ * and a link to the full changelog. Seen-state is per-device (localStorage), so
+ * there's no account/database dependency. Dismissing (any path) marks it seen.
+ */
+export function WhatsNewModal({
+  latestKey,
+  title,
+  items,
+  moreCount,
+}: {
+  /** Stable id of the newest entry (its date, usually). */
+  latestKey: string;
+  /** Heading shown in the modal (the entry's date/title). */
+  title: string;
+  /** A few highlight bullets. */
+  items: string[];
+  /** How many additional bullets exist beyond `items`. */
+  moreCount: number;
+}) {
+  const [open, setOpen] = useState(false);
+
+  useEffect(() => {
+    try {
+      if (window.localStorage.getItem(SEEN_KEY) !== latestKey) setOpen(true);
+    } catch {
+      /* private mode / storage disabled — just don't nag */
+    }
+  }, [latestKey]);
+
+  // Close on Escape while open.
+  useEffect(() => {
+    if (!open) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") dismiss();
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open]);
+
+  const markSeen = () => {
+    try {
+      window.localStorage.setItem(SEEN_KEY, latestKey);
+    } catch {
+      /* ignore */
+    }
+  };
+  const dismiss = () => {
+    markSeen();
+    setOpen(false);
+  };
+
+  if (!open) return null;
+
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4"
+      onClick={dismiss}
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="whats-new-title"
+    >
+      <div
+        className="w-full max-w-md rounded-lg bg-white p-6 shadow-xl"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="flex items-start justify-between gap-4">
+          <div>
+            <p className="text-xs font-semibold uppercase tracking-wide text-blue-600">
+              What&apos;s new
+            </p>
+            <h2 id="whats-new-title" className="mt-0.5 text-lg font-semibold text-gray-900">
+              {title}
+            </h2>
+          </div>
+          <button
+            onClick={dismiss}
+            aria-label="Close"
+            className="-mr-1 -mt-1 rounded p-1 text-gray-400 hover:bg-gray-100 hover:text-gray-600"
+          >
+            ✕
+          </button>
+        </div>
+
+        <ul className="mt-4 list-disc space-y-1.5 pl-5 text-sm text-gray-700 marker:text-gray-400">
+          {items.map((item, i) => (
+            <li key={i}>{item}</li>
+          ))}
+        </ul>
+        {moreCount > 0 && (
+          <p className="mt-2 text-sm text-gray-500">
+            …and {moreCount} more {moreCount === 1 ? "change" : "changes"}.
+          </p>
+        )}
+
+        <div className="mt-6 flex items-center justify-end gap-3">
+          <button
+            onClick={dismiss}
+            className="rounded-md border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
+          >
+            Got it
+          </button>
+          <Link
+            href="/changelog"
+            onClick={markSeen}
+            className="rounded-md bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700"
+          >
+            See what changed
+          </Link>
+        </div>
+      </div>
+    </div>
+  );
+}
