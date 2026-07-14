@@ -1,47 +1,70 @@
 "use client";
 
 import { useMemo, useRef, useState } from "react";
-import type { EndplatePose } from "@willcgage/module-schematic";
+import {
+  sampleBenchworkOutline,
+  type BenchworkPoint,
+  type EndplatePose,
+} from "@willcgage/module-schematic";
 
 type Pt = { x: number; y: number };
+const DEG = Math.PI / 180;
 
 /**
  * Benchwork outline editor — draw a module's physical footprint as a polygon in
  * module-local inches (endplate A's track point at the origin, mainline +x,
- * perpendicular +y up). The endplate poses are drawn as a faint reference. Click
- * an edge to add a vertex, drag a vertex to move it, select one to remove or type
- * exact inches. Empty outline = the layout falls back to the endplate-width band.
+ * perpendicular +y up). Edges can be straight or curved: drag the diamond on an
+ * edge to bow it into an arc. The endplate FACES are drawn as anchors — drag a
+ * corner near one and it snaps, so the board meets the standard interface. Empty
+ * outline = the layout falls back to the endplate-width band.
  */
 export function BenchworkEditor({
   outline,
   onChange,
   lengthInches,
   poses,
+  endplateWidths,
 }: {
-  outline: Pt[];
-  onChange: (next: Pt[]) => void;
+  outline: BenchworkPoint[];
+  onChange: (next: BenchworkPoint[]) => void;
   lengthInches: number;
   poses: EndplatePose[];
+  endplateWidths?: Record<string, number>;
 }) {
   const svgRef = useRef<SVGSVGElement | null>(null);
-  const dragRef = useRef<number | null>(null);
+  const dragRef = useRef<{ kind: "vertex" | "edge"; i: number } | null>(null);
   const [sel, setSel] = useState<number | null>(null);
 
-  // View box around the track + outline, module-local (before the y flip).
+  // Endplate face corners — the anchors a board corner should meet.
+  const anchors = useMemo(() => {
+    const out: { x: number; y: number; id: string }[] = [];
+    for (const p of poses) {
+      const hw = (endplateWidths?.[p.id] ?? 24) / 2;
+      const px = Math.cos((p.heading + 90) * DEG);
+      const py = Math.sin((p.heading + 90) * DEG);
+      out.push({ x: p.x + px * hw, y: p.y + py * hw, id: p.id });
+      out.push({ x: p.x - px * hw, y: p.y - py * hw, id: p.id });
+    }
+    return out;
+  }, [poses, endplateWidths]);
+
+  const sampled = useMemo(() => sampleBenchworkOutline(outline, 24), [outline]);
+
   const bounds = useMemo(() => {
-    const xs = [0, lengthInches, ...poses.map((p) => p.x), ...outline.map((p) => p.x)];
-    const ys = [-14, 14, ...poses.map((p) => p.y), ...outline.map((p) => p.y)];
+    const xs = [0, lengthInches, ...anchors.map((a) => a.x), ...sampled.map((p) => p.x)];
+    const ys = [-16, 16, ...anchors.map((a) => a.y), ...sampled.map((p) => p.y)];
     const minX = Math.min(...xs);
     const maxX = Math.max(...xs);
     const minY = Math.min(...ys);
     const maxY = Math.max(...ys);
-    const pad = Math.max(8, (maxX - minX) * 0.08);
+    const pad = Math.max(8, (maxX - minX) * 0.06);
     return { minX: minX - pad, minY: minY - pad, w: maxX - minX + pad * 2, h: maxY - minY + pad * 2 };
-  }, [lengthInches, poses, outline]);
+  }, [lengthInches, anchors, sampled]);
 
-  const sy = (y: number) => -y; // module +y up → SVG y down
+  const sy = (y: number) => -y;
   const vb = `${bounds.minX} ${-(bounds.minY + bounds.h)} ${bounds.w} ${bounds.h}`;
-  const r = Math.max(1.5, bounds.w * 0.008); // vertex handle radius, inches
+  const r = Math.max(1.5, bounds.w * 0.006);
+  const snapDist = Math.max(3, bounds.w * 0.02);
 
   const toLocal = (e: React.PointerEvent): Pt => {
     const svg = svgRef.current!;
@@ -53,53 +76,99 @@ export function BenchworkEditor({
     return { x: u.x, y: -u.y };
   };
 
-  const set = (next: Pt[]) => onChange(next.map((p) => ({ x: round(p.x), y: round(p.y) })));
+  const commit = (next: BenchworkPoint[]) =>
+    onChange(
+      next.map((p) => ({
+        x: round(p.x),
+        y: round(p.y),
+        ...(p.bulge ? { bulge: round(p.bulge) } : {}),
+      })),
+    );
 
-  /** Insert a click point onto the nearest edge (so the ring stays sensible). */
+  const snapToAnchor = (pt: Pt): Pt => {
+    let best = pt;
+    let bestD = snapDist;
+    for (const a of anchors) {
+      const d = Math.hypot(pt.x - a.x, pt.y - a.y);
+      if (d < bestD) {
+        bestD = d;
+        best = { x: a.x, y: a.y };
+      }
+    }
+    return best;
+  };
+
+  /** Midpoint control handle for edge i (chord mid offset by its bulge). */
+  const edgeHandle = (i: number): Pt => {
+    const p0 = outline[i];
+    const p1 = outline[(i + 1) % outline.length];
+    const dx = p1.x - p0.x;
+    const dy = p1.y - p0.y;
+    const c = Math.hypot(dx, dy) || 1;
+    const nx = -dy / c;
+    const ny = dx / c;
+    const b = p0.bulge ?? 0;
+    return { x: (p0.x + p1.x) / 2 + nx * b, y: (p0.y + p1.y) / 2 + ny * b };
+  };
+
   const addOnNearestEdge = (pt: Pt) => {
     if (outline.length < 2) {
-      set([...outline, pt]);
+      commit([...outline, { x: pt.x, y: pt.y }]);
       setSel(outline.length);
       return;
     }
     let best = 0;
     let bestD = Infinity;
     for (let i = 0; i < outline.length; i++) {
-      const a = outline[i];
-      const b = outline[(i + 1) % outline.length];
-      const d = distToSegment(pt, a, b);
+      const d = distToSegment(pt, outline[i], outline[(i + 1) % outline.length]);
       if (d < bestD) {
         bestD = d;
         best = i;
       }
     }
     const next = [...outline];
-    next.splice(best + 1, 0, pt);
-    set(next);
+    next.splice(best + 1, 0, { x: pt.x, y: pt.y });
+    commit(next);
     setSel(best + 1);
   };
 
   const onBgDown = (e: React.PointerEvent) => {
-    if (dragRef.current !== null) return;
-    addOnNearestEdge(toLocal(e));
+    if (dragRef.current) return;
+    addOnNearestEdge(snapToAnchor(toLocal(e)));
   };
-  const onVertexDown = (e: React.PointerEvent, i: number) => {
+  const startDrag = (e: React.PointerEvent, kind: "vertex" | "edge", i: number) => {
     e.stopPropagation();
     try {
       (e.target as Element).setPointerCapture?.(e.pointerId);
     } catch {
       /* best-effort */
     }
-    dragRef.current = i;
-    setSel(i);
+    dragRef.current = { kind, i };
+    if (kind === "vertex") setSel(i);
   };
   const onMove = (e: React.PointerEvent) => {
-    const i = dragRef.current;
-    if (i === null) return;
+    const d = dragRef.current;
+    if (!d) return;
     const p = toLocal(e);
     const next = [...outline];
-    next[i] = p;
-    set(next);
+    if (d.kind === "vertex") {
+      const s = snapToAnchor(p);
+      next[d.i] = { ...next[d.i], x: s.x, y: s.y };
+    } else {
+      // Set edge i's bulge = perpendicular offset of the handle from the chord.
+      const p0 = outline[d.i];
+      const p1 = outline[(d.i + 1) % outline.length];
+      const dx = p1.x - p0.x;
+      const dy = p1.y - p0.y;
+      const c = Math.hypot(dx, dy) || 1;
+      const nx = -dy / c;
+      const ny = dx / c;
+      const mx = (p0.x + p1.x) / 2;
+      const my = (p0.y + p1.y) / 2;
+      const bulge = (p.x - mx) * nx + (p.y - my) * ny;
+      next[d.i] = { ...next[d.i], bulge: Math.abs(bulge) < 0.5 ? 0 : bulge };
+    }
+    commit(next);
   };
   const onUp = () => {
     dragRef.current = null;
@@ -107,12 +176,18 @@ export function BenchworkEditor({
 
   const removeSel = () => {
     if (sel === null) return;
-    set(outline.filter((_, i) => i !== sel));
+    commit(outline.filter((_, i) => i !== sel));
     setSel(null);
   };
+  const straightenSel = () => {
+    if (sel === null) return;
+    const next = [...outline];
+    next[sel] = { x: next[sel].x, y: next[sel].y }; // drop bulge on the edge leaving sel
+    commit(next);
+  };
   const seedRectangle = () => {
-    const d = 24; // Free-moN recommended depth to start from; drag to the real shape
-    set([
+    const d = 24;
+    commit([
       { x: 0, y: -d / 2 },
       { x: lengthInches, y: -d / 2 },
       { x: lengthInches, y: d / 2 },
@@ -121,34 +196,30 @@ export function BenchworkEditor({
     setSel(null);
   };
 
-  const poly = outline.map((p) => `${p.x},${sy(p.y)}`).join(" ");
+  const polyPts = sampled.map((p) => `${p.x},${sy(p.y)}`).join(" ");
 
   return (
     <div>
       <div className="mb-2 flex flex-wrap items-center gap-2 text-sm">
-        <button
-          type="button"
-          onClick={seedRectangle}
-          className="rounded-md border border-gray-300 px-3 py-1 font-medium text-gray-700 hover:bg-gray-50"
-        >
+        <button type="button" onClick={seedRectangle} className={btn}>
           {outline.length ? "Reset to rectangle" : "Start from a rectangle"}
         </button>
         {outline.length > 0 && (
           <button
             type="button"
             onClick={() => {
-              set([]);
+              commit([]);
               setSel(null);
             }}
-            className="rounded-md border border-gray-300 px-3 py-1 font-medium text-gray-700 hover:bg-gray-50"
+            className={btn}
           >
             Clear
           </button>
         )}
         <span className="text-gray-500">
           {outline.length === 0
-            ? "No outline — the layout uses the endplate-width band. Start from a rectangle, then drag corners."
-            : "Click an edge to add a corner · drag a corner to move · select one to remove / type exact inches."}
+            ? "No outline — the layout uses the endplate-width band. Start from a rectangle, then shape it."
+            : "Click an edge to add a corner · drag a corner (snaps to endplate anchors ◆) · drag an edge's ◇ to curve it."}
         </span>
       </div>
 
@@ -156,7 +227,7 @@ export function BenchworkEditor({
         ref={svgRef}
         viewBox={vb}
         width="100%"
-        height="240"
+        height="360"
         preserveAspectRatio="xMidYMid meet"
         className="touch-none rounded-md border border-gray-300 bg-gray-50"
         onPointerDown={onBgDown}
@@ -177,9 +248,9 @@ export function BenchworkEditor({
           />
         )}
         {poses.map((p) => {
-          const nx = Math.cos((p.heading + 90) * (Math.PI / 180));
-          const ny = Math.sin((p.heading + 90) * (Math.PI / 180));
-          const hw = 12;
+          const hw = (endplateWidths?.[p.id] ?? 24) / 2;
+          const nx = Math.cos((p.heading + 90) * DEG);
+          const ny = Math.sin((p.heading + 90) * DEG);
           return (
             <g key={p.id}>
               <line
@@ -188,20 +259,34 @@ export function BenchworkEditor({
                 x2={p.x + nx * hw}
                 y2={sy(p.y + ny * hw)}
                 stroke="#3b82f6"
-                strokeWidth={r * 0.6}
+                strokeWidth={r * 0.7}
                 strokeLinecap="round"
               />
-              <text x={p.x} y={sy(p.y) - r * 1.5} textAnchor="middle" fontSize={r * 2.2} fill="#2563eb">
+              <text x={p.x} y={sy(p.y) - r * 1.6} textAnchor="middle" fontSize={r * 2.4} fill="#2563eb">
                 {p.id}
               </text>
             </g>
           );
         })}
+        {/* Endplate anchor corners */}
+        {anchors.map((a, i) => (
+          <rect
+            key={`anc${i}`}
+            x={a.x - r * 0.8}
+            y={sy(a.y) - r * 0.8}
+            width={r * 1.6}
+            height={r * 1.6}
+            fill="#bfdbfe"
+            stroke="#2563eb"
+            strokeWidth={r * 0.3}
+            transform={`rotate(45 ${a.x} ${sy(a.y)})`}
+          />
+        ))}
 
-        {/* Outline polygon */}
-        {outline.length >= 2 && (
+        {/* Outline polygon (arcs sampled) */}
+        {sampled.length >= 2 && (
           <polygon
-            points={poly}
+            points={polyPts}
             fill="#0ea5e9"
             fillOpacity={outline.length >= 3 ? 0.14 : 0}
             stroke="#0284c7"
@@ -209,10 +294,30 @@ export function BenchworkEditor({
             strokeLinejoin="round"
           />
         )}
+        {/* Edge midpoint (curve) handles */}
+        {outline.length >= 2 &&
+          outline.map((_, i) => {
+            const h = edgeHandle(i);
+            return (
+              <rect
+                key={`edge${i}`}
+                x={h.x - r * 0.9}
+                y={sy(h.y) - r * 0.9}
+                width={r * 1.8}
+                height={r * 1.8}
+                fill={outline[i].bulge ? "#f59e0b" : "#fff"}
+                stroke="#d97706"
+                strokeWidth={r * 0.35}
+                transform={`rotate(45 ${h.x} ${sy(h.y)})`}
+                style={{ cursor: "grab" }}
+                onPointerDown={(e) => startDrag(e, "edge", i)}
+              />
+            );
+          })}
         {/* Vertices */}
         {outline.map((p, i) => (
           <circle
-            key={i}
+            key={`v${i}`}
             cx={p.x}
             cy={sy(p.y)}
             r={r}
@@ -220,7 +325,7 @@ export function BenchworkEditor({
             stroke="#0284c7"
             strokeWidth={r * 0.4}
             style={{ cursor: "grab" }}
-            onPointerDown={(e) => onVertexDown(e, i)}
+            onPointerDown={(e) => startDrag(e, "vertex", i)}
           />
         ))}
       </svg>
@@ -237,7 +342,7 @@ export function BenchworkEditor({
               onChange={(e) => {
                 const next = [...outline];
                 next[sel] = { ...next[sel], x: Number(e.target.value) };
-                set(next);
+                commit(next);
               }}
               className="w-20 rounded border border-gray-300 px-2 py-1"
             />
@@ -251,11 +356,16 @@ export function BenchworkEditor({
               onChange={(e) => {
                 const next = [...outline];
                 next[sel] = { ...next[sel], y: Number(e.target.value) };
-                set(next);
+                commit(next);
               }}
               className="w-20 rounded border border-gray-300 px-2 py-1"
             />
           </label>
+          {outline[sel].bulge ? (
+            <button type="button" onClick={straightenSel} className={btn}>
+              Straighten this edge
+            </button>
+          ) : null}
           <button
             type="button"
             onClick={removeSel}
@@ -268,6 +378,9 @@ export function BenchworkEditor({
     </div>
   );
 }
+
+const btn =
+  "rounded-md border border-gray-300 px-3 py-1 font-medium text-gray-700 hover:bg-gray-50";
 
 function round(n: number): number {
   return Math.round(n * 100) / 100;
