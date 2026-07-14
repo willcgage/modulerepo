@@ -20,6 +20,7 @@ import {
   type SignalFacing,
 } from "@/lib/module-schematic";
 import { SchematicPreview } from "./schematic-preview";
+import { BenchworkEditor } from "./benchwork-editor";
 import { saveModuleSchematic } from "./actions";
 
 const inp =
@@ -834,6 +835,25 @@ export function SchematicEditor({
             );
           })}
         </div>
+      </Collapsible>
+
+      {/* Benchwork footprint — the module's physical board outline (#benchwork) */}
+      <Collapsible
+        title="Benchwork outline"
+        hint={state.outline.length ? `${state.outline.length}-corner shape` : "optional — draws the real board shape"}
+      >
+        <p className="mb-3 text-sm text-gray-600">
+          Draw the module&apos;s physical benchwork footprint. Free-Dispatcher uses it
+          to show your real board shape in the layout map (corners, L-shapes, angled
+          fronts) instead of a plain band. Leave it empty to use the endplate-width
+          band. The mainline runs West (A) → East (B); measurements are in inches.
+        </p>
+        <BenchworkEditor
+          outline={state.outline}
+          onChange={(next) => patch((s) => (s.outline = next))}
+          lengthInches={state.lengthInches}
+          poses={derivedPoses}
+        />
       </Collapsible>
 
       {/* Control Points (signals — at a turnout, or a standalone block signal) */}
