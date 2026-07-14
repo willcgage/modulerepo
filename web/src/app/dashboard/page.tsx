@@ -2,6 +2,11 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { logout } from "./actions";
+import { latestEntry, latestChangelogKey } from "@/lib/changelog";
+import { entryItems } from "@/lib/changelog/parse";
+import { WhatsNewModal } from "@/components/whats-new-modal";
+
+const WHATS_NEW_PREVIEW = 4;
 
 export default async function DashboardPage({
   searchParams,
@@ -27,8 +32,18 @@ export default async function DashboardPage({
 
   const isAdmin = profile?.role === "admin";
 
+  const whatsNewItems = latestEntry ? entryItems(latestEntry) : [];
+
   return (
     <div className="mx-auto max-w-2xl px-4 py-12">
+      {latestEntry && latestChangelogKey && (
+        <WhatsNewModal
+          latestKey={latestChangelogKey}
+          title={latestEntry.date ?? latestEntry.title}
+          items={whatsNewItems.slice(0, WHATS_NEW_PREVIEW)}
+          moreCount={Math.max(0, whatsNewItems.length - WHATS_NEW_PREVIEW)}
+        />
+      )}
       <div className="flex items-center justify-between">
         <h1 className="text-2xl font-semibold text-gray-900">Dashboard</h1>
         <form action={logout}>
@@ -79,6 +94,12 @@ export default async function DashboardPage({
           className="rounded-md border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
         >
           Help
+        </Link>
+        <Link
+          href="/changelog"
+          className="rounded-md border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
+        >
+          What&apos;s new
         </Link>
       </div>
 
