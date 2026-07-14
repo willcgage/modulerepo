@@ -114,6 +114,14 @@ export function SchematicEditor({
       return next;
     });
 
+  /** Store an authored endplate face width, or clear it back to the default. */
+  const setEndplateWidth = (id: string, raw: string) =>
+    patch((s) => {
+      const v = parseFloat(raw);
+      if (Number.isFinite(v) && v > 0) s.endplateWidths[id] = v;
+      else delete s.endplateWidths[id];
+    });
+
   function addPassingSiding() {
     patch((s) => {
       const { track, turnouts, controlPoints } = buildPassingSiding(s);
@@ -278,6 +286,37 @@ export function SchematicEditor({
               <option value="double">Double</option>
             </select>
           </label>
+        </div>
+        {/* Endplate FACE width — the physical size of the standard interface at
+            each end (Free-moN: 12″ minimum, 24″ recommended). A module may differ
+            end to end; the layout draws each end and the benchwork band to match. */}
+        <div className="mt-3 grid grid-cols-1 gap-4 sm:grid-cols-2">
+          <label className="block text-sm font-medium text-gray-700">
+            {state.loop ? "Entry (A)" : "West end (A)"} endplate face width (in)
+            <input
+              type="number"
+              min={12}
+              step={0.5}
+              value={state.endplateWidths.A ?? 24}
+              onChange={(e) => setEndplateWidth("A", e.target.value)}
+              className={`mt-1 ${inp}`}
+              title="Free-moN endplate face width: 12 in minimum, 24 in recommended."
+            />
+          </label>
+          {state.configB !== "none" && (
+            <label className="block text-sm font-medium text-gray-700">
+              {state.loop ? "Interchange (B)" : "East end (B)"} endplate face width (in)
+              <input
+                type="number"
+                min={12}
+                step={0.5}
+                value={state.endplateWidths.B ?? 24}
+                onChange={(e) => setEndplateWidth("B", e.target.value)}
+                className={`mt-1 ${inp}`}
+                title="Free-moN endplate face width: 12 in minimum, 24 in recommended."
+              />
+            </label>
+          )}
         </div>
         <label className="mt-3 flex items-center gap-2 text-sm font-medium text-gray-700">
           <input
