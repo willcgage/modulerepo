@@ -837,25 +837,6 @@ export function SchematicEditor({
         </div>
       </Collapsible>
 
-      {/* Benchwork footprint — the module's physical board outline (#benchwork) */}
-      <Collapsible
-        title="Benchwork outline"
-        hint={state.outline.length ? `${state.outline.length}-corner shape` : "optional — draws the real board shape"}
-      >
-        <p className="mb-3 text-sm text-gray-600">
-          Draw the module&apos;s physical benchwork footprint. Free-Dispatcher uses it
-          to show your real board shape in the layout map (corners, L-shapes, angled
-          fronts) instead of a plain band. Leave it empty to use the endplate-width
-          band. The mainline runs West (A) → East (B); measurements are in inches.
-        </p>
-        <BenchworkEditor
-          outline={state.outline}
-          onChange={(next) => patch((s) => (s.outline = next))}
-          lengthInches={state.lengthInches}
-          poses={derivedPoses}
-        />
-      </Collapsible>
-
       {/* Control Points (signals — at a turnout, or a standalone block signal) */}
       <section className="rounded-lg border border-gray-200 bg-white p-4">
         <div className="mb-3 flex items-center justify-between">
@@ -1086,6 +1067,30 @@ export function SchematicEditor({
           </p>
         </div>
       </div>
+
+      {/* Benchwork footprint — full width; it needs room to draw (#benchwork) */}
+      <section className="rounded-lg border border-gray-200 bg-white p-4">
+        <div className="mb-1 flex items-baseline justify-between">
+          <h2 className="text-lg font-semibold text-gray-900">Benchwork outline</h2>
+          <span className="text-sm text-gray-500">
+            {state.outline.length ? `${state.outline.length}-corner shape` : "optional"}
+          </span>
+        </div>
+        <p className="mb-3 max-w-3xl text-sm text-gray-600">
+          Draw the module&apos;s physical benchwork footprint. Free-Dispatcher draws
+          your real board shape in the layout map (corners, L-shapes, curved and
+          angled fronts) instead of a plain band. The endplate faces (A/B) are shown
+          as anchors — snap corners to them so the board meets the standard interface.
+          Leave it empty to use the endplate-width band. Measurements are in inches.
+        </p>
+        <BenchworkEditor
+          outline={state.outline}
+          onChange={(next) => patch((s) => (s.outline = next))}
+          lengthInches={state.lengthInches}
+          poses={derivedPoses}
+          endplateWidths={state.endplateWidths}
+        />
+      </section>
     </div>
   );
 }
