@@ -13,8 +13,30 @@ Dates are YYYY-MM-DD. Changes are listed newest-first.
   24″ recommended, and a module may differ end to end (e.g. a transition). The width
   is saved with the module and used by Free-Dispatcher to draw each module's
   benchwork footprint and endplate faces to scale.
+- **Benchwork outline** — draw your module's actual board shape (corners, L-shapes,
+  angled fronts) instead of settling for a plain rectangle. Start from a rectangle,
+  then drag corners; the endplate faces show as ◆ anchors you can snap corners to,
+  so the board meets the standard interface. Free-Dispatcher draws that real
+  footprint in the layout map. Leave it empty to keep the endplate-width band.
+- **Curved benchwork edges** — drag an edge's ◇ handle to bow it into a true arc,
+  for curved fronts and corner boards. Select a corner to straighten its edge again.
+- **See the physical module** — a module's page now shows *what it looks like* (the
+  benchwork and mainline, to scale) next to *how it operates* (the dispatcher
+  schematic). Catalog cards lead with the physical shape, so you can spot a corner,
+  a curve or a yard at a glance instead of decoding a line diagram.
 - **In-app changelog** — this page. When there are updates you haven't seen yet, a
   note pops up after you log in so you can catch up on what changed.
+
+### Changed
+- **Benchwork editing has room to work** — it moved out of the cramped side panel
+  into a full-width canvas, and it now draws the real module: the mainline, sidings,
+  turnouts and signals appear where they actually sit on the board (following the
+  module's curvature), so you're shaping the board around the real track rather than
+  a straight placeholder line.
+
+### Fixed
+- **Changelog entries were cut off mid-sentence** — longer entries that wrap across
+  lines now read in full.
 
 ---
 
