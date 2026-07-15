@@ -30,6 +30,12 @@ export interface CanvasSignal {
   side: "above" | "below";
 }
 
+/** What's selected on the canvas — the editor renders its inspector. */
+export type CanvasSelection =
+  | { kind: "corner"; i: number }
+  | { kind: "turnout"; id: string }
+  | { kind: "track"; id: string };
+
 /**
  * Benchwork outline editor — draw a module's physical footprint as a polygon in
  * module-local inches (endplate A's track point at the origin, mainline +x,
@@ -50,6 +56,8 @@ export function BenchworkEditor({
   signals = [],
   onTurnoutMove,
   onTrackEndMove,
+  selection = null,
+  onSelect,
 }: {
   outline: BenchworkPoint[];
   onChange: (next: BenchworkPoint[]) => void;
@@ -66,6 +74,9 @@ export function BenchworkEditor({
   onTurnoutMove?: (id: string, pos: number) => void;
   /** Drag a siding/spur end along the main → its new from/to position. */
   onTrackEndMove?: (id: string, end: "from" | "to", pos: number) => void;
+  /** Selection is owned by the editor, which renders the inspector for it. */
+  selection?: CanvasSelection | null;
+  onSelect?: (s: CanvasSelection | null) => void;
 }) {
   const svgRef = useRef<SVGSVGElement | null>(null);
   const dragRef = useRef<
@@ -74,7 +85,9 @@ export function BenchworkEditor({
     | { kind: "trackEnd"; id: string; end: "from" | "to" }
     | null
   >(null);
-  const [sel, setSel] = useState<number | null>(null);
+  /** The selected corner index, when a corner is what's selected. */
+  const sel = selection?.kind === "corner" ? selection.i : null;
+  const setSel = (i: number | null) => onSelect?.(i === null ? null : { kind: "corner", i });
 
   // Endplate face corners — the anchors a board corner should meet.
   const anchors = useMemo(() => {
@@ -231,7 +244,10 @@ export function BenchworkEditor({
       /* best-effort */
     }
     dragRef.current = d;
-    if (d.kind === "vertex") setSel(d.i);
+    // Grabbing something selects it — the editor shows its inspector.
+    if (d.kind === "vertex") onSelect?.({ kind: "corner", i: d.i });
+    else if (d.kind === "turnout") onSelect?.({ kind: "turnout", id: d.id });
+    else if (d.kind === "trackEnd") onSelect?.({ kind: "track", id: d.id });
   };
   /** Pointer → inches along the main, clamped to the module. */
   const posFrom = (p: Pt) =>
@@ -341,17 +357,31 @@ export function BenchworkEditor({
       >
         {/* --- Track context: the REAL module, drawn under the board --- */}
         {/* Sidings / spurs / Main 2 — positioned along the main, offset to lane */}
-        {trackPaths.map((t) => (
-          <polyline
-            key={`trk${t.id}`}
-            points={t.pts.map((p) => `${p.x},${sy(p.y)}`).join(" ")}
-            fill="none"
-            stroke="#94a3b8"
-            strokeWidth={r * 0.5}
-            strokeLinecap="round"
-            strokeLinejoin="round"
-          />
-        ))}
+        {trackPaths.map((t) => {
+          const on = selection?.kind === "track" && selection.id === t.id;
+          return (
+            <polyline
+              key={`trk${t.id}`}
+              points={t.pts.map((p) => `${p.x},${sy(p.y)}`).join(" ")}
+              fill="none"
+              stroke={on ? "#0284c7" : "#94a3b8"}
+              strokeWidth={on ? r * 0.9 : r * 0.5}
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              style={onSelect ? { cursor: "pointer" } : undefined}
+              onPointerDown={
+                onSelect
+                  ? (e) => {
+                      e.stopPropagation(); // don't add a benchwork corner
+                      onSelect({ kind: "track", id: t.id });
+                    }
+                  : undefined
+              }
+            >
+              <title>{t.id}</title>
+            </polyline>
+          );
+        })}
         {/* Mainline — the real centre-line (follows the module's curvature) */}
         {centerline.length >= 2 ? (
           <polyline
@@ -393,21 +423,27 @@ export function BenchworkEditor({
             </circle>
           ))}
         {/* Turnouts — drag along the track to set their position */}
-        {turnoutPts.map((t) => (
-          <circle
-            key={`to${t.id}`}
-            cx={t.x}
-            cy={sy(t.y)}
-            r={onTurnoutMove ? r * 0.7 : r * 0.5}
-            fill="#475569"
-            style={onTurnoutMove ? { cursor: "ew-resize" } : undefined}
-            onPointerDown={
-              onTurnoutMove ? (e) => beginDrag(e, { kind: "turnout", id: t.id }) : undefined
-            }
-          >
-            {onTurnoutMove && <title>Drag along the track to move this turnout</title>}
-          </circle>
-        ))}
+        {turnoutPts.map((t) => {
+          const on = selection?.kind === "turnout" && selection.id === t.id;
+          return (
+            <circle
+              key={`to${t.id}`}
+              cx={t.x}
+              cy={sy(t.y)}
+              r={onTurnoutMove ? r * 0.7 : r * 0.5}
+              fill={on ? "#0284c7" : "#475569"}
+              stroke={on ? "#0284c7" : "none"}
+              strokeWidth={r * 0.5}
+              strokeOpacity={0.3}
+              style={onTurnoutMove ? { cursor: "ew-resize" } : undefined}
+              onPointerDown={
+                onTurnoutMove ? (e) => beginDrag(e, { kind: "turnout", id: t.id }) : undefined
+              }
+            >
+              {onTurnoutMove && <title>Drag along the track to move this turnout</title>}
+            </circle>
+          );
+        })}
         {/* Signals */}
         {signalPts.map((s) => (
           <circle

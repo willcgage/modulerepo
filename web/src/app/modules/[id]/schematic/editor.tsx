@@ -21,7 +21,7 @@ import {
   type SignalFacing,
 } from "@/lib/module-schematic";
 import { SchematicPreview } from "./schematic-preview";
-import { BenchworkEditor } from "./benchwork-editor";
+import { BenchworkEditor, type CanvasSelection } from "./benchwork-editor";
 import { saveModuleSchematic } from "./actions";
 
 const inp =
@@ -64,6 +64,8 @@ export function SchematicEditor({
   geometry?: { type: string | null; degrees: number | null; offset: number | null };
 }) {
   const [state, setState] = useState<EditorState>(initial);
+  /** What's selected on the physical canvas — drives the contextual inspector. */
+  const [selection, setSelection] = useState<CanvasSelection | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [saved, setSaved] = useState(false);
   const [isPending, startTransition] = useTransition();
@@ -1149,9 +1151,175 @@ export function SchematicEditor({
               else t.toPos = pos;
             })
           }
+          selection={selection}
+          onSelect={setSelection}
+        />
+        <CanvasInspector
+          selection={selection}
+          state={state}
+          patch={patch}
+          clear={() => setSelection(null)}
+          trackOptions={trackOptions}
         />
       </section>
     </div>
+  );
+}
+
+/**
+ * Contextual inspector — edits whatever is selected on the physical canvas, in
+ * place, instead of making you find it in the form sections below. Corners are
+ * handled by the canvas itself; this covers the track features.
+ */
+function CanvasInspector({
+  selection,
+  state,
+  patch,
+  clear,
+  trackOptions,
+}: {
+  selection: CanvasSelection | null;
+  state: EditorState;
+  patch: (fn: (s: EditorState) => void) => void;
+  clear: () => void;
+  trackOptions: { value: string; label: string }[];
+}) {
+  if (!selection || selection.kind === "corner") return null;
+
+  const shell = (title: string, body: React.ReactNode, onRemove: () => void, removeLabel: string) => (
+    <div className="mt-3 rounded-md border border-sky-200 bg-sky-50/60 p-3">
+      <div className="mb-2 flex items-center justify-between">
+        <h3 className="text-sm font-semibold text-gray-900">{title}</h3>
+        <button type="button" onClick={clear} className="text-xs text-gray-500 hover:text-gray-700">
+          Done
+        </button>
+      </div>
+      {body}
+      <button
+        type="button"
+        onClick={() => {
+          onRemove();
+          clear();
+        }}
+        className="mt-2 rounded-md border border-red-300 px-3 py-1 text-sm font-medium text-red-700 hover:bg-red-50"
+      >
+        {removeLabel}
+      </button>
+    </div>
+  );
+
+  if (selection.kind === "turnout") {
+    const i = state.turnouts.findIndex((t) => t.id === selection.id);
+    if (i < 0) return null;
+    const t = state.turnouts[i];
+    return shell(
+      `Turnout · ${t.name || t.id}`,
+      <div className="grid grid-cols-2 gap-3 sm:grid-cols-5">
+        <Field label="Name">
+          <input
+            value={t.name}
+            onChange={(e) => patch((s) => (s.turnouts[i].name = e.target.value))}
+            className={inp}
+          />
+        </Field>
+        <Field label="Position (in from A)">
+          <input
+            type="number"
+            step={0.5}
+            value={t.pos}
+            onChange={(e) => patch((s) => (s.turnouts[i].pos = Number(e.target.value)))}
+            className={inp}
+          />
+        </Field>
+        <Field label="On track">
+          <select
+            value={t.onTrack}
+            onChange={(e) => patch((s) => (s.turnouts[i].onTrack = e.target.value))}
+            className={inp}
+          >
+            {trackOptions.map((o) => (
+              <option key={o.value} value={o.value}>{o.label}</option>
+            ))}
+          </select>
+        </Field>
+        <Field label="Diverges to">
+          <select
+            value={t.divergeTrack}
+            onChange={(e) => patch((s) => (s.turnouts[i].divergeTrack = e.target.value))}
+            className={inp}
+          >
+            {trackOptions.map((o) => (
+              <option key={o.value} value={o.value}>{o.label}</option>
+            ))}
+          </select>
+        </Field>
+        <Field label="Hand">
+          <select
+            value={t.kind}
+            onChange={(e) => patch((s) => (s.turnouts[i].kind = e.target.value as TurnoutKind))}
+            className={inp}
+          >
+            {KIND_OPTIONS.map((o) => (
+              <option key={o.value} value={o.value}>{o.label}</option>
+            ))}
+          </select>
+        </Field>
+      </div>,
+      () => patch((s) => s.turnouts.splice(i, 1)),
+      "Remove turnout",
+    );
+  }
+
+  const i = state.extraTracks.findIndex((t) => t.id === selection.id);
+  if (i < 0) return null;
+  const t = state.extraTracks[i];
+  return shell(
+    `Track · ${t.trackName || t.id}`,
+    <div className="grid grid-cols-2 gap-3 sm:grid-cols-5">
+      <Field label="Name">
+        <input
+          value={t.trackName ?? ""}
+          onChange={(e) => patch((s) => (s.extraTracks[i].trackName = e.target.value))}
+          className={inp}
+        />
+      </Field>
+      <Field label="Kind">
+        <select
+          value={t.role}
+          onChange={(e) => patch((s) => (s.extraTracks[i].role = e.target.value as TrackRole))}
+          className={inp}
+        >
+          {ROLE_OPTIONS.map((o) => (
+            <option key={o.value} value={o.value}>{o.label}</option>
+          ))}
+        </select>
+      </Field>
+      <Field label="Starts (in from A)">
+        <input
+          type="number"
+          step={0.5}
+          value={t.fromPos}
+          onChange={(e) => patch((s) => (s.extraTracks[i].fromPos = Number(e.target.value)))}
+          className={inp}
+        />
+      </Field>
+      <Field label="Ends (in from A)">
+        <input
+          type="number"
+          step={0.5}
+          value={t.toPos}
+          onChange={(e) => patch((s) => (s.extraTracks[i].toPos = Number(e.target.value)))}
+          className={inp}
+        />
+      </Field>
+      <Field label="Capacity (N)">
+        <div className={`${inp} bg-gray-50 text-gray-600`}>
+          {Math.round(inchesToScaleFeet(Math.abs(t.toPos - t.fromPos)))} ft
+        </div>
+      </Field>
+    </div>,
+    () => patch((s) => s.extraTracks.splice(i, 1)),
+    "Remove track",
   );
 }
 
