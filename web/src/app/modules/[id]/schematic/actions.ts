@@ -8,6 +8,66 @@ import {
   type ModuleSchematicDoc,
 } from "@/lib/module-schematic";
 
+/** The dimensions that size the board — edited in the schematic builder's first
+ * stage, because everything downstream is measured against them. */
+export type ModuleDimensions = {
+  geometry_type: string;
+  geometry_degrees: string;
+  geometry_offset_inches: string;
+  length_total_inches: string;
+  mainline_length_inches: string;
+};
+
+function toNullableNumber(value: string): number | null {
+  const trimmed = value.trim();
+  if (!trimmed) return null;
+  const num = Number(trimmed);
+  return Number.isFinite(num) ? num : null;
+}
+
+/**
+ * Update just the module's geometry + lengths (owner-only). Narrower than the
+ * edit page's updateModuleBasics — no name validation, no redirect — so the
+ * schematic builder can save dimensions alongside the doc without leaving.
+ */
+export async function updateModuleDimensions(
+  moduleId: number,
+  input: ModuleDimensions,
+): Promise<{ error: string } | void> {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) redirect("/login");
+
+  const { data: module } = await supabase
+    .from("freemon_modules")
+    .select("id, owner_id")
+    .eq("id", moduleId)
+    .maybeSingle();
+  if (!module || module.owner_id !== user.id) redirect(`/modules/${moduleId}`);
+
+  const footprint = toNullableNumber(input.length_total_inches);
+  if (footprint == null || footprint <= 0) {
+    return { error: "Module footprint length is required." };
+  }
+
+  const { error } = await supabase
+    .from("freemon_modules")
+    .update({
+      geometry_type: input.geometry_type || null,
+      geometry_degrees: toNullableNumber(input.geometry_degrees),
+      geometry_offset_inches: toNullableNumber(input.geometry_offset_inches),
+      length_total_inches: footprint,
+      mainline_length_inches: toNullableNumber(input.mainline_length_inches),
+    })
+    .eq("id", moduleId);
+  if (error) return { error: error.message };
+
+  revalidatePath(`/modules/${moduleId}`);
+  revalidatePath(`/modules/${moduleId}/schematic`);
+}
+
 /**
  * Save (or clear) a module's operations schematic. Owner-only. The schematic's
  * tracks are the single source of truth for the module's Track section
