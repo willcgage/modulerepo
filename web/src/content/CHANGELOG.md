@@ -33,6 +33,10 @@ Dates are YYYY-MM-DD. Changes are listed newest-first.
   turnouts and signals appear where they actually sit on the board (following the
   module's curvature), so you're shaping the board around the real track rather than
   a straight placeholder line.
+- **Place track by dragging** — on that canvas you can now drag a turnout (●) along
+  its track, and drag a siding or spur's ends (○) along the mainline, instead of
+  typing positions in inches. The numeric fields are still there when you want to be
+  exact, and the dispatcher view updates as you drag.
 
 ### Fixed
 - **Changelog entries were cut off mid-sentence** — longer entries that wrap across

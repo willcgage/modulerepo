@@ -62,6 +62,37 @@ export function laneOffset(lane: number): number {
 }
 
 /**
+ * The inverse of sampleAt: project an arbitrary point onto the centre-line and
+ * return how many inches along the main the nearest point is (plus how far off
+ * it was). This is what turns "I dragged a turnout to here on the board" back
+ * into the schematic's positional model.
+ */
+export function projectToCenterline(
+  center: Pt[],
+  p: Pt,
+): { pos: number; dist: number } {
+  if (center.length < 2) return { pos: 0, dist: Infinity };
+  let best = { pos: 0, dist: Infinity };
+  let acc = 0;
+  for (let i = 1; i < center.length; i++) {
+    const a = center[i - 1];
+    const b = center[i];
+    const dx = b.x - a.x;
+    const dy = b.y - a.y;
+    const segLen = Math.hypot(dx, dy);
+    const len2 = dx * dx + dy * dy || 1;
+    let t = ((p.x - a.x) * dx + (p.y - a.y) * dy) / len2;
+    t = Math.max(0, Math.min(1, t));
+    const cx = a.x + dx * t;
+    const cy = a.y + dy * t;
+    const d = Math.hypot(p.x - cx, p.y - cy);
+    if (d < best.dist) best = { pos: acc + segLen * t, dist: d };
+    acc += segLen;
+  }
+  return best;
+}
+
+/**
  * The physical path of a track that runs from `fromPos` to `toPos` inches along
  * the mainline, offset to its lane — i.e. a siding/spur drawn on the real board,
  * following the module's curvature.

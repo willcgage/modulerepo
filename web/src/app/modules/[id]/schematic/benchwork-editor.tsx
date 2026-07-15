@@ -6,17 +6,19 @@ import {
   type BenchworkPoint,
   type EndplatePose,
 } from "@willcgage/module-schematic";
-import { lanePath, sampleAt, laneOffset } from "@/lib/physical-track";
+import { lanePath, sampleAt, laneOffset, projectToCenterline } from "@/lib/physical-track";
 
 type Pt = { x: number; y: number };
 const DEG = Math.PI / 180;
 
-/** Track/feature context drawn under the benchwork layer (read-only for now). */
+/** Track/feature context drawn under the benchwork layer. */
 export interface CanvasTrack {
   id: string;
   lane: number;
   fromPos: number;
   toPos: number;
+  /** Sidings/spurs can be dragged along the main; a derived Main 2 can't. */
+  editable?: boolean;
 }
 export interface CanvasTurnout {
   id: string;
@@ -46,6 +48,8 @@ export function BenchworkEditor({
   tracks = [],
   turnouts = [],
   signals = [],
+  onTurnoutMove,
+  onTrackEndMove,
 }: {
   outline: BenchworkPoint[];
   onChange: (next: BenchworkPoint[]) => void;
@@ -58,9 +62,18 @@ export function BenchworkEditor({
   tracks?: CanvasTrack[];
   turnouts?: CanvasTurnout[];
   signals?: CanvasSignal[];
+  /** Drag a turnout along the main → its new position, inches from endplate A. */
+  onTurnoutMove?: (id: string, pos: number) => void;
+  /** Drag a siding/spur end along the main → its new from/to position. */
+  onTrackEndMove?: (id: string, end: "from" | "to", pos: number) => void;
 }) {
   const svgRef = useRef<SVGSVGElement | null>(null);
-  const dragRef = useRef<{ kind: "vertex" | "edge"; i: number } | null>(null);
+  const dragRef = useRef<
+    | { kind: "vertex" | "edge"; i: number }
+    | { kind: "turnout"; id: string }
+    | { kind: "trackEnd"; id: string; end: "from" | "to" }
+    | null
+  >(null);
   const [sel, setSel] = useState<number | null>(null);
 
   // Endplate face corners — the anchors a board corner should meet.
@@ -95,6 +108,19 @@ export function BenchworkEditor({
         : [],
     [centerline, turnouts],
   );
+  /** Draggable end handles for sidings/spurs (not the derived Main 2). */
+  const trackEnds = useMemo(() => {
+    if (centerline.length < 2) return [];
+    return tracks
+      .filter((t) => t.editable)
+      .flatMap((t) => {
+        const off = laneOffset(t.lane);
+        return (["from", "to"] as const).map((end) => {
+          const p = sampleAt(centerline, end === "from" ? t.fromPos : t.toPos);
+          return { id: t.id, end, x: p.x + p.nx * off, y: p.y + p.ny * off };
+        });
+      });
+  }, [centerline, tracks]);
   const signalPts = useMemo(
     () =>
       centerline.length >= 2
@@ -194,20 +220,40 @@ export function BenchworkEditor({
     if (dragRef.current) return;
     addOnNearestEdge(snapToAnchor(toLocal(e)));
   };
-  const startDrag = (e: React.PointerEvent, kind: "vertex" | "edge", i: number) => {
+  const beginDrag = (
+    e: React.PointerEvent,
+    d: NonNullable<typeof dragRef.current>,
+  ) => {
     e.stopPropagation();
     try {
       (e.target as Element).setPointerCapture?.(e.pointerId);
     } catch {
       /* best-effort */
     }
-    dragRef.current = { kind, i };
-    if (kind === "vertex") setSel(i);
+    dragRef.current = d;
+    if (d.kind === "vertex") setSel(d.i);
   };
+  /** Pointer → inches along the main, clamped to the module. */
+  const posFrom = (p: Pt) =>
+    Math.round(
+      Math.max(0, Math.min(lengthInches, projectToCenterline(centerline, p).pos)) * 10,
+    ) / 10;
+
   const onMove = (e: React.PointerEvent) => {
     const d = dragRef.current;
     if (!d) return;
     const p = toLocal(e);
+
+    // Track features are positional: project the pointer back onto the main.
+    if (d.kind === "turnout") {
+      if (centerline.length >= 2) onTurnoutMove?.(d.id, posFrom(p));
+      return;
+    }
+    if (d.kind === "trackEnd") {
+      if (centerline.length >= 2) onTrackEndMove?.(d.id, d.end, posFrom(p));
+      return;
+    }
+
     const next = [...outline];
     if (d.kind === "vertex") {
       const s = snapToAnchor(p);
@@ -277,7 +323,7 @@ export function BenchworkEditor({
         <span className="text-gray-500">
           {outline.length === 0
             ? "No outline — the layout uses the endplate-width band. Start from a rectangle, then shape it."
-            : "Click an edge to add a corner · drag a corner (snaps to endplate anchors ◆) · drag an edge's ◇ to curve it."}
+            : "Click an edge to add a corner · drag a corner (snaps to endplate anchors ◆) · drag an edge's ◇ to curve it · drag a turnout ● or a siding's end ○ along the main to position it."}
         </span>
       </div>
 
@@ -329,9 +375,38 @@ export function BenchworkEditor({
             />
           )
         )}
-        {/* Turnouts */}
+        {/* Siding / spur end handles — drag along the main to reposition */}
+        {onTrackEndMove &&
+          trackEnds.map((h) => (
+            <circle
+              key={`end${h.id}${h.end}`}
+              cx={h.x}
+              cy={sy(h.y)}
+              r={r * 0.7}
+              fill="#fff"
+              stroke="#0f766e"
+              strokeWidth={r * 0.3}
+              style={{ cursor: "ew-resize" }}
+              onPointerDown={(e) => beginDrag(e, { kind: "trackEnd", id: h.id, end: h.end })}
+            >
+              <title>{`Drag to move this track's ${h.end === "from" ? "start" : "end"} along the main`}</title>
+            </circle>
+          ))}
+        {/* Turnouts — drag along the track to set their position */}
         {turnoutPts.map((t) => (
-          <circle key={`to${t.id}`} cx={t.x} cy={sy(t.y)} r={r * 0.5} fill="#475569" />
+          <circle
+            key={`to${t.id}`}
+            cx={t.x}
+            cy={sy(t.y)}
+            r={onTurnoutMove ? r * 0.7 : r * 0.5}
+            fill="#475569"
+            style={onTurnoutMove ? { cursor: "ew-resize" } : undefined}
+            onPointerDown={
+              onTurnoutMove ? (e) => beginDrag(e, { kind: "turnout", id: t.id }) : undefined
+            }
+          >
+            {onTurnoutMove && <title>Drag along the track to move this turnout</title>}
+          </circle>
         ))}
         {/* Signals */}
         {signalPts.map((s) => (
@@ -408,7 +483,7 @@ export function BenchworkEditor({
                 strokeWidth={r * 0.35}
                 transform={`rotate(45 ${h.x} ${sy(h.y)})`}
                 style={{ cursor: "grab" }}
-                onPointerDown={(e) => startDrag(e, "edge", i)}
+                onPointerDown={(e) => beginDrag(e, { kind: "edge", i })}
               />
             );
           })}
@@ -423,7 +498,7 @@ export function BenchworkEditor({
             stroke="#0284c7"
             strokeWidth={r * 0.4}
             style={{ cursor: "grab" }}
-            onPointerDown={(e) => startDrag(e, "vertex", i)}
+            onPointerDown={(e) => beginDrag(e, { kind: "vertex", i })}
           />
         ))}
       </svg>
