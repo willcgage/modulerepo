@@ -66,6 +66,8 @@ export function SchematicEditor({
   const [state, setState] = useState<EditorState>(initial);
   /** What's selected on the physical canvas — drives the contextual inspector. */
   const [selection, setSelection] = useState<CanvasSelection | null>(null);
+  /** Build order: each stage's output is the next one's substrate. */
+  const [stage, setStage] = useState<Stage>("mainline");
   const [error, setError] = useState<string | null>(null);
   const [saved, setSaved] = useState(false);
   const [isPending, startTransition] = useTransition();
@@ -277,9 +279,11 @@ export function SchematicEditor({
 
       {/* Form (left) + sticky live preview (right) — the preview stays in view
           while scrolling the form. */}
-      <div className="grid items-start gap-5 lg:grid-cols-[minmax(0,1fr)_340px]">
+      <div className="grid items-start gap-5 lg:grid-cols-[176px_minmax(0,1fr)_340px]">
+        <StageRail stage={stage} setStage={setStage} state={state} />
         <div className="min-w-0 space-y-5">
       {/* Mainline */}
+      {stage === "mainline" && (
       <section className="rounded-lg border border-gray-200 bg-white p-4">
         <h2 className="mb-3 text-lg font-semibold text-gray-900">Mainline</h2>
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
@@ -431,8 +435,11 @@ export function SchematicEditor({
           </label>
         )}
       </section>
+      )}
 
-      {/* Tracks */}
+      {/* Track: sidings & spurs · turnouts · crossings */}
+      {stage === "track" && (
+        <>
       <section className="rounded-lg border border-gray-200 bg-white p-4">
         <div className="mb-3 flex items-center justify-between">
           <h2 className="text-lg font-semibold text-gray-900">Sidings &amp; spurs</h2>
@@ -800,9 +807,12 @@ export function SchematicEditor({
           </div>
         ))}
       </Collapsible>
+        </>
+      )}
 
       {/* Endplate poses (#175 phase 1b) — the layout map's geometry. Auto-
           derived; owners hand-tune shapes the fields can't express. */}
+      {stage === "benchwork" && (
       <Collapsible title="Endplate poses" hint="auto-derived — advanced">
         <p className="mb-3 text-sm text-gray-500">
           Where each endplate sits (inches from endplate A, with an outward
@@ -879,8 +889,10 @@ export function SchematicEditor({
           })}
         </div>
       </Collapsible>
+      )}
 
       {/* Control Points (signals — at a turnout, or a standalone block signal) */}
+      {stage === "operations" && (
       <section className="rounded-lg border border-gray-200 bg-white p-4">
         <div className="mb-3 flex items-center justify-between">
           <h2 className="text-lg font-semibold text-gray-900">Control Points</h2>
@@ -1062,6 +1074,7 @@ export function SchematicEditor({
           </div>
         )}
       </section>
+      )}
 
       {error && (
         <p className="rounded-md bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>
@@ -1163,6 +1176,87 @@ export function SchematicEditor({
         />
       </section>
     </div>
+  );
+}
+
+/** Authoring stages, in the order a module actually gets built. */
+type Stage = "mainline" | "benchwork" | "track" | "operations";
+const STAGES: {
+  id: Stage;
+  label: string;
+  hint: (s: EditorState) => string;
+}[] = [
+  {
+    id: "mainline",
+    label: "Mainline & endplates",
+    hint: (s) =>
+      `${s.lengthInches}″ · ${s.configA}${s.configB === "none" ? "" : ` / ${s.configB}`}`,
+  },
+  {
+    id: "benchwork",
+    label: "Benchwork",
+    hint: (s) => (s.outline.length ? `${s.outline.length}-corner shape` : "not drawn"),
+  },
+  {
+    id: "track",
+    label: "Track",
+    hint: (s) =>
+      `${s.extraTracks.length} track${s.extraTracks.length === 1 ? "" : "s"} · ${s.turnouts.length} turnout${s.turnouts.length === 1 ? "" : "s"}`,
+  },
+  {
+    id: "operations",
+    label: "Operations",
+    hint: (s) =>
+      `${s.controlPoints.length} control point${s.controlPoints.length === 1 ? "" : "s"}`,
+  },
+];
+
+/**
+ * Build-order rail. Each stage's output is the next one's substrate — the
+ * dimensions size the board, the board carries the track, the track carries the
+ * signals — so the rail runs in the order you'd actually build the module. It
+ * filters the tools; the physical canvas below stays visible throughout.
+ */
+function StageRail({
+  stage,
+  setStage,
+  state,
+}: {
+  stage: Stage;
+  setStage: (s: Stage) => void;
+  state: EditorState;
+}) {
+  return (
+    <nav className="lg:sticky lg:top-4">
+      <ol className="flex gap-1 overflow-x-auto lg:block lg:space-y-1 lg:overflow-visible">
+        {STAGES.map((st, i) => {
+          const on = stage === st.id;
+          return (
+            <li key={st.id} className="shrink-0 lg:shrink">
+              <button
+                type="button"
+                onClick={() => setStage(st.id)}
+                aria-current={on ? "step" : undefined}
+                className={`w-full rounded-md border px-3 py-2 text-left transition ${
+                  on
+                    ? "border-blue-500 bg-blue-50"
+                    : "border-transparent hover:border-gray-200 hover:bg-gray-50"
+                }`}
+              >
+                <span className={`block text-sm font-medium ${on ? "text-blue-900" : "text-gray-800"}`}>
+                  {i + 1}. {st.label}
+                </span>
+                <span className="block text-xs text-gray-500">{st.hint(state)}</span>
+              </button>
+            </li>
+          );
+        })}
+      </ol>
+      <p className="mt-3 hidden px-3 text-xs text-gray-400 lg:block">
+        Built in order: the dimensions size the board, the board carries the track,
+        the track carries the signals.
+      </p>
+    </nav>
   );
 }
 

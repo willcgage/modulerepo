@@ -41,6 +41,12 @@ Dates are YYYY-MM-DD. Changes are listed newest-first.
   settings open right there: a turnout's name, position, which track it's on, what it
   diverges to and its hand; a track's name, kind, extent and capacity. No more hunting
   for the right row in the form below.
+- **Build it in the order you'd build it** — the schematic editor now has a stage rail:
+  Mainline & endplates → Benchwork → Track → Operations. Each stage shows only its own
+  tools (and what you've filled in so far), so you're not scrolling past six sections
+  to find one field. The physical canvas stays visible the whole way through, because
+  each stage builds on the last: the dimensions size the board, the board carries the
+  track, the track carries the signals. Jump between stages freely — nothing is locked.
 
 ### Fixed
 - **Changelog entries were cut off mid-sentence** — longer entries that wrap across
