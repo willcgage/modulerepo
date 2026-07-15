@@ -39,7 +39,11 @@ export default async function DashboardPage({
       {latestEntry && latestChangelogKey && (
         <WhatsNewModal
           latestKey={latestChangelogKey}
-          title={latestEntry.date ?? latestEntry.title}
+          title={
+            latestEntry.date && latestEntry.title !== latestEntry.date
+              ? `${latestEntry.title} · ${latestEntry.date}`
+              : (latestEntry.date ?? latestEntry.title)
+          }
           items={whatsNewItems.slice(0, WHATS_NEW_PREVIEW)}
           moreCount={Math.max(0, whatsNewItems.length - WHATS_NEW_PREVIEW)}
         />
