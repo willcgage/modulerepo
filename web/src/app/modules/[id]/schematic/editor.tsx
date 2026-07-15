@@ -22,7 +22,11 @@ import {
 } from "@/lib/module-schematic";
 import { SchematicPreview } from "./schematic-preview";
 import { BenchworkEditor, type CanvasSelection } from "./benchwork-editor";
-import { saveModuleSchematic } from "./actions";
+import {
+  saveModuleSchematic,
+  updateModuleDimensions,
+  type ModuleDimensions,
+} from "./actions";
 
 const inp =
   "block w-full rounded-md border border-gray-300 px-2 py-1 text-sm text-gray-900 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500";
@@ -49,7 +53,8 @@ export function SchematicEditor({
   hadSchematic,
   newModule = false,
   lockedConfigs = { a: false, b: false },
-  geometry = { type: null, degrees: null, offset: null },
+  geometries = [],
+  initialDimensions,
 }: {
   moduleId: number;
   recordNumber: string;
@@ -60,14 +65,32 @@ export function SchematicEditor({
   /** True when the module's endplate records define the config — the selects
    * mirror them read-only (edit endplates on the module page instead). */
   lockedConfigs?: { a: boolean; b: boolean };
-  /** The module's physical geometry (drives the derived endplate poses). */
-  geometry?: { type: string | null; degrees: number | null; offset: number | null };
+  /** Geometry choices from the lookup table (which need degrees / offset). */
+  geometries?: {
+    value: string;
+    display_label: string;
+    requires_degrees: boolean;
+    requires_offset_inches: boolean;
+  }[];
+  /** The module's geometry + lengths — editable here, since they size the board. */
+  initialDimensions: ModuleDimensions;
 }) {
   const [state, setState] = useState<EditorState>(initial);
   /** What's selected on the physical canvas — drives the contextual inspector. */
   const [selection, setSelection] = useState<CanvasSelection | null>(null);
   /** Build order: each stage's output is the next one's substrate. */
   const [stage, setStage] = useState<Stage>("mainline");
+  /** The module's geometry + lengths. Editing these reshapes the board live. */
+  const [dims, setDims] = useState<ModuleDimensions>(initialDimensions);
+  const geometry = useMemo(
+    () => ({
+      type: dims.geometry_type || null,
+      degrees: dims.geometry_degrees ? Number(dims.geometry_degrees) : null,
+      offset: dims.geometry_offset_inches ? Number(dims.geometry_offset_inches) : null,
+    }),
+    [dims],
+  );
+  const geoSpec = geometries.find((g) => g.value === dims.geometry_type);
   const [error, setError] = useState<string | null>(null);
   const [saved, setSaved] = useState(false);
   const [isPending, startTransition] = useTransition();
@@ -160,6 +183,18 @@ export function SchematicEditor({
       return next;
     });
 
+  /**
+   * Edit a dimension. The doc's mainline length follows the module's (mainline
+   * length if set, else the footprint length) so the board and the schematic
+   * can't drift apart.
+   */
+  const setDim = (p: Partial<ModuleDimensions>) => {
+    const next = { ...dims, ...p };
+    setDims(next);
+    const len = Number(next.mainline_length_inches || next.length_total_inches) || 0;
+    if (len > 0 && len !== state.lengthInches) patch((s) => (s.lengthInches = len));
+  };
+
   /** Store an authored endplate face width, or clear it back to the default. */
   const setEndplateWidth = (id: string, raw: string) =>
     patch((s) => {
@@ -243,6 +278,19 @@ export function SchematicEditor({
     setError(null);
     setSaved(false);
     startTransition(async () => {
+      // Dimensions live on the module record, the rest in the doc — but they're
+      // one edit to the owner, so one Save writes both. Dimensions first: the
+      // doc is measured against them.
+      const dimsChanged = (Object.keys(dims) as (keyof ModuleDimensions)[]).some(
+        (k) => dims[k] !== initialDimensions[k],
+      );
+      if (dimsChanged) {
+        const dimResult = await updateModuleDimensions(moduleId, dims);
+        if (dimResult && "error" in dimResult) {
+          setError(dimResult.error);
+          return;
+        }
+      }
       const result = await saveModuleSchematic(moduleId, clear ? null : doc);
       if (result && "error" in result) setError(result.error);
       else setSaved(true);
@@ -285,16 +333,78 @@ export function SchematicEditor({
       {/* Mainline */}
       {stage === "mainline" && (
       <section className="rounded-lg border border-gray-200 bg-white p-4">
-        <h2 className="mb-3 text-lg font-semibold text-gray-900">Mainline</h2>
+        <h2 className="mb-1 text-lg font-semibold text-gray-900">Dimensions & endplates</h2>
+        <p className="mb-3 max-w-2xl text-sm text-gray-600">
+          These size the board everything else is drawn on — change them and the
+          canvas below reshapes as you type. Saved with the schematic.
+        </p>
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
           <label className="block text-sm font-medium text-gray-700">
-            Mainline length (inches)
+            Geometry
+            <select
+              value={dims.geometry_type}
+              onChange={(e) =>
+                setDim({
+                  geometry_type: e.target.value,
+                  geometry_degrees: "",
+                  geometry_offset_inches: "",
+                })
+              }
+              className={`mt-1 ${inp}`}
+            >
+              <option value="">—</option>
+              {geometries.map((g) => (
+                <option key={g.value} value={g.value}>
+                  {g.display_label}
+                </option>
+              ))}
+            </select>
+          </label>
+          {geoSpec?.requires_degrees && (
+            <label className="block text-sm font-medium text-gray-700">
+              Degrees
+              <input
+                type="number"
+                step={0.001}
+                value={dims.geometry_degrees}
+                onChange={(e) => setDim({ geometry_degrees: e.target.value })}
+                className={`mt-1 ${inp}`}
+              />
+            </label>
+          )}
+          {geoSpec?.requires_offset_inches && (
+            <label className="block text-sm font-medium text-gray-700">
+              Offset (inches)
+              <input
+                type="number"
+                step={0.001}
+                value={dims.geometry_offset_inches}
+                onChange={(e) => setDim({ geometry_offset_inches: e.target.value })}
+                className={`mt-1 ${inp}`}
+              />
+            </label>
+          )}
+          <label className="block text-sm font-medium text-gray-700">
+            Module footprint length (in)
             <input
               type="number"
-              value={state.lengthInches}
-              readOnly
-              className={`mt-1 ${inp} bg-gray-50 text-gray-600`}
-              title="The module's mainline length — change it in Edit module basics; the schematic is measured against it."
+              step={0.001}
+              value={dims.length_total_inches}
+              onChange={(e) => setDim({ length_total_inches: e.target.value })}
+              className={`mt-1 ${inp}`}
+              title="The physical length of the board."
+            />
+          </label>
+          <label className="block text-sm font-medium text-gray-700">
+            Mainline length (in)
+            <input
+              type="number"
+              step={0.001}
+              value={dims.mainline_length_inches}
+              onChange={(e) => setDim({ mainline_length_inches: e.target.value })}
+              className={`mt-1 ${inp}`}
+              placeholder={dims.length_total_inches || "same as footprint"}
+              title="Only when the rail distance through the module differs from the footprint (curves, wyes). Blank = same as the footprint length."
             />
           </label>
           <label className="block text-sm font-medium text-gray-700">
@@ -1188,7 +1298,7 @@ const STAGES: {
 }[] = [
   {
     id: "mainline",
-    label: "Mainline & endplates",
+    label: "Dimensions & endplates",
     hint: (s) =>
       `${s.lengthInches}″ · ${s.configA}${s.configB === "none" ? "" : ` / ${s.configB}`}`,
   },

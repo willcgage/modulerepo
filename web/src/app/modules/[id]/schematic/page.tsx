@@ -38,6 +38,13 @@ export default async function ModuleSchematicPage({
     .eq("module_id", moduleId)
     .order("id");
 
+  // Geometry choices — the builder's first stage edits these, since they size
+  // the board everything else is drawn on.
+  const { data: geometries } = await supabase
+    .from("module_geometries")
+    .select("value, display_label, requires_degrees, requires_offset_inches")
+    .order("value");
+
   // The module's endplate records are AUTHORITATIVE for the main-track config
   // (single/double per end) — the schematic mirrors them, like the mainline
   // length. Without this, a single↔double module (FMN-0038) opened the builder
@@ -64,7 +71,7 @@ export default async function ModuleSchematicPage({
   if (epB && !initial.loop) initial.configB = epB;
 
   return (
-    <div className="mx-auto max-w-3xl px-4 py-12">
+    <div className="mx-auto max-w-screen-2xl px-4 py-12">
       <SchematicEditor
         moduleId={moduleId}
         recordNumber={module.record_number}
@@ -73,10 +80,13 @@ export default async function ModuleSchematicPage({
         hadSchematic={module.schematic != null}
         newModule={isNew === "1"}
         lockedConfigs={{ a: epA != null, b: epB != null && !initial.loop }}
-        geometry={{
-          type: module.geometry_type ?? null,
-          degrees: module.geometry_degrees ?? null,
-          offset: module.geometry_offset_inches ?? null,
+        geometries={geometries ?? []}
+        initialDimensions={{
+          geometry_type: module.geometry_type ?? "",
+          geometry_degrees: module.geometry_degrees?.toString() ?? "",
+          geometry_offset_inches: module.geometry_offset_inches?.toString() ?? "",
+          length_total_inches: module.length_total_inches?.toString() ?? "",
+          mainline_length_inches: module.mainline_length_inches?.toString() ?? "",
         }}
       />
     </div>

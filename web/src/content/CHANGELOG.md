@@ -42,13 +42,19 @@ Dates are YYYY-MM-DD. Changes are listed newest-first.
   diverges to and its hand; a track's name, kind, extent and capacity. No more hunting
   for the right row in the form below.
 - **Build it in the order you'd build it** — the schematic editor now has a stage rail:
-  Mainline & endplates → Benchwork → Track → Operations. Each stage shows only its own
+  Dimensions & endplates → Benchwork → Track → Operations. Each stage shows only its own
   tools (and what you've filled in so far), so you're not scrolling past six sections
   to find one field. The physical canvas stays visible the whole way through, because
   each stage builds on the last: the dimensions size the board, the board carries the
   track, the track carries the signals. Jump between stages freely — nothing is locked.
+- **Set the module's shape and size right where you draw it** — geometry (straight,
+  curve and its degrees, corner, offset) and the module's footprint and mainline
+  lengths are now edited in the builder's first stage instead of on a separate Edit
+  page. The board reshapes as you type, and one Save writes both.
 
 ### Fixed
+- **The schematic builder was squeezed into a narrow column** — it now uses the full
+  width of the window, so the canvas has room to work in.
 - **Changelog entries were cut off mid-sentence** — longer entries that wrap across
   lines now read in full.
 
