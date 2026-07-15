@@ -3,6 +3,7 @@ import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { asModuleSchematic } from "@/lib/module-schematic";
 import { SchematicPreview } from "@/app/modules/[id]/schematic/schematic-preview";
+import { ModuleFootprintView, footprintInput } from "@/components/module-footprint-view";
 import { StatusBadge } from "@/components/status-badge";
 
 /**
@@ -22,7 +23,7 @@ export default async function CatalogPage() {
   const { data: modules } = await supabase
     .from("freemon_modules")
     .select(
-      "id, record_number, module_name, category, status, endplate_count, owner_id, updated_at, schematic",
+      "id, record_number, module_name, category, status, endplate_count, owner_id, updated_at, schematic, geometry_type, geometry_degrees, geometry_offset_inches, length_total_inches, mainline_length_inches",
     )
     .order("record_number", { ascending: true });
 
@@ -91,11 +92,14 @@ export default async function CatalogPage() {
                   <StatusBadge status={m.status} />
                 </div>
 
-                <div className="mt-3">
+                <div className="mt-3 space-y-2">
+                  {/* Physical board (to scale) — the primary browse signal */}
+                  <ModuleFootprintView input={footprintInput(m, doc)} height={90} />
+                  {/* Dispatcher schematic — how it operates */}
                   {doc ? (
                     <SchematicPreview doc={doc} />
                   ) : (
-                    <div className="flex h-16 items-center justify-center rounded-md border border-dashed border-gray-200 text-xs text-gray-400">
+                    <div className="flex h-12 items-center justify-center rounded-md border border-dashed border-gray-200 text-xs text-gray-400">
                       No schematic yet
                     </div>
                   )}

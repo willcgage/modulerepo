@@ -4,6 +4,7 @@ import { createClient } from "@/lib/supabase/server";
 import { embeddedOne } from "@/lib/embedded";
 import { asModuleSchematic } from "@/lib/module-schematic";
 import { SchematicPreview } from "./schematic/schematic-preview";
+import { ModuleFootprintView, footprintInput } from "@/components/module-footprint-view";
 import { StatusBadge } from "@/components/status-badge";
 import {
   TextField,
@@ -251,30 +252,49 @@ export default async function ModuleDetailPage({
         />
       </dl>
 
-      {/* ---- Operations schematic (track-graph) — up top, it's the heart -- */}
-      <Section title="Operations schematic">
-        {asModuleSchematic(module.schematic) ? (
-          <div className="space-y-2">
-            <SchematicPreview doc={asModuleSchematic(module.schematic)!} />
-            {isOwner && (
-              <Link
-                href={`/modules/${module.id}/schematic`}
-                className="inline-block text-sm text-blue-600 hover:underline"
-              >
-                Edit schematic →
-              </Link>
-            )}
+      {/* ---- The module, two ways: physical board + dispatcher schematic --- */}
+      <Section title="Module">
+        <div className="space-y-3">
+          <div className="grid gap-4 sm:grid-cols-2">
+            <div>
+              <h3 className="mb-1 text-xs font-semibold uppercase tracking-wide text-gray-500">
+                What it looks like
+              </h3>
+              <ModuleFootprintView
+                input={footprintInput(module, asModuleSchematic(module.schematic))}
+                height={200}
+              />
+              <p className="mt-1 text-xs text-gray-400">
+                Physical benchwork + mainline, to scale.
+              </p>
+            </div>
+            <div>
+              <h3 className="mb-1 text-xs font-semibold uppercase tracking-wide text-gray-500">
+                How it operates
+              </h3>
+              {asModuleSchematic(module.schematic) ? (
+                <SchematicPreview doc={asModuleSchematic(module.schematic)!} />
+              ) : isOwner ? (
+                <Link
+                  href={`/modules/${module.id}/schematic`}
+                  className="inline-block rounded-md border border-dashed border-gray-300 px-4 py-3 text-sm text-blue-600 hover:bg-gray-50"
+                >
+                  Build the operations schematic — sidings, turnouts and signals →
+                </Link>
+              ) : (
+                <p className="text-sm text-gray-500">No operations schematic yet.</p>
+              )}
+            </div>
           </div>
-        ) : isOwner ? (
-          <Link
-            href={`/modules/${module.id}/schematic`}
-            className="inline-block rounded-md border border-dashed border-gray-300 px-4 py-3 text-sm text-blue-600 hover:bg-gray-50"
-          >
-            Build the operations schematic — sidings, turnouts and signals →
-          </Link>
-        ) : (
-          <p className="text-sm text-gray-500">No operations schematic yet.</p>
-        )}
+          {isOwner && asModuleSchematic(module.schematic) && (
+            <Link
+              href={`/modules/${module.id}/schematic`}
+              className="inline-block text-sm text-blue-600 hover:underline"
+            >
+              Edit schematic →
+            </Link>
+          )}
+        </div>
       </Section>
 
       {/* ---- Endplates ------------------------------------------------- */}
