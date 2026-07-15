@@ -37,6 +37,10 @@ Dates are YYYY-MM-DD. Changes are listed newest-first.
   its track, and drag a siding or spur's ends (○) along the mainline, instead of
   typing positions in inches. The numeric fields are still there when you want to be
   exact, and the dispatcher view updates as you drag.
+- **Click something to edit it** — select a turnout or a track on the canvas and its
+  settings open right there: a turnout's name, position, which track it's on, what it
+  diverges to and its hand; a track's name, kind, extent and capacity. No more hunting
+  for the right row in the form below.
 
 ### Fixed
 - **Changelog entries were cut off mid-sentence** — longer entries that wrap across
