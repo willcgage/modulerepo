@@ -118,8 +118,10 @@ export function SchematicEditor({
           lane: t.lane ?? 1,
           fromPos: t.fromPos ?? 0,
           toPos: t.toPos ?? state.lengthInches,
+          // Sidings/spurs are the owner's to place; Main 2 is derived.
+          editable: state.extraTracks.some((x) => x.id === t.id),
         })),
-    [doc, state.lengthInches],
+    [doc, state.lengthInches, state.extraTracks],
   );
   const canvasTurnouts = useMemo(
     () => state.turnouts.map((t) => ({ id: t.id, pos: t.pos })),
@@ -1133,6 +1135,20 @@ export function SchematicEditor({
           tracks={canvasTracks}
           turnouts={canvasTurnouts}
           signals={canvasSignals}
+          onTurnoutMove={(id, pos) =>
+            patch((s) => {
+              const t = s.turnouts.find((x) => x.id === id);
+              if (t) t.pos = pos;
+            })
+          }
+          onTrackEndMove={(id, end, pos) =>
+            patch((s) => {
+              const t = s.extraTracks.find((x) => x.id === id);
+              if (!t) return;
+              if (end === "from") t.fromPos = pos;
+              else t.toPos = pos;
+            })
+          }
         />
       </section>
     </div>
