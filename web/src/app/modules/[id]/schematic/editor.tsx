@@ -12,6 +12,7 @@ import {
   isTransitionTurnout,
   deriveEndplatePoses,
   poseNeedsManual,
+  moduleFootprint,
   nextId,
   inchesToScaleFeet,
   type EditorState,
@@ -93,6 +94,44 @@ export function SchematicEditor({
     [state, geometry],
   );
   const wantsManualPose = poseNeedsManual(geometry.type) || state.loop;
+  // The real physical module — its centre-line drives where track, turnouts and
+  // signals actually sit on the board (not just in the straightened view).
+  const footprint = useMemo(
+    () =>
+      moduleFootprint({
+        lengthInches: state.lengthInches,
+        geometryType: geometry.type,
+        geometryDegrees: geometry.degrees,
+        geometryOffsetInches: geometry.offset,
+        endplateWidths: state.endplateWidths,
+        outline: state.outline,
+      }),
+    [state.lengthInches, state.endplateWidths, state.outline, geometry],
+  );
+  /** Everything except the main itself — the main IS the centre-line. */
+  const canvasTracks = useMemo(
+    () =>
+      (doc.tracks ?? [])
+        .filter((t) => t.id !== MAIN_TRACK_ID)
+        .map((t) => ({
+          id: t.id,
+          lane: t.lane ?? 1,
+          fromPos: t.fromPos ?? 0,
+          toPos: t.toPos ?? state.lengthInches,
+        })),
+    [doc, state.lengthInches],
+  );
+  const canvasTurnouts = useMemo(
+    () => state.turnouts.map((t) => ({ id: t.id, pos: t.pos })),
+    [state.turnouts],
+  );
+  const canvasSignals = useMemo(
+    () =>
+      state.controlPoints.flatMap((cp) =>
+        cp.signals.map((s) => ({ id: s.id, pos: s.pos, side: s.side })),
+      ),
+    [state.controlPoints],
+  );
   // Track dropdowns show the owner's track name, not the internal id. On a
   // double-track module, Main 2 is a real track — a turnout on it diverges
   // outward instead of drawing a crossover from Main 1 (modulerepo#14).
@@ -1071,17 +1110,18 @@ export function SchematicEditor({
       {/* Benchwork footprint — full width; it needs room to draw (#benchwork) */}
       <section className="rounded-lg border border-gray-200 bg-white p-4">
         <div className="mb-1 flex items-baseline justify-between">
-          <h2 className="text-lg font-semibold text-gray-900">Benchwork outline</h2>
+          <h2 className="text-lg font-semibold text-gray-900">Benchwork &amp; track</h2>
           <span className="text-sm text-gray-500">
-            {state.outline.length ? `${state.outline.length}-corner shape` : "optional"}
+            {state.outline.length ? `${state.outline.length}-corner shape` : "physical canvas"}
           </span>
         </div>
         <p className="mb-3 max-w-3xl text-sm text-gray-600">
-          Draw the module&apos;s physical benchwork footprint. Free-Dispatcher draws
-          your real board shape in the layout map (corners, L-shapes, curved and
-          angled fronts) instead of a plain band. The endplate faces (A/B) are shown
-          as anchors — snap corners to them so the board meets the standard interface.
-          Leave it empty to use the endplate-width band. Measurements are in inches.
+          The module as it physically is, to scale: the mainline, sidings, turnouts
+          and signals are drawn where they actually sit on the board. Draw the
+          benchwork around them — click an edge to add a corner, drag a corner (the
+          endplate faces show as ◆ anchors to snap to), or drag an edge&apos;s ◇ to
+          curve it. Free-Dispatcher draws this real shape in the layout map; leave it
+          empty to fall back to the endplate-width band. Measurements are in inches.
         </p>
         <BenchworkEditor
           outline={state.outline}
@@ -1089,6 +1129,10 @@ export function SchematicEditor({
           lengthInches={state.lengthInches}
           poses={derivedPoses}
           endplateWidths={state.endplateWidths}
+          centerline={footprint.centerline}
+          tracks={canvasTracks}
+          turnouts={canvasTurnouts}
+          signals={canvasSignals}
         />
       </section>
     </div>

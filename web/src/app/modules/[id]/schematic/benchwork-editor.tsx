@@ -6,9 +6,27 @@ import {
   type BenchworkPoint,
   type EndplatePose,
 } from "@willcgage/module-schematic";
+import { lanePath, sampleAt, laneOffset } from "@/lib/physical-track";
 
 type Pt = { x: number; y: number };
 const DEG = Math.PI / 180;
+
+/** Track/feature context drawn under the benchwork layer (read-only for now). */
+export interface CanvasTrack {
+  id: string;
+  lane: number;
+  fromPos: number;
+  toPos: number;
+}
+export interface CanvasTurnout {
+  id: string;
+  pos: number;
+}
+export interface CanvasSignal {
+  id: string;
+  pos: number;
+  side: "above" | "below";
+}
 
 /**
  * Benchwork outline editor — draw a module's physical footprint as a polygon in
@@ -24,12 +42,22 @@ export function BenchworkEditor({
   lengthInches,
   poses,
   endplateWidths,
+  centerline = [],
+  tracks = [],
+  turnouts = [],
+  signals = [],
 }: {
   outline: BenchworkPoint[];
   onChange: (next: BenchworkPoint[]) => void;
   lengthInches: number;
   poses: EndplatePose[];
   endplateWidths?: Record<string, number>;
+  /** The real mainline centre-line (module-local inches) — drawn as context. */
+  centerline?: Pt[];
+  /** Sidings/spurs/main-2, positioned along the main and offset to their lane. */
+  tracks?: CanvasTrack[];
+  turnouts?: CanvasTurnout[];
+  signals?: CanvasSignal[];
 }) {
   const svgRef = useRef<SVGSVGElement | null>(null);
   const dragRef = useRef<{ kind: "vertex" | "edge"; i: number } | null>(null);
@@ -50,16 +78,46 @@ export function BenchworkEditor({
 
   const sampled = useMemo(() => sampleBenchworkOutline(outline, 24), [outline]);
 
+  // Track context, laid onto the real centre-line (read-only under the board).
+  const trackPaths = useMemo(
+    () =>
+      centerline.length >= 2
+        ? tracks
+            .map((t) => ({ id: t.id, pts: lanePath(centerline, t.fromPos, t.toPos, t.lane) }))
+            .filter((t) => t.pts.length > 1)
+        : [],
+    [centerline, tracks],
+  );
+  const turnoutPts = useMemo(
+    () =>
+      centerline.length >= 2
+        ? turnouts.map((t) => ({ id: t.id, ...sampleAt(centerline, t.pos) }))
+        : [],
+    [centerline, turnouts],
+  );
+  const signalPts = useMemo(
+    () =>
+      centerline.length >= 2
+        ? signals.map((s) => {
+            const p = sampleAt(centerline, s.pos);
+            const off = (s.side === "above" ? 1 : -1) * (laneOffset(1) + 1.5);
+            return { id: s.id, x: p.x + p.nx * off, y: p.y + p.ny * off };
+          })
+        : [],
+    [centerline, signals],
+  );
+
   const bounds = useMemo(() => {
-    const xs = [0, lengthInches, ...anchors.map((a) => a.x), ...sampled.map((p) => p.x)];
-    const ys = [-16, 16, ...anchors.map((a) => a.y), ...sampled.map((p) => p.y)];
+    const ctx = [...centerline, ...trackPaths.flatMap((t) => t.pts)];
+    const xs = [0, lengthInches, ...anchors.map((a) => a.x), ...sampled.map((p) => p.x), ...ctx.map((p) => p.x)];
+    const ys = [-16, 16, ...anchors.map((a) => a.y), ...sampled.map((p) => p.y), ...ctx.map((p) => p.y)];
     const minX = Math.min(...xs);
     const maxX = Math.max(...xs);
     const minY = Math.min(...ys);
     const maxY = Math.max(...ys);
     const pad = Math.max(8, (maxX - minX) * 0.06);
     return { minX: minX - pad, minY: minY - pad, w: maxX - minX + pad * 2, h: maxY - minY + pad * 2 };
-  }, [lengthInches, anchors, sampled]);
+  }, [lengthInches, anchors, sampled, centerline, trackPaths]);
 
   const sy = (y: number) => -y;
   const vb = `${bounds.minX} ${-(bounds.minY + bounds.h)} ${bounds.w} ${bounds.h}`;
@@ -235,18 +293,58 @@ export function BenchworkEditor({
         onPointerUp={onUp}
         onPointerLeave={onUp}
       >
-        {/* Track reference: chord A→B + endplate faces */}
-        {poses.length >= 2 && (
-          <line
-            x1={poses[0].x}
-            y1={sy(poses[0].y)}
-            x2={poses[poses.length - 1].x}
-            y2={sy(poses[poses.length - 1].y)}
-            stroke="#93c5fd"
+        {/* --- Track context: the REAL module, drawn under the board --- */}
+        {/* Sidings / spurs / Main 2 — positioned along the main, offset to lane */}
+        {trackPaths.map((t) => (
+          <polyline
+            key={`trk${t.id}`}
+            points={t.pts.map((p) => `${p.x},${sy(p.y)}`).join(" ")}
+            fill="none"
+            stroke="#94a3b8"
             strokeWidth={r * 0.5}
-            strokeDasharray={`${r} ${r}`}
+            strokeLinecap="round"
+            strokeLinejoin="round"
           />
+        ))}
+        {/* Mainline — the real centre-line (follows the module's curvature) */}
+        {centerline.length >= 2 ? (
+          <polyline
+            points={centerline.map((p) => `${p.x},${sy(p.y)}`).join(" ")}
+            fill="none"
+            stroke="#64748b"
+            strokeWidth={r * 0.7}
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          />
+        ) : (
+          poses.length >= 2 && (
+            <line
+              x1={poses[0].x}
+              y1={sy(poses[0].y)}
+              x2={poses[poses.length - 1].x}
+              y2={sy(poses[poses.length - 1].y)}
+              stroke="#93c5fd"
+              strokeWidth={r * 0.5}
+              strokeDasharray={`${r} ${r}`}
+            />
+          )
         )}
+        {/* Turnouts */}
+        {turnoutPts.map((t) => (
+          <circle key={`to${t.id}`} cx={t.x} cy={sy(t.y)} r={r * 0.5} fill="#475569" />
+        ))}
+        {/* Signals */}
+        {signalPts.map((s) => (
+          <circle
+            key={`sig${s.id}`}
+            cx={s.x}
+            cy={sy(s.y)}
+            r={r * 0.45}
+            fill="#fff"
+            stroke="#475569"
+            strokeWidth={r * 0.25}
+          />
+        ))}
         {poses.map((p) => {
           const hw = (endplateWidths?.[p.id] ?? 24) / 2;
           const nx = Math.cos((p.heading + 90) * DEG);
