@@ -35,7 +35,7 @@ export function entryKey(e: ChangelogEntry): string {
     e.title,
     ...e.sections.flatMap((s) => [s.heading ?? "", ...s.items]),
   ].join("");
-  return `${e.date ?? e.title}#${fnv1a(body)}`;
+  return `${e.title || e.date}#${fnv1a(body)}`;
 }
 
 /** Small stable content hash (FNV-1a → base36). */

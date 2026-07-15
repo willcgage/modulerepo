@@ -1,66 +1,33 @@
 # Changelog
 
-All notable changes to the Module Repository are documented here.
-Dates are YYYY-MM-DD. Changes are listed newest-first.
+All notable changes to the Module Repository, newest first.
+Headings are `version — date` (YYYY-MM-DD).
 
 ---
 
-## 2026-07-14
+## v0.5.0 — 2026-07-14
 
 ### Added
-- **Endplate face width** — the schematic editor now lets you set each endplate's
-  face width (West/A and East/B), in inches. The Free-moN standard is 12″ minimum,
-  24″ recommended, and a module may differ end to end (e.g. a transition). The width
-  is saved with the module and used by Free-Dispatcher to draw each module's
-  benchwork footprint and endplate faces to scale.
-- **Benchwork outline** — draw your module's actual board shape (corners, L-shapes,
-  angled fronts) instead of settling for a plain rectangle. Start from a rectangle,
-  then drag corners; the endplate faces show as ◆ anchors you can snap corners to,
-  so the board meets the standard interface. Free-Dispatcher draws that real
-  footprint in the layout map. Leave it empty to keep the endplate-width band.
-- **Curved benchwork edges** — drag an edge's ◇ handle to bow it into a true arc,
-  for curved fronts and corner boards. Select a corner to straighten its edge again.
-- **See the physical module** — a module's page now shows *what it looks like* (the
-  benchwork and mainline, to scale) next to *how it operates* (the dispatcher
-  schematic). Catalog cards lead with the physical shape, so you can spot a corner,
-  a curve or a yard at a glance instead of decoding a line diagram.
-- **In-app changelog** — this page. When there are updates you haven't seen yet, a
-  note pops up after you log in so you can catch up on what changed.
+- **Endplate face width** — set each endplate's face width (12″ min, 24″ recommended); ends may differ.
+- **Benchwork outline** — draw the module's real board shape; corners snap to the endplate faces (◆). Empty = plain endplate-width band.
+- **Curved edges** — drag an edge's ◇ to bow it into an arc.
+- **Physical module view** — module pages and catalog cards now show the board and track to scale, beside the dispatcher schematic.
+- **In-app changelog** — this page, plus a note after login when there's something new.
 
 ### Changed
-- **Benchwork editing has room to work** — it moved out of the cramped side panel
-  into a full-width canvas, and it now draws the real module: the mainline, sidings,
-  turnouts and signals appear where they actually sit on the board (following the
-  module's curvature), so you're shaping the board around the real track rather than
-  a straight placeholder line.
-- **Place track by dragging** — on that canvas you can now drag a turnout (●) along
-  its track, and drag a siding or spur's ends (○) along the mainline, instead of
-  typing positions in inches. The numeric fields are still there when you want to be
-  exact, and the dispatcher view updates as you drag.
-- **Click something to edit it** — select a turnout or a track on the canvas and its
-  settings open right there: a turnout's name, position, which track it's on, what it
-  diverges to and its hand; a track's name, kind, extent and capacity. No more hunting
-  for the right row in the form below.
-- **Build it in the order you'd build it** — the schematic editor now has a stage rail:
-  Dimensions & endplates → Benchwork → Track → Operations. Each stage shows only its own
-  tools (and what you've filled in so far), so you're not scrolling past six sections
-  to find one field. The physical canvas stays visible the whole way through, because
-  each stage builds on the last: the dimensions size the board, the board carries the
-  track, the track carries the signals. Jump between stages freely — nothing is locked.
-- **Set the module's shape and size right where you draw it** — geometry (straight,
-  curve and its degrees, corner, offset) and the module's footprint and mainline
-  lengths are now edited in the builder's first stage instead of on a separate Edit
-  page. The board reshapes as you type, and one Save writes both.
+- **Benchwork editor is a full-width canvas** of the real module — mainline, sidings, turnouts and signals drawn where they actually sit.
+- **Place track by dragging** — drag a turnout (●) or a siding's ends (○) along the main. Numeric fields still available.
+- **Click to edit** — select a turnout or track on the canvas to edit it in place.
+- **Build order** — the builder now runs Dimensions → Benchwork → Track → Operations, one stage at a time. Jump freely; nothing is locked.
+- **Dimensions live in the builder** — geometry and lengths reshape the board as you type. One Save writes both.
 
 ### Fixed
-- **The schematic builder was squeezed into a narrow column** — it now uses the full
-  width of the window, so the canvas has room to work in.
-- **Changelog entries were cut off mid-sentence** — longer entries that wrap across
-  lines now read in full.
+- Builder uses the full window instead of a narrow column.
+- Changelog entries no longer cut off mid-sentence.
 
 ---
 
-## [Unreleased] — 2026-06-28
+## v0.4.0 — 2026-06-28
 
 ### Added
 - **Decimal inch length entry** — module length is now entered as a single total-inches
@@ -91,7 +58,7 @@ Dates are YYYY-MM-DD. Changes are listed newest-first.
 
 ---
 
-## 2026-06-25
+## v0.3.0 — 2026-06-25
 
 ### Added
 - **File uploads up to 10 MB** — the Next.js server-action body-size limit was raised
@@ -106,7 +73,7 @@ Dates are YYYY-MM-DD. Changes are listed newest-first.
 
 ---
 
-## 2026-06-18
+## v0.2.0 — 2026-06-18
 
 ### Added
 - Module tracks (spurs and sidings) with capacity, linked to industries.
@@ -116,8 +83,9 @@ Dates are YYYY-MM-DD. Changes are listed newest-first.
 
 ---
 
-## 2026-06-10 — Initial release (M1–M4)
+## v0.1.0 — 2026-06-10
 
+- Initial release (M1–M4).
 - Authentication and user management.
 - Module CRUD with new-module wizard.
 - Endplates, industries, and image gallery.

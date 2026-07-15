@@ -30,11 +30,10 @@ export default function ChangelogPage() {
           {changelogEntries.map((entry, i) => (
             <li key={`${entry.title}-${i}`} className="border-l-2 border-blue-100 pl-4">
               <div className="flex items-baseline gap-3">
-                <h2 className="text-lg font-semibold text-gray-900">
-                  {entry.date ?? entry.title}
-                </h2>
+                {/* Version leads; the date is context. */}
+                <h2 className="text-lg font-semibold text-gray-900">{entry.title}</h2>
                 {entry.date && entry.title !== entry.date && (
-                  <span className="text-sm text-gray-500">{entry.title}</span>
+                  <span className="text-sm text-gray-500">{entry.date}</span>
                 )}
               </div>
               {entry.sections.map((section, si) => (
