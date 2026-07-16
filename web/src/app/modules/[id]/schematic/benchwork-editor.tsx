@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useRef, useState } from "react";
+import { useMemo, useRef } from "react";
 import {
   sampleBenchworkOutline,
   type BenchworkPoint,
@@ -34,7 +34,15 @@ export interface CanvasSignal {
 export type CanvasSelection =
   | { kind: "corner"; i: number }
   | { kind: "turnout"; id: string }
-  | { kind: "track"; id: string };
+  | { kind: "track"; id: string }
+  | { kind: "endplate"; id: string };
+
+/**
+ * What a click on empty canvas means. Without this the canvas has to guess, and
+ * it guessed "add a benchwork corner" — so there was no way to click background
+ * and mean "nothing". Select is the default; Benchwork is the drawing mode.
+ */
+export type CanvasTool = "select" | "benchwork";
 
 /**
  * Benchwork outline editor — draw a module's physical footprint as a polygon in
@@ -58,6 +66,7 @@ export function BenchworkEditor({
   onTrackEndMove,
   selection = null,
   onSelect,
+  tool = "select",
 }: {
   outline: BenchworkPoint[];
   onChange: (next: BenchworkPoint[]) => void;
@@ -77,6 +86,8 @@ export function BenchworkEditor({
   /** Selection is owned by the editor, which renders the inspector for it. */
   selection?: CanvasSelection | null;
   onSelect?: (s: CanvasSelection | null) => void;
+  /** What a background click means. See CanvasTool. */
+  tool?: CanvasTool;
 }) {
   const svgRef = useRef<SVGSVGElement | null>(null);
   const dragRef = useRef<
@@ -231,6 +242,12 @@ export function BenchworkEditor({
 
   const onBgDown = (e: React.PointerEvent) => {
     if (dragRef.current) return;
+    // Only the Benchwork tool draws. Under Select, background means "nothing" —
+    // which is what makes deselecting possible at all.
+    if (tool !== "benchwork") {
+      onSelect?.(null);
+      return;
+    }
     addOnNearestEdge(snapToAnchor(toLocal(e)));
   };
   const beginDrag = (
@@ -294,17 +311,6 @@ export function BenchworkEditor({
     dragRef.current = null;
   };
 
-  const removeSel = () => {
-    if (sel === null) return;
-    commit(outline.filter((_, i) => i !== sel));
-    setSel(null);
-  };
-  const straightenSel = () => {
-    if (sel === null) return;
-    const next = [...outline];
-    next[sel] = { x: next[sel].x, y: next[sel].y }; // drop bulge on the edge leaving sel
-    commit(next);
-  };
   const seedRectangle = () => {
     const d = 24;
     commit([
@@ -319,37 +325,49 @@ export function BenchworkEditor({
   const polyPts = sampled.map((p) => `${p.x},${sy(p.y)}`).join(" ");
 
   return (
-    <div>
-      <div className="mb-2 flex flex-wrap items-center gap-2 text-sm">
-        <button type="button" onClick={seedRectangle} className={btn}>
-          {outline.length ? "Reset to rectangle" : "Start from a rectangle"}
-        </button>
-        {outline.length > 0 && (
-          <button
-            type="button"
-            onClick={() => {
-              commit([]);
-              setSel(null);
-            }}
-            className={btn}
-          >
-            Clear
-          </button>
+    <div className="flex h-full min-h-0 flex-col">
+      {/* Tool options — only the active tool's controls, not a global toolbar. */}
+      <div className="mb-2 flex h-6 shrink-0 flex-wrap items-center gap-2 text-xs">
+        {tool === "benchwork" ? (
+          <>
+            <button type="button" onClick={seedRectangle} className={btn}>
+              {outline.length ? "Reset to rectangle" : "Start from a rectangle"}
+            </button>
+            {outline.length > 0 && (
+              <button
+                type="button"
+                onClick={() => {
+                  commit([]);
+                  setSel(null);
+                }}
+                className={btn}
+              >
+                Clear
+              </button>
+            )}
+            <span className="text-gray-500">
+              {outline.length === 0
+                ? "No outline — the layout falls back to the endplate-width band."
+                : "Click an edge to add a corner · drag a corner (snaps to ◆) · drag an edge's ◇ to curve it."}
+            </span>
+          </>
+        ) : (
+          <span className="text-gray-500">
+            Click anything to select it · drag a turnout ● or a siding&rsquo;s end ○
+            along the main to position it.
+          </span>
         )}
-        <span className="text-gray-500">
-          {outline.length === 0
-            ? "No outline — the layout uses the endplate-width band. Start from a rectangle, then shape it."
-            : "Click an edge to add a corner · drag a corner (snaps to endplate anchors ◆) · drag an edge's ◇ to curve it · drag a turnout ● or a siding's end ○ along the main to position it."}
-        </span>
       </div>
 
       <svg
         ref={svgRef}
         viewBox={vb}
         width="100%"
-        height="360"
+        height="100%"
         preserveAspectRatio="xMidYMid meet"
-        className="touch-none rounded-md border border-gray-300 bg-gray-50"
+        className={`min-h-0 flex-1 touch-none rounded-md border border-gray-300 bg-gray-50 ${
+          tool === "benchwork" ? "cursor-crosshair" : ""
+        }`}
         onPointerDown={onBgDown}
         onPointerMove={onMove}
         onPointerUp={onUp}
@@ -460,6 +478,7 @@ export function BenchworkEditor({
           const hw = (endplateWidths?.[p.id] ?? 24) / 2;
           const nx = Math.cos((p.heading + 90) * DEG);
           const ny = Math.sin((p.heading + 90) * DEG);
+          const on = selection?.kind === "endplate" && selection.id === p.id;
           return (
             <g key={p.id}>
               <line
@@ -467,10 +486,21 @@ export function BenchworkEditor({
                 y1={sy(p.y - ny * hw)}
                 x2={p.x + nx * hw}
                 y2={sy(p.y + ny * hw)}
-                stroke="#3b82f6"
-                strokeWidth={r * 0.7}
+                stroke={on ? "#1d4ed8" : "#3b82f6"}
+                strokeWidth={on ? r * 1.2 : r * 0.7}
                 strokeLinecap="round"
-              />
+                style={onSelect ? { cursor: "pointer" } : undefined}
+                onPointerDown={
+                  onSelect
+                    ? (e) => {
+                        e.stopPropagation(); // don't draw through the endplate
+                        onSelect({ kind: "endplate", id: p.id });
+                      }
+                    : undefined
+                }
+              >
+                <title>{`Endplate ${p.id} — the standard interface`}</title>
+              </line>
               <text x={p.x} y={sy(p.y) - r * 1.6} textAnchor="middle" fontSize={r * 2.4} fill="#2563eb">
                 {p.id}
               </text>
@@ -492,7 +522,10 @@ export function BenchworkEditor({
           />
         ))}
 
-        {/* Outline polygon (arcs sampled) */}
+        {/* Outline polygon (arcs sampled). The board is CONTEXT drawn over the
+            track, so it must not eat their clicks — without this its fill sits
+            on top of every turnout, signal and endplate and makes them
+            unselectable. Its own handles are separate elements below. */}
         {sampled.length >= 2 && (
           <polygon
             points={polyPts}
@@ -501,6 +534,7 @@ export function BenchworkEditor({
             stroke="#0284c7"
             strokeWidth={r * 0.7}
             strokeLinejoin="round"
+            pointerEvents="none"
           />
         )}
         {/* Edge midpoint (curve) handles */}
@@ -538,52 +572,6 @@ export function BenchworkEditor({
           />
         ))}
       </svg>
-
-      {sel !== null && outline[sel] && (
-        <div className="mt-2 flex flex-wrap items-center gap-2 text-sm">
-          <span className="text-gray-600">Corner {sel + 1}:</span>
-          <label className="flex items-center gap-1">
-            x
-            <input
-              type="number"
-              step={0.5}
-              value={outline[sel].x}
-              onChange={(e) => {
-                const next = [...outline];
-                next[sel] = { ...next[sel], x: Number(e.target.value) };
-                commit(next);
-              }}
-              className="w-20 rounded border border-gray-300 px-2 py-1"
-            />
-          </label>
-          <label className="flex items-center gap-1">
-            y
-            <input
-              type="number"
-              step={0.5}
-              value={outline[sel].y}
-              onChange={(e) => {
-                const next = [...outline];
-                next[sel] = { ...next[sel], y: Number(e.target.value) };
-                commit(next);
-              }}
-              className="w-20 rounded border border-gray-300 px-2 py-1"
-            />
-          </label>
-          {outline[sel].bulge ? (
-            <button type="button" onClick={straightenSel} className={btn}>
-              Straighten this edge
-            </button>
-          ) : null}
-          <button
-            type="button"
-            onClick={removeSel}
-            className="rounded-md border border-red-300 px-3 py-1 font-medium text-red-700 hover:bg-red-50"
-          >
-            Remove corner
-          </button>
-        </div>
-      )}
     </div>
   );
 }
