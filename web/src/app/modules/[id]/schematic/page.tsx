@@ -70,8 +70,10 @@ export default async function ModuleSchematicPage({
   if (epA) initial.configA = epA;
   if (epB && !initial.loop) initial.configB = epB;
 
+  // An editor is not an article: full-bleed, viewport-height, no page scroll —
+  // the canvas gets the room, and each panel scrolls itself.
   return (
-    <div className="mx-auto max-w-screen-2xl px-4 py-12">
+    <div className="h-dvh overflow-hidden">
       <SchematicEditor
         moduleId={moduleId}
         recordNumber={module.record_number}

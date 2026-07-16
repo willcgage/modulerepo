@@ -5,6 +5,20 @@ Headings are `version — date` (YYYY-MM-DD).
 
 ---
 
+## v0.6.0 — 2026-07-16
+
+### Changed
+- **The canvas is now the editor** — full-height board in the middle, one inspector on the right. The form stack and the stage rail are gone.
+- **Nothing selected shows the module** — geometry, lengths and loop settings live in the inspector.
+- **Endplates are objects** — click one on the board to set its track config, face width and pose.
+- **Objects list** — every track, turnout, crossing and control point in one place; click to select, and it highlights on the board.
+- **Dispatcher view moved to a strip** at the bottom (it's derived, so it no longer takes a column from the board).
+- **Readiness replaces the stage gate** — a checklist in the top bar says what's missing instead of hiding fields.
+
+### Fixed
+- **Track under the benchwork is clickable again** — the board's shading sat on top of the track and swallowed every click, so turnouts, signals and endplates couldn't be selected or dragged on any module with an outline drawn.
+- **Clicking empty canvas no longer adds a benchwork corner** — the Select tool means select; the Benchwork tool draws.
+
 ## v0.5.0 — 2026-07-14
 
 ### Added
