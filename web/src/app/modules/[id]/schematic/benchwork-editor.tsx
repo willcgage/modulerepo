@@ -6,7 +6,13 @@ import {
   type BenchworkPoint,
   type EndplatePose,
 } from "@willcgage/module-schematic";
-import { lanePath, sampleAt, laneOffset, projectToCenterline } from "@/lib/physical-track";
+import {
+  lanePath,
+  sampleAt,
+  laneOffset,
+  projectToCenterline,
+  LANE_SPACING_INCHES,
+} from "@/lib/physical-track";
 
 type Pt = { x: number; y: number };
 type ViewBox = { minX: number; minY: number; w: number; h: number };
@@ -39,13 +45,26 @@ export interface CanvasSignal {
   pos: number;
   side: "above" | "below";
 }
+/** An industry — a car-spot span beside a track (#industries). */
+export interface CanvasIndustry {
+  id: string;
+  /** Lane of the track it spots on (to offset it beside that track). */
+  lane: number;
+  fromPos: number;
+  toPos: number;
+  side: "above" | "below";
+  name: string;
+  /** Secondary readout under the name (cars / inches), or "" for none. */
+  sub: string;
+}
 
 /** What's selected on the canvas — the editor renders its inspector. */
 export type CanvasSelection =
   | { kind: "corner"; i: number }
   | { kind: "turnout"; id: string }
   | { kind: "track"; id: string }
-  | { kind: "endplate"; id: string };
+  | { kind: "endplate"; id: string }
+  | { kind: "industry"; id: string };
 
 /**
  * What a click on empty canvas means. Without this the canvas has to guess, and
@@ -72,8 +91,10 @@ export function BenchworkEditor({
   tracks = [],
   turnouts = [],
   signals = [],
+  industries = [],
   onTurnoutMove,
   onTrackEndMove,
+  onIndustryEndMove,
   selection = null,
   onSelect,
   tool = "select",
@@ -89,10 +110,14 @@ export function BenchworkEditor({
   tracks?: CanvasTrack[];
   turnouts?: CanvasTurnout[];
   signals?: CanvasSignal[];
+  /** Industries — car-spot spans beside their track. */
+  industries?: CanvasIndustry[];
   /** Drag a turnout along the main → its new position, inches from endplate A. */
   onTurnoutMove?: (id: string, pos: number) => void;
   /** Drag a siding/spur end along the main → its new from/to position. */
   onTrackEndMove?: (id: string, end: "from" | "to", pos: number) => void;
+  /** Drag an industry span end along the track → its new from/to position. */
+  onIndustryEndMove?: (id: string, end: "from" | "to", pos: number) => void;
   /** Selection is owned by the editor, which renders the inspector for it. */
   selection?: CanvasSelection | null;
   onSelect?: (s: CanvasSelection | null) => void;
@@ -104,6 +129,7 @@ export function BenchworkEditor({
     | { kind: "vertex" | "edge"; i: number }
     | { kind: "turnout"; id: string }
     | { kind: "trackEnd"; id: string; end: "from" | "to" }
+    | { kind: "industryEnd"; id: string; end: "from" | "to" }
     | null
   >(null);
   /** An in-progress pan: pointer origin + the view at grab time. */
@@ -182,6 +208,39 @@ export function BenchworkEditor({
         : [],
     [centerline, signals],
   );
+  /** Industries — a car-spot span drawn beyond the track it serves, on `side`. */
+  const industryShapes = useMemo(() => {
+    if (centerline.length < 2) return [];
+    return industries.map((ind) => {
+      const sign = ind.side === "above" ? 1 : -1;
+      // Beyond the track's rails, on the industry's side.
+      const off = laneOffset(ind.lane) + sign * (LANE_SPACING_INCHES * 0.9);
+      const a0 = Math.min(ind.fromPos, ind.toPos);
+      const b0 = Math.max(ind.fromPos, ind.toPos);
+      const path: Pt[] = [];
+      const steps = 16;
+      for (let s = 0; s <= steps && b0 - a0 > 0.01; s++) {
+        const p = sampleAt(centerline, a0 + ((b0 - a0) * s) / steps);
+        path.push({ x: p.x + p.nx * off, y: p.y + p.ny * off });
+      }
+      const a = sampleAt(centerline, ind.fromPos);
+      const b = sampleAt(centerline, ind.toPos);
+      const mid = sampleAt(centerline, (ind.fromPos + ind.toPos) / 2);
+      const labelOff = off + sign * 2.2;
+      return {
+        id: ind.id,
+        side: ind.side,
+        name: ind.name,
+        sub: ind.sub,
+        path,
+        ends: [
+          { end: "from" as const, x: a.x + a.nx * off, y: a.y + a.ny * off },
+          { end: "to" as const, x: b.x + b.nx * off, y: b.y + b.ny * off },
+        ],
+        label: { x: mid.x + mid.nx * labelOff, y: mid.y + mid.ny * labelOff },
+      };
+    });
+  }, [centerline, industries]);
 
   /** Content bounds in world (module-local) inches — what "Fit" frames to. */
   const bounds = useMemo<ViewBox>(() => {
@@ -387,6 +446,7 @@ export function BenchworkEditor({
     if (d.kind === "vertex") onSelect?.({ kind: "corner", i: d.i });
     else if (d.kind === "turnout") onSelect?.({ kind: "turnout", id: d.id });
     else if (d.kind === "trackEnd") onSelect?.({ kind: "track", id: d.id });
+    else if (d.kind === "industryEnd") onSelect?.({ kind: "industry", id: d.id });
   };
   /** Pointer → inches along the main, clamped to the module. */
   const posFrom = (p: Pt) =>
@@ -427,6 +487,16 @@ export function BenchworkEditor({
         onTrackEndMove?.(d.id, d.end, pos);
         const t = tracks.find((x) => x.id === d.id);
         const other = t ? (d.end === "from" ? t.toPos : t.fromPos) : pos;
+        setReadout(lengthLabel(Math.abs(pos - other)));
+      }
+      return;
+    }
+    if (d.kind === "industryEnd") {
+      if (centerline.length >= 2) {
+        const pos = posFrom(p);
+        onIndustryEndMove?.(d.id, d.end, pos);
+        const ind = industries.find((x) => x.id === d.id);
+        const other = ind ? (d.end === "from" ? ind.toPos : ind.fromPos) : pos;
         setReadout(lengthLabel(Math.abs(pos - other)));
       }
       return;
@@ -810,6 +880,67 @@ export function BenchworkEditor({
             <circle cx={s.x} cy={sy(s.y)} r={world(1.2)} fill="#f87171" />
           </g>
         ))}
+        {/* Industries — a car-spot span beside its track, name + optional readout. */}
+        {industryShapes.map((ind) => {
+          const on = selection?.kind === "industry" && selection.id === ind.id;
+          return (
+            <g key={`ind${ind.id}`}>
+              {ind.path.length >= 2 && (
+                <polyline
+                  points={ind.path.map((p) => `${p.x},${sy(p.y)}`).join(" ")}
+                  fill="none"
+                  stroke={on ? "#b45309" : "#d97706"}
+                  strokeWidth={on ? world(4) : world(2.5)}
+                  strokeLinecap="round"
+                  style={onSelect ? { cursor: "pointer" } : undefined}
+                  onPointerDown={
+                    onSelect
+                      ? (e) => {
+                          e.stopPropagation();
+                          onSelect({ kind: "industry", id: ind.id });
+                        }
+                      : undefined
+                  }
+                >
+                  <title>{ind.name || "Industry"}</title>
+                </polyline>
+              )}
+              <text
+                x={ind.label.x}
+                y={sy(ind.label.y)}
+                textAnchor="middle"
+                fontSize={world(9)}
+                fill="#92400e"
+                fontWeight={600}
+                pointerEvents="none"
+              >
+                {ind.name || "Industry"}
+                {ind.sub && (
+                  <tspan x={ind.label.x} dy={world(10)} fontWeight={400} fill="#a16207">
+                    {ind.sub}
+                  </tspan>
+                )}
+              </text>
+              {onIndustryEndMove &&
+                ind.ends.map((h) => (
+                  <rect
+                    key={`ie${ind.id}${h.end}`}
+                    x={h.x - world(3)}
+                    y={sy(h.y) - world(3)}
+                    width={world(6)}
+                    height={world(6)}
+                    fill="#fff"
+                    stroke="#b45309"
+                    strokeWidth={world(1)}
+                    style={{ cursor: "ew-resize" }}
+                    onPointerDown={(e) => beginDrag(e, { kind: "industryEnd", id: ind.id, end: h.end })}
+                  >
+                    <title>{`Drag to move this industry's ${h.end === "from" ? "start" : "end"}`}</title>
+                  </rect>
+                ))}
+            </g>
+          );
+        })}
         {poses.map((p) => {
           const hw = (endplateWidths?.[p.id] ?? 24) / 2;
           // Along the face (perpendicular to the outward heading)…

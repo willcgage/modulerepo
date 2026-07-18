@@ -15,16 +15,19 @@ import {
   moduleFootprint,
   nextId,
   inchesToScaleFeet,
+  carCapacity,
   type EditorState,
   type TrackRole,
   type TurnoutKind,
   type SignalFacing,
+  type IndustryLabelMode,
 } from "@/lib/module-schematic";
 import { SchematicPreview } from "./schematic-preview";
 import {
   BenchworkEditor,
   type CanvasSelection,
   type CanvasTool,
+  type CanvasIndustry,
 } from "./benchwork-editor";
 import {
   saveModuleSchematic,
@@ -68,7 +71,8 @@ const isCanvasSel = (s: Selection | null): s is CanvasSelection =>
   (s.kind === "corner" ||
     s.kind === "turnout" ||
     s.kind === "track" ||
-    s.kind === "endplate");
+    s.kind === "endplate" ||
+    s.kind === "industry");
 
 export function SchematicEditor({
   moduleId,
@@ -78,6 +82,7 @@ export function SchematicEditor({
   newModule = false,
   lockedConfigs = { a: false, b: false },
   geometries = [],
+  industryTypes = [],
   initialDimensions,
 }: {
   moduleId: number;
@@ -96,6 +101,8 @@ export function SchematicEditor({
     requires_degrees: boolean;
     requires_offset_inches: boolean;
   }[];
+  /** Industry type choices for the industry inspector. */
+  industryTypes?: { value: string; display_label: string }[];
   /** The module's geometry + lengths — editable here, since they size the board. */
   initialDimensions: ModuleDimensions;
 }) {
@@ -229,6 +236,36 @@ export function SchematicEditor({
       ),
     [state.controlPoints],
   );
+  /** Lane of any track id (mains fixed; extras by their record). */
+  const laneOfTrack = useMemo(() => {
+    const m = new Map<string, number>();
+    m.set(MAIN_TRACK_ID, 0);
+    m.set(MAIN2_TRACK_ID, 1);
+    for (const t of state.extraTracks) m.set(t.id, t.lane);
+    return m;
+  }, [state.extraTracks]);
+  const canvasIndustries = useMemo<CanvasIndustry[]>(
+    () =>
+      state.industries.map((ind) => {
+        const cars = carCapacity(ind.fromPos, ind.toPos);
+        const sub =
+          ind.labelMode === "cars"
+            ? `${cars} cars`
+            : ind.labelMode === "inches"
+              ? `${Math.round(Math.abs(ind.toPos - ind.fromPos))}″`
+              : "";
+        return {
+          id: ind.id,
+          lane: laneOfTrack.get(ind.track) ?? 0,
+          fromPos: ind.fromPos,
+          toPos: ind.toPos,
+          side: ind.side,
+          name: ind.name,
+          sub,
+        };
+      }),
+    [state.industries, laneOfTrack],
+  );
   // Track dropdowns show the owner's track name, not the internal id. On a
   // double-track module, Main 2 is a real track — a turnout on it diverges
   // outward instead of drawing a crossover from Main 1 (modulerepo#14).
@@ -343,6 +380,26 @@ export function SchematicEditor({
         signals: [
           { id: `${id}-AtoB`, pos: Math.round(s.lengthInches * 0.25), track: MAIN_TRACK_ID, facing: "AtoB", side: "above" },
         ],
+      });
+    });
+  }
+  function addIndustry() {
+    patch((s) => {
+      const spur = s.extraTracks.find((t) => t.role === "spur") ?? s.extraTracks[0];
+      const track = spur?.id ?? MAIN_TRACK_ID;
+      const from = spur ? spur.fromPos : Math.round(s.lengthInches * 0.35);
+      const to = spur ? spur.toPos : Math.round(s.lengthInches * 0.6);
+      s.industries.push({
+        id: nextId("ind", s.industries.map((i) => i.id)),
+        name: "",
+        type: "",
+        track,
+        fromPos: from,
+        toPos: to,
+        side: "below",
+        labelMode: "none",
+        carTypes: [],
+        moduleIndustryId: null,
       });
     });
   }
@@ -543,6 +600,7 @@ export function SchematicEditor({
                 tracks={canvasTracks}
                 turnouts={canvasTurnouts}
                 signals={canvasSignals}
+                industries={canvasIndustries}
                 tool={tool}
                 onTurnoutMove={(id, pos) =>
                   patch((s) => {
@@ -556,6 +614,14 @@ export function SchematicEditor({
                     if (!t) return;
                     if (end === "from") t.fromPos = pos;
                     else t.toPos = pos;
+                  })
+                }
+                onIndustryEndMove={(id, end, pos) =>
+                  patch((s) => {
+                    const ind = s.industries.find((x) => x.id === id);
+                    if (!ind) return;
+                    if (end === "from") ind.fromPos = pos;
+                    else ind.toPos = pos;
                   })
                 }
                 selection={isCanvasSel(selection) ? selection : null}
@@ -582,6 +648,7 @@ export function SchematicEditor({
             wantsManualPose={wantsManualPose}
             setEndplateWidth={setEndplateWidth}
             trackOptions={trackOptions}
+            industryTypes={industryTypes}
           />
           <ObjectsList
             state={state}
@@ -595,6 +662,7 @@ export function SchematicEditor({
               turnout: addTurnout,
               crossing: addCrossing,
               controlPoint: addControlPoint,
+              industry: addIndustry,
             }}
           />
         </aside>
@@ -757,6 +825,17 @@ const STAGES: {
     done: (s) => s.extraTracks.length > 0,
   },
   {
+    id: "industries",
+    label: "Industries",
+    hint: (s) =>
+      s.industries.length
+        ? `${s.industries.length} industr${s.industries.length === 1 ? "y" : "ies"}`
+        : "none placed",
+    // Optional: a module may legitimately have no industries, so "done" once
+    // there's track to place them on (never blocks completion).
+    done: (s) => s.industries.length > 0 || s.extraTracks.length === 0,
+  },
+  {
     id: "operations",
     label: "Operations",
     hint: (s) =>
@@ -827,6 +906,7 @@ function Inspector({
   wantsManualPose,
   setEndplateWidth,
   trackOptions,
+  industryTypes,
 }: {
   selection: Selection | null;
   select: (s: Selection | null) => void;
@@ -841,6 +921,7 @@ function Inspector({
   wantsManualPose: boolean;
   setEndplateWidth: (id: string, raw: string) => void;
   trackOptions: { value: string; label: string }[];
+  industryTypes: { value: string; display_label: string }[];
 }) {
   const head = (title: string, sub?: string) => (
     <div className="mb-3 border-b border-gray-100 pb-2">
@@ -1543,6 +1624,109 @@ function Inspector({
     );
   }
 
+  // ---- Industry ----
+  if (selection.kind === "industry") {
+    const idx = state.industries.findIndex((x) => x.id === selection.id);
+    if (idx < 0) return null;
+    const ind = state.industries[idx];
+    const up = (fn: (x: EditorState["industries"][number]) => void) =>
+      patch((s) => fn(s.industries[idx]));
+    const cars = carCapacity(ind.fromPos, ind.toPos);
+    return shell(
+      `Industry · ${ind.name || "unnamed"}`,
+      <>
+        <label className="block text-xs font-medium text-gray-600">
+          Name
+          <input
+            value={ind.name}
+            onChange={(e) => up((x) => (x.name = e.target.value))}
+            className={`mt-0.5 ${inp}`}
+            placeholder="e.g. Ace Feed & Grain"
+          />
+        </label>
+        <label className="block text-xs font-medium text-gray-600">
+          Type
+          <select
+            value={ind.type}
+            onChange={(e) => up((x) => (x.type = e.target.value))}
+            className={`mt-0.5 ${inp}`}
+          >
+            <option value="">—</option>
+            {industryTypes.map((o) => (
+              <option key={o.value} value={o.value}>{o.display_label}</option>
+            ))}
+          </select>
+        </label>
+        <label className="block text-xs font-medium text-gray-600">
+          On track
+          <select
+            value={ind.track}
+            onChange={(e) => up((x) => (x.track = e.target.value))}
+            className={`mt-0.5 ${inp}`}
+          >
+            {trackOptions.map((o) => (
+              <option key={o.value} value={o.value}>{o.label}</option>
+            ))}
+          </select>
+        </label>
+        <div className="grid grid-cols-2 gap-2">
+          <label className="block text-xs font-medium text-gray-600">
+            Starts (in from A)
+            <input
+              type="number"
+              step={0.5}
+              value={ind.fromPos}
+              onChange={(e) => up((x) => (x.fromPos = Number(e.target.value)))}
+              className={`mt-0.5 ${inp}`}
+            />
+          </label>
+          <label className="block text-xs font-medium text-gray-600">
+            Ends (in from A)
+            <input
+              type="number"
+              step={0.5}
+              value={ind.toPos}
+              onChange={(e) => up((x) => (x.toPos = Number(e.target.value)))}
+              className={`mt-0.5 ${inp}`}
+            />
+          </label>
+        </div>
+        <div className="grid grid-cols-2 gap-2">
+          <label className="block text-xs font-medium text-gray-600">
+            Side
+            <select
+              value={ind.side}
+              onChange={(e) => up((x) => (x.side = e.target.value as "above" | "below"))}
+              className={`mt-0.5 ${inp}`}
+            >
+              <option value="above">Above track</option>
+              <option value="below">Below track</option>
+            </select>
+          </label>
+          <label className="block text-xs font-medium text-gray-600">
+            Capacity
+            <div className={`mt-0.5 ${inp} bg-gray-50 text-gray-600`} title="Derived from the drawn span.">
+              {cars} cars
+            </div>
+          </label>
+        </div>
+        <label className="block text-xs font-medium text-gray-600">
+          Label on canvas
+          <select
+            value={ind.labelMode}
+            onChange={(e) => up((x) => (x.labelMode = e.target.value as IndustryLabelMode))}
+            className={`mt-0.5 ${inp}`}
+          >
+            <option value="none">Name only</option>
+            <option value="cars">Name + car count</option>
+            <option value="inches">Name + length</option>
+          </select>
+        </label>
+      </>,
+      { fn: () => patch((s) => s.industries.splice(idx, 1)), label: "Remove industry" },
+    );
+  }
+
   // ---- Track ----
   const i = state.extraTracks.findIndex((t) => t.id === selection.id);
   if (i < 0) return null;
@@ -1658,6 +1842,7 @@ function ObjectsList({
     turnout: () => void;
     crossing: () => void;
     controlPoint: () => void;
+    industry: () => void;
   };
 }) {
   /** Corners are keyed by index, everything else by id — compare accordingly. */
@@ -1725,6 +1910,25 @@ function ObjectsList({
       >
         {state.extraTracks.map((t) =>
           row(t.id, t.trackName || t.id, { kind: "track", id: t.id }, `${Math.abs(t.toPos - t.fromPos)}″`),
+        )}
+      </Group>
+
+      <Group
+        title="Industries"
+        count={state.industries.length}
+        actions={
+          <button type="button" onClick={add.industry} className={addBtn} title="A rail-served customer — a car-spot span on a track.">
+            + Industry
+          </button>
+        }
+      >
+        {state.industries.map((ind) =>
+          row(
+            ind.id,
+            ind.name || "unnamed",
+            { kind: "industry", id: ind.id },
+            `${carCapacity(ind.fromPos, ind.toPos)} cars`,
+          ),
         )}
       </Group>
 
