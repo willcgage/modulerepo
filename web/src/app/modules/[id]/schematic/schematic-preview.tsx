@@ -10,8 +10,18 @@ import { moduleFeatures, type ModuleSchematicDoc } from "@/lib/module-schematic"
 const LANE_GAP = 12;
 const PAD = 10;
 
-export function SchematicPreview({ doc }: { doc: ModuleSchematicDoc }) {
+export function SchematicPreview({
+  doc,
+  highlightId = null,
+}: {
+  doc: ModuleSchematicDoc;
+  /** Feature id selected on the physical canvas — drawn emphasised here, so the
+   * physical ↔ dispatcher mapping is visible (#linked-selection). */
+  highlightId?: string | null;
+}) {
   const f = moduleFeatures(doc);
+  const hi = (id: string) => highlightId != null && id === highlightId;
+  const HL = "#0284c7"; // highlight stroke/fill
   const W = 300; // logical width; positions are fractions of it
   const px = (frac: number) => PAD + frac * (W - 2 * PAD);
   const lengthInches = doc.lengthInches ?? 0;
@@ -218,8 +228,8 @@ export function SchematicPreview({ doc }: { doc: ModuleSchematicDoc }) {
               key={t.id}
               points={pts}
               fill="none"
-              stroke="#64748b"
-              strokeWidth={1.8}
+              stroke={hi(t.id) ? HL : "#64748b"}
+              strokeWidth={hi(t.id) ? 3 : 1.8}
               strokeLinejoin="round"
               strokeLinecap="round"
               strokeDasharray={isSpur ? "3 2" : undefined}
@@ -247,7 +257,13 @@ export function SchematicPreview({ doc }: { doc: ModuleSchematicDoc }) {
 
         {/* Turnout markers on the main */}
         {f.turnouts.map((t) => (
-          <circle key={t.id} cx={px(t.posFrac)} cy={laneY(t.onLane)} r={2} fill="#64748b">
+          <circle
+            key={t.id}
+            cx={px(t.posFrac)}
+            cy={laneY(t.onLane)}
+            r={hi(t.id) ? 3.2 : 2}
+            fill={hi(t.id) ? HL : "#64748b"}
+          >
             <title>{t.name || "Turnout"}</title>
           </circle>
         ))}
