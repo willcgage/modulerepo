@@ -3,6 +3,7 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import {
   sampleBenchworkOutline,
+  samplePath,
   type BenchworkPoint,
   type EndplatePose,
 } from "@willcgage/module-schematic";
@@ -35,6 +36,12 @@ export interface CanvasTrack {
   toPos: number;
   /** Sidings/spurs can be dragged along the main; a derived Main 2 can't. */
   editable?: boolean;
+  /** The pos on the main where this spur's turnout sits — its throat snaps
+   * there when drawn as a 2-D path (#2d-track). */
+  throatPos?: number;
+  /** Authored 2-D path (module-local inches). When set, the track draws along
+   * it instead of the lane-offset path. */
+  path?: BenchworkPoint[];
 }
 export interface CanvasTurnout {
   id: string;
@@ -71,7 +78,7 @@ export type CanvasSelection =
  * it guessed "add a benchwork corner" — so there was no way to click background
  * and mean "nothing". Select is the default; Benchwork is the drawing mode.
  */
-export type CanvasTool = "select" | "benchwork" | "industry" | "mainline";
+export type CanvasTool = "select" | "benchwork" | "industry" | "mainline" | "track";
 
 /**
  * Benchwork outline editor — draw a module's physical footprint as a polygon in
@@ -98,6 +105,7 @@ export function BenchworkEditor({
   onAddIndustry,
   mainPath = [],
   onMainPathChange,
+  onTrackPathChange,
   selection = null,
   onSelect,
   tool = "select",
@@ -127,6 +135,9 @@ export function BenchworkEditor({
    * Mainline tool seeds it from the centre-line, then edits it (#2d-track). */
   mainPath?: BenchworkPoint[];
   onMainPathChange?: (next: BenchworkPoint[]) => void;
+  /** Author a spur/siding's 2-D path (module-local inches) — bend/rotate it in
+   * the Track tool; its throat stays snapped to its turnout (#2d-track). */
+  onTrackPathChange?: (id: string, next: BenchworkPoint[]) => void;
   /** Selection is owned by the editor, which renders the inspector for it. */
   selection?: CanvasSelection | null;
   onSelect?: (s: CanvasSelection | null) => void;
@@ -137,6 +148,7 @@ export function BenchworkEditor({
   const dragRef = useRef<
     | { kind: "vertex" | "edge"; i: number }
     | { kind: "mainVertex" | "mainEdge"; i: number }
+    | { kind: "spurVertex" | "spurEdge"; id: string; i: number }
     | { kind: "turnout"; id: string }
     | { kind: "trackEnd"; id: string; end: "from" | "to" }
     | { kind: "industryEnd"; id: string; end: "from" | "to" }
@@ -169,12 +181,19 @@ export function BenchworkEditor({
 
   const sampled = useMemo(() => sampleBenchworkOutline(outline, 24), [outline]);
 
-  // Track context, laid onto the real centre-line (read-only under the board).
+  // Track context. A track with an authored 2-D path draws along it; otherwise
+  // it's laid onto the main centre-line, offset to its lane (#2d-track).
   const trackPaths = useMemo(
     () =>
       centerline.length >= 2
         ? tracks
-            .map((t) => ({ id: t.id, pts: lanePath(centerline, t.fromPos, t.toPos, t.lane) }))
+            .map((t) => ({
+              id: t.id,
+              pts:
+                t.path && t.path.length >= 2
+                  ? samplePath(t.path)
+                  : lanePath(centerline, t.fromPos, t.toPos, t.lane),
+            }))
             .filter((t) => t.pts.length > 1)
         : [],
     [centerline, tracks],
@@ -190,7 +209,8 @@ export function BenchworkEditor({
   const trackEnds = useMemo(() => {
     if (centerline.length < 2) return [];
     return tracks
-      .filter((t) => t.editable)
+      // A drawn spur is positioned by its path, not fromPos/toPos — no end drags.
+      .filter((t) => t.editable && !(t.path && t.path.length >= 2))
       .flatMap((t) => {
         const off = laneOffset(t.lane);
         return (["from", "to"] as const).map((end) => {
@@ -460,6 +480,73 @@ export function BenchworkEditor({
     commitMain(next);
   };
 
+  // --- Spur path editing (Track tool) — the selected editable spur ------------
+  const editSpurTrack =
+    tool === "track" && selection?.kind === "track"
+      ? tracks.find((t) => t.id === selection.id && t.editable)
+      : undefined;
+  /** The throat point (on the main at the spur's turnout), or null. */
+  const spurThroat = (t: CanvasTrack): Pt | null => {
+    if (t.throatPos == null || centerline.length < 2) return null;
+    const p = sampleAt(centerline, t.throatPos);
+    return { x: p.x, y: p.y };
+  };
+  /** Seed a 2-point diverging path: throat on the main → stub at the lane. */
+  const spurSeed = (t: CanvasTrack): BenchworkPoint[] => {
+    if (centerline.length < 2) return [];
+    const throatPos = t.throatPos ?? t.fromPos;
+    const stubPos =
+      Math.abs(t.fromPos - throatPos) >= Math.abs(t.toPos - throatPos) ? t.fromPos : t.toPos;
+    const a = spurThroat(t) ?? { x: sampleAt(centerline, throatPos).x, y: sampleAt(centerline, throatPos).y };
+    const s = sampleAt(centerline, stubPos);
+    const off = laneOffset(t.lane);
+    return [a, { x: s.x + s.nx * off, y: s.y + s.ny * off }];
+  };
+  const editSpur: BenchworkPoint[] = editSpurTrack
+    ? editSpurTrack.path && editSpurTrack.path.length >= 2
+      ? editSpurTrack.path
+      : spurSeed(editSpurTrack)
+    : [];
+  /** Commit a spur path — the throat (point 0) is always re-pinned to its
+   * turnout, so the spur stays connected even if the turnout later moves. */
+  const commitSpur = (t: CanvasTrack, next: BenchworkPoint[]) => {
+    if (!next.length) return;
+    const pinned = next.map((p) => ({
+      x: round(p.x),
+      y: round(p.y),
+      ...(p.bulge ? { bulge: round(p.bulge) } : {}),
+    }));
+    const th = spurThroat(t);
+    if (th) pinned[0] = { ...pinned[0], x: round(th.x), y: round(th.y) };
+    onTrackPathChange?.(t.id, pinned);
+  };
+  const spurEdgeHandle = (pts: BenchworkPoint[], i: number): Pt => {
+    const p0 = pts[i];
+    const p1 = pts[i + 1];
+    const dx = p1.x - p0.x;
+    const dy = p1.y - p0.y;
+    const c = Math.hypot(dx, dy) || 1;
+    return {
+      x: (p0.x + p1.x) / 2 + (-dy / c) * (p0.bulge ?? 0),
+      y: (p0.y + p1.y) / 2 + (dx / c) * (p0.bulge ?? 0),
+    };
+  };
+  const addSpurVertex = (t: CanvasTrack, pt: Pt) => {
+    if (editSpur.length < 2) return;
+    let best = 0;
+    let bestD = Infinity;
+    for (let i = 0; i < editSpur.length - 1; i++) {
+      const d = distToSegment(pt, editSpur[i], editSpur[i + 1]);
+      if (d < bestD) {
+        bestD = d;
+        best = i;
+      }
+    }
+    const next = [...editSpur];
+    next.splice(best + 1, 0, { x: pt.x, y: pt.y });
+    commitSpur(t, next);
+  };
+
   const addOnNearestEdge = (pt: Pt) => {
     if (outline.length < 2) {
       commit([...outline, { x: pt.x, y: pt.y }]);
@@ -498,6 +585,13 @@ export function BenchworkEditor({
     // Mainline tool: a background click adds a bend point on the mainline.
     if (tool === "mainline") {
       if (onMainPathChange) addMainVertex(toLocal(e));
+      return;
+    }
+    // Track tool: with a spur selected, a background click adds a bend to it;
+    // otherwise clear so the next spur click selects.
+    if (tool === "track") {
+      if (editSpurTrack && onTrackPathChange) addSpurVertex(editSpurTrack, toLocal(e));
+      else onSelect?.(null);
       return;
     }
     // Only the Benchwork tool draws. Under Select, background means "nothing" —
@@ -576,6 +670,28 @@ export function BenchworkEditor({
         const other = ind ? (d.end === "from" ? ind.toPos : ind.fromPos) : pos;
         setReadout(lengthLabel(Math.abs(pos - other)));
       }
+      return;
+    }
+    if (d.kind === "spurVertex" || d.kind === "spurEdge") {
+      if (!editSpurTrack || editSpurTrack.id !== d.id) return;
+      const next = editSpur.map((pt) => ({ ...pt }));
+      if (d.kind === "spurVertex") {
+        if (d.i === 0) return; // the throat stays snapped to the turnout
+        next[d.i] = { ...next[d.i], x: p.x, y: p.y };
+        setReadout(`${fmt(p.x)}, ${fmt(p.y)}″`);
+      } else {
+        const p0 = editSpur[d.i];
+        const p1 = editSpur[d.i + 1];
+        const dx = p1.x - p0.x;
+        const dy = p1.y - p0.y;
+        const c = Math.hypot(dx, dy) || 1;
+        const mx = (p0.x + p1.x) / 2;
+        const my = (p0.y + p1.y) / 2;
+        const bulge = (p.x - mx) * (-dy / c) + (p.y - my) * (dx / c);
+        next[d.i] = { ...next[d.i], bulge: Math.abs(bulge) < 0.5 ? 0 : bulge };
+        setReadout(`bow ${fmt(Math.abs(bulge))}″`);
+      }
+      commitSpur(editSpurTrack, next);
       return;
     }
     if (d.kind === "mainVertex" || d.kind === "mainEdge") {
@@ -836,6 +952,11 @@ export function BenchworkEditor({
             Drag a mainline point ○ to move it · drag an edge&rsquo;s ◇ to curve
             it · click the line to add a bend. Endplate A stays at the origin.
           </span>
+        ) : tool === "track" ? (
+          <span className="text-gray-500">
+            Click a siding/spur to select it, then drag its points ○ to bend or
+            rotate it (◇ to curve). The throat stays snapped to its turnout.
+          </span>
         ) : (
           <span className="text-gray-500">
             Click anything to select it · drag a turnout ● or a siding&rsquo;s end ○
@@ -870,7 +991,7 @@ export function BenchworkEditor({
         className={`min-h-0 flex-1 touch-none rounded-md border border-gray-300 bg-white ${
           spaceHeld
             ? "cursor-grab"
-            : tool === "benchwork" || tool === "industry" || tool === "mainline"
+            : tool === "benchwork" || tool === "industry" || tool === "mainline" || tool === "track"
               ? "cursor-crosshair"
               : ""
         }`}
@@ -1228,6 +1349,47 @@ export function BenchworkEditor({
                 onPointerDown={(e) => beginDrag(e, { kind: "mainVertex", i })}
               >
                 <title>{i === 0 ? "Endplate A (fixed origin)" : "Drag to move this mainline point"}</title>
+              </circle>
+            ))}
+          </>
+        )}
+
+        {/* --- Spur edit handles (Track tool) — bend/rotate the selected spur --- */}
+        {editSpurTrack && editSpur.length >= 2 && (
+          <>
+            {editSpur.slice(0, -1).map((_, i) => {
+              const h = spurEdgeHandle(editSpur, i);
+              return (
+                <rect
+                  key={`se${i}`}
+                  x={h.x - r * 0.9}
+                  y={sy(h.y) - r * 0.9}
+                  width={r * 1.8}
+                  height={r * 1.8}
+                  fill={editSpur[i].bulge ? "#0d9488" : "#fff"}
+                  stroke="#0f766e"
+                  strokeWidth={r * 0.35}
+                  transform={`rotate(45 ${h.x} ${sy(h.y)})`}
+                  style={{ cursor: "grab" }}
+                  onPointerDown={(e) => beginDrag(e, { kind: "spurEdge", id: editSpurTrack.id, i })}
+                >
+                  <title>Drag to bow this stretch into a curve</title>
+                </rect>
+              );
+            })}
+            {editSpur.map((p, i) => (
+              <circle
+                key={`sv${i}`}
+                cx={p.x}
+                cy={sy(p.y)}
+                r={r}
+                fill={i === 0 ? "#99f6e4" : "#fff"}
+                stroke="#0f766e"
+                strokeWidth={r * 0.4}
+                style={{ cursor: i === 0 ? "default" : "grab" }}
+                onPointerDown={(e) => beginDrag(e, { kind: "spurVertex", id: editSpurTrack.id, i })}
+              >
+                <title>{i === 0 ? "Throat — snapped to the turnout" : "Drag to move this point"}</title>
               </circle>
             ))}
           </>

@@ -5,6 +5,11 @@ Headings are `version — date` (YYYY-MM-DD).
 
 ---
 
+## v0.14.0 — 2026-07-18
+
+### Added
+- **Draw sidings & spurs** — the **T** tool: select a siding/spur, then drag its points to bend or rotate it (◇ to curve), or click to add a bend. The throat stays snapped to its turnout. The dispatcher view is unchanged.
+
 ## v0.13.0 — 2026-07-18
 
 ### Added
