@@ -5,6 +5,11 @@ Headings are `version — date` (YYYY-MM-DD).
 
 ---
 
+## v0.12.0 — 2026-07-18
+
+### Added
+- **Linked dispatcher view** — select a track, turnout or crossing on the board and it lights up in the dispatcher strip below, so the physical-to-dispatcher mapping is visible.
+
 ## v0.11.2 — 2026-07-18
 
 ### Added

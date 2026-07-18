@@ -662,7 +662,17 @@ export function SchematicEditor({
               />
             </div>
           </div>
-          <DispatcherStrip doc={doc} />
+          <DispatcherStrip
+            doc={doc}
+            highlightId={
+              selection &&
+              (selection.kind === "turnout" ||
+                selection.kind === "track" ||
+                selection.kind === "crossing")
+                ? selection.id
+                : null
+            }
+          />
         </div>
 
         {/* The one inspector. */}
@@ -804,7 +814,13 @@ function isTypingTarget(t: EventTarget | null): boolean {
 
 /** The derived dispatcher view. Never authored — so it gets a strip, not a
  * column. It's glanceable because it's *why* the module data exists. */
-function DispatcherStrip({ doc }: { doc: ReturnType<typeof stateToDoc> }) {
+function DispatcherStrip({
+  doc,
+  highlightId,
+}: {
+  doc: ReturnType<typeof stateToDoc>;
+  highlightId: string | null;
+}) {
   const [open, setOpen] = useState(true);
   return (
     <div className="shrink-0 border-t border-gray-200 bg-white">
@@ -819,7 +835,7 @@ function DispatcherStrip({ doc }: { doc: ReturnType<typeof stateToDoc> }) {
       </button>
       {open && (
         <div className="max-h-44 overflow-auto px-3 pb-3">
-          <SchematicPreview doc={doc} />
+          <SchematicPreview doc={doc} highlightId={highlightId} />
         </div>
       )}
     </div>
