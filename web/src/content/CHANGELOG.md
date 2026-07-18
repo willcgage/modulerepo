@@ -5,6 +5,11 @@ Headings are `version — date` (YYYY-MM-DD).
 
 ---
 
+## v0.15.0 — 2026-07-18
+
+### Changed
+- **One "+ Track" menu** — add track from a single menu: set the mainline to single or double track, or add a siding or spur/yard (and a crossover on a double main).
+
 ## v0.14.1 — 2026-07-18
 
 ### Fixed
