@@ -83,6 +83,7 @@ export function SchematicEditor({
   lockedConfigs = { a: false, b: false },
   geometries = [],
   industryTypes = [],
+  carTypes = [],
   initialDimensions,
 }: {
   moduleId: number;
@@ -103,6 +104,8 @@ export function SchematicEditor({
   }[];
   /** Industry type choices for the industry inspector. */
   industryTypes?: { value: string; display_label: string }[];
+  /** Car type choices for the industry inspector's multiselect. */
+  carTypes?: { value: string; display_label: string }[];
   /** The module's geometry + lengths — editable here, since they size the board. */
   initialDimensions: ModuleDimensions;
 }) {
@@ -649,6 +652,7 @@ export function SchematicEditor({
             setEndplateWidth={setEndplateWidth}
             trackOptions={trackOptions}
             industryTypes={industryTypes}
+            carTypes={carTypes}
           />
           <ObjectsList
             state={state}
@@ -907,6 +911,7 @@ function Inspector({
   setEndplateWidth,
   trackOptions,
   industryTypes,
+  carTypes,
 }: {
   selection: Selection | null;
   select: (s: Selection | null) => void;
@@ -922,6 +927,7 @@ function Inspector({
   setEndplateWidth: (id: string, raw: string) => void;
   trackOptions: { value: string; label: string }[];
   industryTypes: { value: string; display_label: string }[];
+  carTypes: { value: string; display_label: string }[];
 }) {
   const head = (title: string, sub?: string) => (
     <div className="mb-3 border-b border-gray-100 pb-2">
@@ -1722,6 +1728,38 @@ function Inspector({
             <option value="inches">Name + length</option>
           </select>
         </label>
+        <div className="text-xs font-medium text-gray-600">
+          Cars received
+          {carTypes.length === 0 ? (
+            <p className="mt-0.5 font-normal text-gray-400">No car types available.</p>
+          ) : (
+            <div className="mt-1 flex flex-wrap gap-1">
+              {carTypes.map((ct) => {
+                const on = ind.carTypes.includes(ct.value);
+                return (
+                  <button
+                    key={ct.value}
+                    type="button"
+                    onClick={() =>
+                      up((x) => {
+                        x.carTypes = on
+                          ? x.carTypes.filter((v) => v !== ct.value)
+                          : [...x.carTypes, ct.value];
+                      })
+                    }
+                    className={`rounded-full border px-2 py-0.5 text-xs font-normal transition ${
+                      on
+                        ? "border-amber-500 bg-amber-50 text-amber-800"
+                        : "border-gray-300 text-gray-600 hover:bg-gray-50"
+                    }`}
+                  >
+                    {ct.display_label}
+                  </button>
+                );
+              })}
+            </div>
+          )}
+        </div>
       </>,
       { fn: () => patch((s) => s.industries.splice(idx, 1)), label: "Remove industry" },
     );

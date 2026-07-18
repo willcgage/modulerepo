@@ -5,6 +5,11 @@ Headings are `version — date` (YYYY-MM-DD).
 
 ---
 
+## v0.11.1 — 2026-07-18
+
+### Added
+- **Car types per industry** — pick which cars each industry receives (boxcar, hopper, tank…) in its inspector; they load and save with the module.
+
 ## v0.11.0 — 2026-07-18
 
 ### Added
