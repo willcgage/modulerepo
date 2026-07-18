@@ -169,7 +169,15 @@ export function BenchworkEditor({
         ? signals.map((s) => {
             const p = sampleAt(centerline, s.pos);
             const off = (s.side === "above" ? 1 : -1) * (laneOffset(1) + 1.5);
-            return { id: s.id, x: p.x + p.nx * off, y: p.y + p.ny * off };
+            // Base on the track it governs; head offset out to `side`, so the
+            // mast can be drawn as a stem + head instead of a bare dot.
+            return {
+              id: s.id,
+              bx: p.x,
+              by: p.y,
+              x: p.x + p.nx * off,
+              y: p.y + p.ny * off,
+            };
           })
         : [],
     [centerline, signals],
@@ -525,6 +533,98 @@ export function BenchworkEditor({
   const extentW = extent.maxX - extent.minX;
   const extentH = extent.maxY - extent.minY;
 
+  // --- Track fidelity (stage 4) ----------------------------------------------
+  // Rails and ties only read once the ~0.35″ N gauge spans a few screen pixels;
+  // below that a single weighted line is cleaner. All physical (inches), so they
+  // scale with the board.
+  const GAUGE = 0.354; // N-scale track gauge (9 mm), inches
+  const ROADBED = 1.3; // ballast-shoulder band width, inches
+  const showRails = GAUGE * scale > 4;
+  const railW = world(1);
+  const poly = (pts: Pt[]) => pts.map((p) => `${p.x},${sy(p.y)}`).join(" ");
+  /** Mainline + sidings/spurs as one list, so all get the same rendering. */
+  const trackLines: { id: string; pts: Pt[]; main: boolean; selectable: boolean }[] = [
+    ...(centerline.length >= 2
+      ? [{ id: "__main__", pts: centerline, main: true, selectable: false }]
+      : []),
+    ...trackPaths.map((t) => ({ id: t.id, pts: t.pts, main: false, selectable: true })),
+  ];
+
+  const renderTrack = (line: (typeof trackLines)[number]) => {
+    const on = selection?.kind === "track" && selection.id === line.id;
+    const click =
+      line.selectable && onSelect
+        ? (e: React.PointerEvent) => {
+            e.stopPropagation();
+            onSelect({ kind: "track", id: line.id });
+          }
+        : undefined;
+    return (
+      <g
+        key={`trk${line.id}`}
+        style={click ? { cursor: "pointer" } : undefined}
+        onPointerDown={click}
+      >
+        {on && (
+          <polyline
+            points={poly(line.pts)}
+            fill="none"
+            stroke="#38bdf8"
+            strokeOpacity={0.4}
+            strokeWidth={ROADBED}
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          />
+        )}
+        {/* Roadbed — subtle ballast band under the rails. */}
+        <polyline
+          points={poly(line.pts)}
+          fill="none"
+          stroke="#e9e2d4"
+          strokeWidth={ROADBED}
+          strokeLinecap="round"
+          strokeLinejoin="round"
+        />
+        {showRails ? (
+          <>
+            {tiesAlong(line.pts, 1.4, GAUGE * 1.35).map((ti, k) => (
+              <line
+                key={`tie${k}`}
+                x1={ti.x1}
+                y1={sy(ti.y1)}
+                x2={ti.x2}
+                y2={sy(ti.y2)}
+                stroke="#a8a29e"
+                strokeWidth={world(0.8)}
+              />
+            ))}
+            {[GAUGE / 2, -GAUGE / 2].map((o, k) => (
+              <polyline
+                key={`rail${k}`}
+                points={poly(offsetPath(line.pts, o))}
+                fill="none"
+                stroke={on ? "#0284c7" : "#475569"}
+                strokeWidth={railW}
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              />
+            ))}
+          </>
+        ) : (
+          <polyline
+            points={poly(line.pts)}
+            fill="none"
+            stroke={on ? "#0284c7" : line.main ? "#64748b" : "#94a3b8"}
+            strokeWidth={on ? r * 0.9 : line.main ? r * 0.7 : r * 0.5}
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          />
+        )}
+        <title>{line.main ? "Mainline" : line.id}</title>
+      </g>
+    );
+  };
+
   return (
     <div className="flex h-full min-h-0 flex-col">
       {/* Tool options (left) + view controls (right). Only the active tool's
@@ -635,55 +735,25 @@ export function BenchworkEditor({
           ))}
         </g>
 
-        {/* --- Track context: the REAL module, drawn under the board --- */}
-        {/* Sidings / spurs / Main 2 — positioned along the main, offset to lane */}
-        {trackPaths.map((t) => {
-          const on = selection?.kind === "track" && selection.id === t.id;
-          return (
-            <polyline
-              key={`trk${t.id}`}
-              points={t.pts.map((p) => `${p.x},${sy(p.y)}`).join(" ")}
-              fill="none"
-              stroke={on ? "#0284c7" : "#94a3b8"}
-              strokeWidth={on ? r * 0.9 : r * 0.5}
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              style={onSelect ? { cursor: "pointer" } : undefined}
-              onPointerDown={
-                onSelect
-                  ? (e) => {
-                      e.stopPropagation(); // don't add a benchwork corner
-                      onSelect({ kind: "track", id: t.id });
-                    }
-                  : undefined
-              }
-            >
-              <title>{t.id}</title>
-            </polyline>
-          );
-        })}
-        {/* Mainline — the real centre-line (follows the module's curvature) */}
-        {centerline.length >= 2 ? (
-          <polyline
-            points={centerline.map((p) => `${p.x},${sy(p.y)}`).join(" ")}
-            fill="none"
-            stroke="#64748b"
-            strokeWidth={r * 0.7}
-            strokeLinecap="round"
-            strokeLinejoin="round"
+        {/* --- The board itself, as a fill under the track (a real board the
+            track sits on). Its edge stroke + handles are drawn on top, below. --- */}
+        {sampled.length >= 2 && outline.length >= 3 && (
+          <polygon points={polyPts} fill="#f6f2ea" fillOpacity={0.9} pointerEvents="none" />
+        )}
+
+        {/* --- Track: roadbed + rails/ties (or a single line when zoomed out) --- */}
+        {trackLines.map(renderTrack)}
+        {/* No centre-line yet? Show the endplate-to-endplate lead dashed. */}
+        {centerline.length < 2 && poses.length >= 2 && (
+          <line
+            x1={poses[0].x}
+            y1={sy(poses[0].y)}
+            x2={poses[poses.length - 1].x}
+            y2={sy(poses[poses.length - 1].y)}
+            stroke="#93c5fd"
+            strokeWidth={r * 0.5}
+            strokeDasharray={`${r} ${r}`}
           />
-        ) : (
-          poses.length >= 2 && (
-            <line
-              x1={poses[0].x}
-              y1={sy(poses[0].y)}
-              x2={poses[poses.length - 1].x}
-              y2={sy(poses[poses.length - 1].y)}
-              stroke="#93c5fd"
-              strokeWidth={r * 0.5}
-              strokeDasharray={`${r} ${r}`}
-            />
-          )
         )}
         {/* Siding / spur end handles — drag along the main to reposition */}
         {onTrackEndMove &&
@@ -724,30 +794,69 @@ export function BenchworkEditor({
             </circle>
           );
         })}
-        {/* Signals */}
+        {/* Signals — a mast (stem from the track it governs) + a head. */}
         {signalPts.map((s) => (
-          <circle
-            key={`sig${s.id}`}
-            cx={s.x}
-            cy={sy(s.y)}
-            r={r * 0.45}
-            fill="#fff"
-            stroke="#475569"
-            strokeWidth={r * 0.25}
-          />
+          <g key={`sig${s.id}`}>
+            <line
+              x1={s.bx}
+              y1={sy(s.by)}
+              x2={s.x}
+              y2={sy(s.y)}
+              stroke="#334155"
+              strokeWidth={world(1)}
+              strokeLinecap="round"
+            />
+            <circle cx={s.x} cy={sy(s.y)} r={world(3)} fill="#0f172a" stroke="#fff" strokeWidth={world(0.8)} />
+            <circle cx={s.x} cy={sy(s.y)} r={world(1.2)} fill="#f87171" />
+          </g>
         ))}
         {poses.map((p) => {
           const hw = (endplateWidths?.[p.id] ?? 24) / 2;
-          const nx = Math.cos((p.heading + 90) * DEG);
-          const ny = Math.sin((p.heading + 90) * DEG);
+          // Along the face (perpendicular to the outward heading)…
+          const fx = Math.cos((p.heading + 90) * DEG);
+          const fy = Math.sin((p.heading + 90) * DEG);
+          // …and the outward heading itself (for the hatch ticks).
+          const hxo = Math.cos(p.heading * DEG);
+          const hyo = Math.sin(p.heading * DEG);
           const on = selection?.kind === "endplate" && selection.id === p.id;
+          const ax = p.x - fx * hw;
+          const ay = p.y - fy * hw;
+          const bx = p.x + fx * hw;
+          const by = p.y + fy * hw;
+          // Short hatch ticks along the face — reads as the machined interface,
+          // not a wall. Angled inward from the face.
+          const nTicks = Math.max(3, Math.round(hw / 3));
+          const ticks = Array.from({ length: nTicks + 1 }, (_, i) => {
+            const t = i / nTicks;
+            const cx = ax + (bx - ax) * t;
+            const cy = ay + (by - ay) * t;
+            const len = 1.4;
+            return {
+              x1: cx,
+              y1: cy,
+              x2: cx - (hxo + fx * 0.6) * len,
+              y2: cy - (hyo + fy * 0.6) * len,
+            };
+          });
           return (
             <g key={p.id}>
+              {ticks.map((t, i) => (
+                <line
+                  key={`h${i}`}
+                  x1={t.x1}
+                  y1={sy(t.y1)}
+                  x2={t.x2}
+                  y2={sy(t.y2)}
+                  stroke="#93c5fd"
+                  strokeWidth={world(0.8)}
+                  pointerEvents="none"
+                />
+              ))}
               <line
-                x1={p.x - nx * hw}
-                y1={sy(p.y - ny * hw)}
-                x2={p.x + nx * hw}
-                y2={sy(p.y + ny * hw)}
+                x1={ax}
+                y1={sy(ay)}
+                x2={bx}
+                y2={sy(by)}
                 stroke={on ? "#1d4ed8" : "#3b82f6"}
                 strokeWidth={on ? r * 1.2 : r * 0.7}
                 strokeLinecap="round"
@@ -784,15 +893,13 @@ export function BenchworkEditor({
           />
         ))}
 
-        {/* Outline polygon (arcs sampled). The board is CONTEXT drawn over the
-            track, so it must not eat their clicks — without this its fill sits
-            on top of every turnout, signal and endplate and makes them
-            unselectable. Its own handles are separate elements below. */}
+        {/* Board edge stroke — the fill is drawn earlier (under the track); this
+            is just the outline. pointerEvents none so it never eats a click; its
+            own handles are separate elements below. */}
         {sampled.length >= 2 && (
           <polygon
             points={polyPts}
-            fill="#0ea5e9"
-            fillOpacity={outline.length >= 3 ? 0.14 : 0}
+            fill="none"
             stroke="#0284c7"
             strokeWidth={r * 0.7}
             strokeLinejoin="round"
@@ -936,4 +1043,47 @@ function distToSegment(p: Pt, a: Pt, b: Pt): number {
   let t = ((p.x - a.x) * dx + (p.y - a.y) * dy) / len2;
   t = Math.max(0, Math.min(1, t));
   return Math.hypot(p.x - (a.x + t * dx), p.y - (a.y + t * dy));
+}
+
+/** Offset a polyline perpendicular by `off` inches (per-vertex averaged normal).
+ * Good enough for the gentle curves module track follows. */
+function offsetPath(pts: Pt[], off: number): Pt[] {
+  return pts.map((p, i) => {
+    const a = pts[Math.max(0, i - 1)];
+    const b = pts[Math.min(pts.length - 1, i + 1)];
+    const dx = b.x - a.x;
+    const dy = b.y - a.y;
+    const len = Math.hypot(dx, dy) || 1;
+    return { x: p.x + (-dy / len) * off, y: p.y + (dx / len) * off };
+  });
+}
+
+/** Tie marks perpendicular to a polyline, evenly spaced by arc length. Capped so
+ * a long track can't spawn unbounded elements. */
+function tiesAlong(
+  pts: Pt[],
+  spacing: number,
+  half: number,
+): { x1: number; y1: number; x2: number; y2: number }[] {
+  const out: { x1: number; y1: number; x2: number; y2: number }[] = [];
+  let carry = 0;
+  for (let i = 0; i < pts.length - 1; i++) {
+    const a = pts[i];
+    const b = pts[i + 1];
+    const dx = b.x - a.x;
+    const dy = b.y - a.y;
+    const seg = Math.hypot(dx, dy);
+    if (seg === 0) continue;
+    const nx = -dy / seg;
+    const ny = dx / seg;
+    for (let d = carry; d < seg; d += spacing) {
+      const t = d / seg;
+      const cx = a.x + dx * t;
+      const cy = a.y + dy * t;
+      out.push({ x1: cx - nx * half, y1: cy - ny * half, x2: cx + nx * half, y2: cy + ny * half });
+      if (out.length > 600) return out;
+    }
+    carry = spacing - ((seg - carry) % spacing);
+  }
+  return out;
 }
