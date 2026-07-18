@@ -5,6 +5,15 @@ Headings are `version — date` (YYYY-MM-DD).
 
 ---
 
+## v0.9.0 — 2026-07-17
+
+### Added
+- **Quick new-module** — name, category, geometry and length, then straight to the canvas with a board already drawn. The full step-by-step wizard is still one click away.
+
+### Changed
+- **New modules open on a seeded board** instead of an empty canvas with a button.
+- **Track capacity shows car count** (≈40 ft cars) alongside scale feet, and is always derived from the drawn length — never typed.
+
 ## v0.8.0 — 2026-07-17
 
 ### Added

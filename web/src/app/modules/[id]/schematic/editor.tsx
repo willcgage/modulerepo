@@ -32,6 +32,10 @@ import {
   type ModuleDimensions,
 } from "./actions";
 
+/** A 40-ft N-scale car is ~3.3″ over the couplers — the length a car occupies
+ * on a track. Capacity in cars reads truer than scale feet for a builder. */
+const CAR_INCHES = 3.3;
+
 const inp =
   "block w-full rounded-md border border-gray-300 px-2 py-1 text-sm text-gray-900 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500";
 const addBtn =
@@ -71,6 +75,7 @@ export function SchematicEditor({
   recordNumber,
   moduleName,
   initial,
+  newModule = false,
   lockedConfigs = { a: false, b: false },
   geometries = [],
   initialDimensions,
@@ -448,6 +453,31 @@ export function SchematicEditor({
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
   }, [undo, redo]);
+
+  // Seed a rectangular board the first time a brand-new module opens, so the
+  // canvas starts as a real board (not an empty SVG with a button). Autosave
+  // persists it; the owner can reshape or undo it.
+  const seeded = useRef(false);
+  useEffect(() => {
+    if (!newModule || seeded.current) return;
+    if (state.outline.length > 0 || state.lengthInches <= 0) return;
+    seeded.current = true;
+    const L = state.lengthInches;
+    const d = 24;
+    // Defer out of the effect body: this is a persisted edit (autosave picks it
+    // up), not render-synchronous state React should batch.
+    queueMicrotask(() =>
+      patch((s) => {
+        s.outline = [
+          { x: 0, y: -d / 2 },
+          { x: L, y: -d / 2 },
+          { x: L, y: d / 2 },
+          { x: 0, y: d / 2 },
+        ];
+      }),
+    );
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   return (
     <div className="flex h-full min-h-0 flex-col bg-gray-100">
@@ -1581,8 +1611,9 @@ function Inspector({
           />
         </label>
         <label className="block text-xs font-medium text-gray-600">
-          Capacity (N)
-          <div className={`mt-0.5 ${inp} bg-gray-50 text-gray-600`}>
+          Capacity
+          <div className={`mt-0.5 ${inp} bg-gray-50 text-gray-600`} title="Derived from the drawn length — not typed.">
+            {Math.floor(Math.abs(t.toPos - t.fromPos) / CAR_INCHES)} cars ·{" "}
             {Math.round(inchesToScaleFeet(Math.abs(t.toPos - t.fromPos)))} ft
           </div>
         </label>
