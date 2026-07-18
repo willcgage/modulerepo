@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, useTransition } from "react";
 import Link from "next/link";
 import {
   MAIN_TRACK_ID,
@@ -34,6 +34,9 @@ import {
   updateModuleDimensions,
   type ModuleDimensions,
 } from "./actions";
+import { submitCarTypeSuggestion } from "../../new/actions";
+
+type CarTypeOption = { value: string; display_label: string };
 
 /** A 40-ft N-scale car is ~3.3″ over the couplers — the length a car occupies
  * on a track. Capacity in cars reads truer than scale feet for a builder. */
@@ -114,6 +117,10 @@ export function SchematicEditor({
   const [selection, setSelection] = useState<Selection | null>(null);
   /** What a canvas background click means. */
   const [tool, setTool] = useState<CanvasTool>("select");
+  /** Car-type choices, seeded from the server + grown by suggestions. */
+  const [carTypeOptions, setCarTypeOptions] = useState<CarTypeOption[]>(carTypes);
+  const addCarTypeOption = (o: CarTypeOption) =>
+    setCarTypeOptions((prev) => (prev.some((c) => c.value === o.value) ? prev : [...prev, o]));
   /** The module's geometry + lengths. Editing these reshapes the board live. */
   const [dims, setDims] = useState<ModuleDimensions>(initialDimensions);
   const geometry = useMemo(
@@ -406,6 +413,27 @@ export function SchematicEditor({
       });
     });
   }
+  /** Place an industry where the Industry tool was clicked, then edit it. */
+  function addIndustryAt(track: string, pos: number) {
+    const id = nextId("ind", state.industries.map((i) => i.id));
+    const half = Math.max(6, Math.round(state.lengthInches * 0.08));
+    patch((s) => {
+      s.industries.push({
+        id,
+        name: "",
+        type: "",
+        track,
+        fromPos: Math.max(0, Math.round(pos - half)),
+        toPos: Math.min(s.lengthInches, Math.round(pos + half)),
+        side: "below",
+        labelMode: "none",
+        carTypes: [],
+        moduleIndustryId: null,
+      });
+    });
+    setSelection({ kind: "industry", id });
+    setTool("select");
+  }
 
   // --- Autosave --------------------------------------------------------------
   // No Save button: persist automatically ~1s after the last edit. Dimensions
@@ -508,6 +536,7 @@ export function SchematicEditor({
       if (!mod && !e.altKey) {
         if (e.key === "v" || e.key === "V") setTool("select");
         else if (e.key === "b" || e.key === "B") setTool("benchwork");
+        else if (e.key === "i" || e.key === "I") setTool("industry");
       }
     };
     window.addEventListener("keydown", onKey);
@@ -627,6 +656,7 @@ export function SchematicEditor({
                     else ind.toPos = pos;
                   })
                 }
+                onAddIndustry={addIndustryAt}
                 selection={isCanvasSel(selection) ? selection : null}
                 onSelect={setSelection}
               />
@@ -652,7 +682,8 @@ export function SchematicEditor({
             setEndplateWidth={setEndplateWidth}
             trackOptions={trackOptions}
             industryTypes={industryTypes}
-            carTypes={carTypes}
+            carTypes={carTypeOptions}
+            onCarTypeSuggested={addCarTypeOption}
           />
           <ObjectsList
             state={state}
@@ -688,12 +719,12 @@ const TOOLS: {
 }[] = [
   { id: "select", key: "V", label: "Select", glyph: "▶", hint: "Select & move (V)" },
   { id: "benchwork", key: "B", label: "Benchwork", glyph: "▱", hint: "Draw the board outline (B)" },
+  { id: "industry", key: "I", label: "Industry", glyph: "▢", hint: "Place an industry on a track (I)" },
 ];
 const SOON_TOOLS = [
   { key: "T", label: "Track", glyph: "═" },
   { key: "W", label: "Turnout", glyph: "⋋" },
   { key: "S", label: "Signal", glyph: "⚑" },
-  { key: "I", label: "Industry", glyph: "▢" },
 ];
 
 function ToolRail({
@@ -912,6 +943,7 @@ function Inspector({
   trackOptions,
   industryTypes,
   carTypes,
+  onCarTypeSuggested,
 }: {
   selection: Selection | null;
   select: (s: Selection | null) => void;
@@ -928,6 +960,7 @@ function Inspector({
   trackOptions: { value: string; label: string }[];
   industryTypes: { value: string; display_label: string }[];
   carTypes: { value: string; display_label: string }[];
+  onCarTypeSuggested: (o: { value: string; display_label: string }) => void;
 }) {
   const head = (title: string, sub?: string) => (
     <div className="mb-3 border-b border-gray-100 pb-2">
@@ -1759,6 +1792,14 @@ function Inspector({
               })}
             </div>
           )}
+          <CarTypeSuggest
+            onSuggested={(o) => {
+              onCarTypeSuggested(o);
+              up((x) => {
+                if (!x.carTypes.includes(o.value)) x.carTypes = [...x.carTypes, o.value];
+              });
+            }}
+          />
         </div>
       </>,
       { fn: () => patch((s) => s.industries.splice(idx, 1)), label: "Remove industry" },
@@ -1854,6 +1895,78 @@ function Inspector({
       )}
     </>,
     { fn: () => patch((s) => s.extraTracks.splice(i, 1)), label: "Remove track" },
+  );
+}
+
+/** Suggest a car type that isn't in the list yet (admin-reviewed, usable now). */
+function CarTypeSuggest({
+  onSuggested,
+}: {
+  onSuggested: (o: { value: string; display_label: string }) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const [value, setValue] = useState("");
+  const [label, setLabel] = useState("");
+  const [err, setErr] = useState<string | null>(null);
+  const [pending, start] = useTransition();
+
+  if (!open) {
+    return (
+      <button
+        type="button"
+        onClick={() => setOpen(true)}
+        className="mt-2 text-xs font-medium text-blue-600 hover:underline"
+      >
+        Don&rsquo;t see it? Suggest a car type…
+      </button>
+    );
+  }
+  const submit = () =>
+    start(async () => {
+      setErr(null);
+      const r = await submitCarTypeSuggestion(value, label, "");
+      if (r.ok) {
+        onSuggested(r.option);
+        setOpen(false);
+        setValue("");
+        setLabel("");
+      } else {
+        setErr(r.message);
+      }
+    });
+  return (
+    <div className="mt-2 rounded-md border border-gray-200 bg-gray-50 p-2">
+      {err && <p className="mb-1 text-xs text-red-700">{err}</p>}
+      <input
+        className={inp}
+        placeholder="value (e.g. wood_chip_car)"
+        value={value}
+        onChange={(e) => setValue(e.target.value)}
+      />
+      <input
+        className={`${inp} mt-1`}
+        placeholder="Label (e.g. Wood Chip Car)"
+        value={label}
+        onChange={(e) => setLabel(e.target.value)}
+      />
+      <div className="mt-1.5 flex gap-1.5">
+        <button
+          type="button"
+          onClick={submit}
+          disabled={pending || !value.trim() || !label.trim()}
+          className="rounded-md bg-blue-600 px-2 py-1 text-xs font-medium text-white hover:bg-blue-700 disabled:opacity-50"
+        >
+          {pending ? "Submitting…" : "Suggest"}
+        </button>
+        <button
+          type="button"
+          onClick={() => setOpen(false)}
+          className="rounded-md border border-gray-300 px-2 py-1 text-xs font-medium text-gray-700 hover:bg-gray-50"
+        >
+          Cancel
+        </button>
+      </div>
+    </div>
   );
 }
 

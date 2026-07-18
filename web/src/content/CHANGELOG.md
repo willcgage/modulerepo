@@ -5,6 +5,12 @@ Headings are `version — date` (YYYY-MM-DD).
 
 ---
 
+## v0.11.2 — 2026-07-18
+
+### Added
+- **Industry tool** — the left-rail **I** tool (or key `I`): click a track to drop an industry there.
+- **Suggest a car type** — request a car type that isn't in the list yet, right from an industry's inspector.
+
 ## v0.11.1 — 2026-07-18
 
 ### Added

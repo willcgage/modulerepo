@@ -71,7 +71,7 @@ export type CanvasSelection =
  * it guessed "add a benchwork corner" — so there was no way to click background
  * and mean "nothing". Select is the default; Benchwork is the drawing mode.
  */
-export type CanvasTool = "select" | "benchwork";
+export type CanvasTool = "select" | "benchwork" | "industry";
 
 /**
  * Benchwork outline editor — draw a module's physical footprint as a polygon in
@@ -95,6 +95,7 @@ export function BenchworkEditor({
   onTurnoutMove,
   onTrackEndMove,
   onIndustryEndMove,
+  onAddIndustry,
   selection = null,
   onSelect,
   tool = "select",
@@ -118,6 +119,8 @@ export function BenchworkEditor({
   onTrackEndMove?: (id: string, end: "from" | "to", pos: number) => void;
   /** Drag an industry span end along the track → its new from/to position. */
   onIndustryEndMove?: (id: string, end: "from" | "to", pos: number) => void;
+  /** In the Industry tool, a click adds an industry on `track` at `pos`. */
+  onAddIndustry?: (track: string, pos: number) => void;
   /** Selection is owned by the editor, which renders the inspector for it. */
   selection?: CanvasSelection | null;
   onSelect?: (s: CanvasSelection | null) => void;
@@ -423,6 +426,11 @@ export function BenchworkEditor({
       panRef.current = { from: toLocal(e), view: { ...vbBox } };
       return;
     }
+    // Industry tool: a background click drops an industry on the main here.
+    if (tool === "industry") {
+      if (onAddIndustry && centerline.length >= 2) onAddIndustry("main", posFrom(toLocal(e)));
+      return;
+    }
     // Only the Benchwork tool draws. Under Select, background means "nothing" —
     // which is what makes deselecting possible at all.
     if (tool !== "benchwork") {
@@ -623,12 +631,17 @@ export function BenchworkEditor({
   const renderTrack = (line: (typeof trackLines)[number]) => {
     const on = selection?.kind === "track" && selection.id === line.id;
     const click =
-      line.selectable && onSelect
+      tool === "industry" && onAddIndustry
         ? (e: React.PointerEvent) => {
             e.stopPropagation();
-            onSelect({ kind: "track", id: line.id });
+            onAddIndustry(line.main ? "main" : line.id, posFrom(toLocal(e)));
           }
-        : undefined;
+        : line.selectable && onSelect
+          ? (e: React.PointerEvent) => {
+              e.stopPropagation();
+              onSelect({ kind: "track", id: line.id });
+            }
+          : undefined;
     return (
       <g
         key={`trk${line.id}`}
@@ -723,6 +736,11 @@ export function BenchworkEditor({
                 : "Click an edge to add a corner · drag a corner (snaps to ◆) · drag an edge's ◇ to curve it."}
             </span>
           </>
+        ) : tool === "industry" ? (
+          <span className="text-gray-500">
+            Click a track to place an industry there (or the main) · then set its
+            name and cars in the inspector.
+          </span>
         ) : (
           <span className="text-gray-500">
             Click anything to select it · drag a turnout ● or a siding&rsquo;s end ○
@@ -755,7 +773,11 @@ export function BenchworkEditor({
         height="100%"
         preserveAspectRatio="xMidYMid meet"
         className={`min-h-0 flex-1 touch-none rounded-md border border-gray-300 bg-white ${
-          spaceHeld ? "cursor-grab" : tool === "benchwork" ? "cursor-crosshair" : ""
+          spaceHeld
+            ? "cursor-grab"
+            : tool === "benchwork" || tool === "industry"
+              ? "cursor-crosshair"
+              : ""
         }`}
         onPointerDown={onBgDown}
         onPointerMove={onMove}
@@ -812,6 +834,9 @@ export function BenchworkEditor({
         )}
 
         {/* --- Track: roadbed + rails/ties (or a single line when zoomed out) --- */}
+        {/* renderTrack's click handler reads the pointer via svgRef, but only
+            when fired — not during render; the lint rule can't see that. */}
+        {/* eslint-disable-next-line react-hooks/refs */}
         {trackLines.map(renderTrack)}
         {/* No centre-line yet? Show the endplate-to-endplate lead dashed. */}
         {centerline.length < 2 && poses.length >= 2 && (
