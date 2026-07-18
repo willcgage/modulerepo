@@ -237,20 +237,28 @@ export function SchematicEditor({
   }, [mainDrawn, derivedPoses, footprint]);
 
   /** Everything except the main itself — the main IS the centre-line. */
-  const canvasTracks = useMemo(
-    () =>
-      (doc.tracks ?? [])
-        .filter((t) => t.id !== MAIN_TRACK_ID)
-        .map((t) => ({
+  const canvasTracks = useMemo(() => {
+    // Where each spur meets the main — the pos of the turnout diverging to it.
+    const throatOf = new Map<string, number>();
+    for (const tn of state.turnouts) if (tn.divergeTrack) throatOf.set(tn.divergeTrack, tn.pos);
+    return (doc.tracks ?? [])
+      .filter((t) => t.id !== MAIN_TRACK_ID)
+      .map((t) => {
+        const et = state.extraTracks.find((x) => x.id === t.id);
+        return {
           id: t.id,
           lane: t.lane ?? 1,
           fromPos: t.fromPos ?? 0,
           toPos: t.toPos ?? state.lengthInches,
           // Sidings/spurs are the owner's to place; Main 2 is derived.
-          editable: state.extraTracks.some((x) => x.id === t.id),
-        })),
-    [doc, state.lengthInches, state.extraTracks],
-  );
+          editable: !!et,
+          // Where the spur's throat snaps (its turnout on the main), + its
+          // authored 2-D path when drawn (#2d-track stage C).
+          throatPos: throatOf.get(t.id),
+          path: et?.path,
+        };
+      });
+  }, [doc, state.lengthInches, state.extraTracks, state.turnouts]);
   const canvasTurnouts = useMemo(
     () => state.turnouts.map((t) => ({ id: t.id, pos: t.pos })),
     [state.turnouts],
@@ -553,6 +561,7 @@ export function SchematicEditor({
         if (e.key === "v" || e.key === "V") setTool("select");
         else if (e.key === "b" || e.key === "B") setTool("benchwork");
         else if (e.key === "m" || e.key === "M") setTool("mainline");
+        else if (e.key === "t" || e.key === "T") setTool("track");
         else if (e.key === "i" || e.key === "I") setTool("industry");
       }
     };
@@ -676,6 +685,12 @@ export function SchematicEditor({
                   })
                 }
                 onAddIndustry={addIndustryAt}
+                onTrackPathChange={(id, path) =>
+                  patch((s) => {
+                    const t = s.extraTracks.find((x) => x.id === id);
+                    if (t) t.path = path.length >= 2 ? path : undefined;
+                  })
+                }
                 selection={isCanvasSel(selection) ? selection : null}
                 onSelect={setSelection}
               />
@@ -749,10 +764,10 @@ const TOOLS: {
   { id: "select", key: "V", label: "Select", glyph: "▶", hint: "Select & move (V)" },
   { id: "benchwork", key: "B", label: "Benchwork", glyph: "▱", hint: "Draw the board outline (B)" },
   { id: "mainline", key: "M", label: "Mainline", glyph: "〜", hint: "Draw / bend the mainline (M)" },
+  { id: "track", key: "T", label: "Track", glyph: "═", hint: "Bend / rotate a siding or spur (T)" },
   { id: "industry", key: "I", label: "Industry", glyph: "▢", hint: "Place an industry on a track (I)" },
 ];
 const SOON_TOOLS = [
-  { key: "T", label: "Track", glyph: "═" },
   { key: "W", label: "Turnout", glyph: "⋋" },
   { key: "S", label: "Signal", glyph: "⚑" },
 ];
