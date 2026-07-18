@@ -1096,31 +1096,17 @@ function Inspector({
               />
             </label>
           )}
-          <div className="grid grid-cols-2 gap-2">
-            <label className="block text-xs font-medium text-gray-600">
-              Footprint length (in)
-              <input
-                type="number"
-                step={0.001}
-                value={dims.length_total_inches}
-                onChange={(e) => setDim({ length_total_inches: e.target.value })}
-                className={`mt-0.5 ${inp}`}
-                title="The physical length of the board."
-              />
-            </label>
-            <label className="block text-xs font-medium text-gray-600">
-              Mainline length (in)
-              <input
-                type="number"
-                step={0.001}
-                value={dims.mainline_length_inches}
-                onChange={(e) => setDim({ mainline_length_inches: e.target.value })}
-                className={`mt-0.5 ${inp}`}
-                placeholder={dims.length_total_inches || "same"}
-                title="Only when the rail distance through the module differs from the footprint (curves, wyes). Blank = same as the footprint length."
-              />
-            </label>
-          </div>
+          <label className="block text-xs font-medium text-gray-600">
+            Footprint length (in)
+            <input
+              type="number"
+              step={0.001}
+              value={dims.length_total_inches}
+              onChange={(e) => setDim({ length_total_inches: e.target.value })}
+              className={`mt-0.5 ${inp}`}
+              title="The physical length of the board. Draw the mainline (M) if the rail runs a different distance than the board."
+            />
+          </label>
           <label className="flex gap-2 text-xs text-gray-700">
             <input
               type="checkbox"
