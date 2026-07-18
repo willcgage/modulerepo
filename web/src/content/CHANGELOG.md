@@ -5,6 +5,13 @@ Headings are `version — date` (YYYY-MM-DD).
 
 ---
 
+## v0.10.0 — 2026-07-17
+
+### Changed
+- **Track looks like track** — a ballast band with two rails and ties once you zoom in, a clean single line at overview.
+- **The board reads as a board** — a solid fill the track sits on, with the endplate faces hatched to show the standard interface.
+- **Signals are masts** — a mast on the track it governs with a head, instead of a bare dot.
+
 ## v0.9.0 — 2026-07-17
 
 ### Added
