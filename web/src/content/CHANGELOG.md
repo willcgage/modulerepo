@@ -5,6 +5,11 @@ Headings are `version — date` (YYYY-MM-DD).
 
 ---
 
+## v0.12.1 — 2026-07-18
+
+### Fixed
+- **Saving a module with industries no longer errors** — removing a track was blocked when an industry still pointed at it; the save now re-points industries first, then cleans up tracks.
+
 ## v0.12.0 — 2026-07-18
 
 ### Added

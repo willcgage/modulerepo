@@ -133,12 +133,10 @@ export async function saveModuleSchematic(
       }
     }
 
-    // Remove Track-section rows the owner deleted in the builder.
-    const del = supabase.from("module_tracks").delete().eq("module_id", moduleId);
-    const { error: delErr } = keptIds.length
-      ? await del.not("id", "in", `(${keptIds.join(",")})`)
-      : await del;
-    if (delErr) return { error: delErr.message };
+    // NB: removing Track-section rows is deferred to the END of this block —
+    // freemon_industries.track_id is a RESTRICT foreign key, so a track can't be
+    // deleted while an industry still references it. Industries are re-pointed
+    // (and removed ones deleted) first, below, then the tracks are cleaned up.
 
     // Sync freemon_industries from the schematic's industries. The doc holds
     // the geometry (span/side/label); freemon_industries is the row of record
@@ -228,6 +226,23 @@ export async function saveModuleSchematic(
         if (insErr) return { error: insErr.message };
       }
     }
+
+    // Now that industries are re-pointed and removed ones deleted, it's safe to
+    // remove the Track-section rows the owner deleted. First null any remaining
+    // industry reference to a track about to go (RESTRICT FK), then delete.
+    if (keptIds.length) {
+      const { error: nullErr } = await supabase
+        .from("freemon_industries")
+        .update({ track_id: null })
+        .eq("module_id", moduleId)
+        .not("track_id", "in", `(${keptIds.join(",")})`);
+      if (nullErr) return { error: nullErr.message };
+    }
+    const del = supabase.from("module_tracks").delete().eq("module_id", moduleId);
+    const { error: delErr } = keptIds.length
+      ? await del.not("id", "in", `(${keptIds.join(",")})`)
+      : await del;
+    if (delErr) return { error: delErr.message };
   }
 
   const nextVersion = doc ? (module.schematic_version ?? 0) + 1 : null;
