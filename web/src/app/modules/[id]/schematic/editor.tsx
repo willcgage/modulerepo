@@ -222,17 +222,27 @@ export function SchematicEditor({
       }),
     [state.lengthInches, state.endplateWidths, state.outline, state.mainPath, geometry],
   );
-  // When the mainline is drawn, endplate B sits at the path's end, facing along
-  // the final tangent — so the endplate face + the layout join follow the shape.
+  // When the mainline is drawn, BOTH endplates follow the track's tangent: A
+  // faces back along the start tangent (outward = west for a straight), B sits
+  // at the path's end facing the final tangent — so both endplate faces and the
+  // layout joins follow the drawn shape (not just B).
   const poses = useMemo(() => {
     if (!mainDrawn) return derivedPoses;
     const c = footprint.centerline;
     if (c.length < 2) return derivedPoses;
+    const deg = (dx: number, dy: number) => (Math.atan2(dy, dx) * 180) / Math.PI;
+    const start = c[0];
+    const startNext = c[1];
+    const aHeading = deg(start.x - startNext.x, start.y - startNext.y); // outward
     const end = c[c.length - 1];
     const prev = c[c.length - 2];
-    const heading = (Math.atan2(end.y - prev.y, end.x - prev.x) * 180) / Math.PI;
+    const bHeading = deg(end.x - prev.x, end.y - prev.y);
     return derivedPoses.map((p) =>
-      p.id === "B" ? { ...p, x: end.x, y: end.y, heading } : p,
+      p.id === "A"
+        ? { ...p, x: start.x, y: start.y, heading: aHeading }
+        : p.id === "B"
+          ? { ...p, x: end.x, y: end.y, heading: bHeading }
+          : p,
     );
   }, [mainDrawn, derivedPoses, footprint]);
 
@@ -631,6 +641,17 @@ export function SchematicEditor({
           </button>
           <span className="mx-1 h-5 w-px bg-gray-200" />
           <SaveBadge state={saveState} error={error} />
+          {/* Autosave already runs ~1s after a change; this Save flushes it now
+              for anyone who wants to save explicitly (or retry after an error). */}
+          <button
+            type="button"
+            onClick={() => void runSave()}
+            disabled={saveState === "saved" || saveState === "saving"}
+            title="Save now (changes also autosave)"
+            className="rounded-md bg-blue-600 px-2.5 py-1 text-xs font-medium text-white hover:bg-blue-700 disabled:opacity-40"
+          >
+            Save
+          </button>
           <button
             type="button"
             onClick={clearDrawing}
