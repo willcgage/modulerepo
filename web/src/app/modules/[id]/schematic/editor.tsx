@@ -763,7 +763,14 @@ export function SchematicEditor({
               crossing: addCrossing,
               controlPoint: addControlPoint,
               industry: addIndustry,
+              mainline: (config) =>
+                patch((s) => {
+                  s.configA = config;
+                  if (s.configB !== "none") s.configB = config;
+                }),
             }}
+            mainlineDouble={isDouble}
+            mainlineLocked={lockedConfigs.a || lockedConfigs.b}
           />
         </aside>
       </div>
@@ -2047,12 +2054,81 @@ function CarTypeSuggest({
  * live — a control point is a named group, not a shape, and a group needs a
  * tree. It's also how you add things until the tool palette lands (stage 2).
  */
+/** The unified "add track" menu: the mainline's single/double config, plus
+ * adding a siding or a spur/yard (and a crossover on a double main). */
+function AddTrackMenu({
+  add,
+  mainlineDouble,
+  mainlineLocked,
+  canCrossover,
+}: {
+  add: {
+    passingSiding: () => void;
+    spur: () => void;
+    crossover: () => void;
+    mainline: (config: "single" | "double") => void;
+  };
+  mainlineDouble: boolean;
+  mainlineLocked: boolean;
+  canCrossover: boolean;
+}) {
+  const [open, setOpen] = useState(false);
+  const item =
+    "flex w-full items-center gap-1.5 rounded px-2 py-1 text-left text-xs text-gray-700 hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-transparent";
+  const run = (fn: () => void) => {
+    fn();
+    setOpen(false);
+  };
+  return (
+    <div className="relative">
+      <button type="button" onClick={() => setOpen((o) => !o)} className={addBtn}>
+        + Track ▾
+      </button>
+      {open && (
+        <>
+          <div className="fixed inset-0 z-10" onClick={() => setOpen(false)} />
+          <div className="absolute right-0 z-20 mt-1 w-48 rounded-lg border border-gray-200 bg-white p-1 shadow-lg">
+            <div className="px-2 pt-1 text-[10px] font-semibold uppercase tracking-wide text-gray-400">
+              Mainline
+            </div>
+            <button type="button" className={item} disabled={mainlineLocked} onClick={() => run(() => add.mainline("single"))}>
+              <span className="w-3 text-blue-600">{!mainlineDouble ? "●" : "○"}</span> Single track
+            </button>
+            <button type="button" className={item} disabled={mainlineLocked} onClick={() => run(() => add.mainline("double"))}>
+              <span className="w-3 text-blue-600">{mainlineDouble ? "●" : "○"}</span> Double track
+            </button>
+            {mainlineLocked && (
+              <div className="px-2 py-0.5 text-[10px] text-gray-400">
+                Set on the module&rsquo;s endplate records.
+              </div>
+            )}
+            <div className="my-1 border-t border-gray-100" />
+            <button type="button" className={item} onClick={() => run(add.passingSiding)}>
+              Siding
+            </button>
+            <button type="button" className={item} onClick={() => run(add.spur)}>
+              Spur / Yard
+            </button>
+            {canCrossover && (
+              <button type="button" className={item} onClick={() => run(add.crossover)}>
+                Crossover
+              </button>
+            )}
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
+
 function ObjectsList({
   state,
   selection,
   select,
   setTool,
   add,
+  mainlineDouble,
+  mainlineLocked,
 }: {
   state: EditorState;
   selection: Selection | null;
@@ -2066,7 +2142,10 @@ function ObjectsList({
     crossing: () => void;
     controlPoint: () => void;
     industry: () => void;
+    mainline: (config: "single" | "double") => void;
   };
+  mainlineDouble: boolean;
+  mainlineLocked: boolean;
 }) {
   /** Corners are keyed by index, everything else by id — compare accordingly. */
   const on = (s: Selection) => {
@@ -2116,19 +2195,12 @@ function ObjectsList({
         title="Track"
         count={state.extraTracks.length}
         actions={
-          <>
-            <button type="button" onClick={add.passingSiding} className={addBtn} title="Adds a switch at each end and control-point signals for both directions automatically.">
-              + Siding
-            </button>
-            <button type="button" onClick={add.spur} className={addBtn}>
-              + Spur
-            </button>
-            {canCrossover && (
-              <button type="button" onClick={add.crossover} className={addBtn} title="A crossover between Main 1 and Main 2 — a turnout on each main joined by a diagonal.">
-                + Crossover
-              </button>
-            )}
-          </>
+          <AddTrackMenu
+            add={add}
+            mainlineDouble={mainlineDouble}
+            mainlineLocked={mainlineLocked}
+            canCrossover={canCrossover}
+          />
         }
       >
         {state.extraTracks.map((t) =>
