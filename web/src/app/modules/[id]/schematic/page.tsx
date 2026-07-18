@@ -1,7 +1,7 @@
 import { notFound, redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { docToState, nextId, MAIN_TRACK_ID } from "@/lib/module-schematic";
-import { fetchIndustryTypes } from "@/lib/edge";
+import { fetchIndustryTypes, fetchCarTypes } from "@/lib/edge";
 import { SchematicEditor } from "./editor";
 
 export default async function ModuleSchematicPage({
@@ -39,15 +39,34 @@ export default async function ModuleSchematicPage({
     .eq("module_id", moduleId)
     .order("id");
 
-  // Existing industries (rows of record) + the type lookup for the inspector.
-  const [{ data: industryRows }, industryTypes] = await Promise.all([
+  // Existing industries (rows of record) + the type/car lookups for the inspector.
+  const [{ data: industryRows }, industryTypes, carTypes] = await Promise.all([
     supabase
       .from("freemon_industries")
       .select("id, industry_name, industry_type, track_id")
       .eq("module_id", moduleId)
       .order("id"),
     fetchIndustryTypes(),
+    fetchCarTypes(),
   ]);
+
+  // Car types spotted at each industry (join → rail_car_types.value).
+  const carTypesByIndustry = new Map<number, string[]>();
+  const industryIds = (industryRows ?? []).map((r) => r.id);
+  if (industryIds.length) {
+    const { data: links } = await supabase
+      .from("freemon_industry_car_types")
+      .select("industry_id, rail_car_types(value)")
+      .in("industry_id", industryIds);
+    for (const l of links ?? []) {
+      const rel = l.rail_car_types as { value: string } | { value: string }[] | null;
+      const value = Array.isArray(rel) ? rel[0]?.value : rel?.value;
+      if (!value) continue;
+      const arr = carTypesByIndustry.get(l.industry_id) ?? [];
+      arr.push(value);
+      carTypesByIndustry.set(l.industry_id, arr);
+    }
+  }
 
   // Geometry choices — the builder's first stage edits these, since they size
   // the board everything else is drawn on.
@@ -103,6 +122,12 @@ export default async function ModuleSchematicPage({
       moduleIndustryId: row.id,
     });
   }
+  // Car types are the row's source of truth — apply them over any doc copy.
+  for (const ind of initial.industries) {
+    if (ind.moduleIndustryId != null) {
+      ind.carTypes = carTypesByIndustry.get(ind.moduleIndustryId) ?? ind.carTypes;
+    }
+  }
 
   // An editor is not an article: full-bleed, viewport-height, no page scroll —
   // the canvas gets the room, and each panel scrolls itself.
@@ -118,6 +143,7 @@ export default async function ModuleSchematicPage({
         lockedConfigs={{ a: epA != null, b: epB != null && !initial.loop }}
         geometries={geometries ?? []}
         industryTypes={industryTypes}
+        carTypes={carTypes}
         initialDimensions={{
           geometry_type: module.geometry_type ?? "",
           geometry_degrees: module.geometry_degrees?.toString() ?? "",

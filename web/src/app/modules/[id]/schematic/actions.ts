@@ -196,6 +196,38 @@ export async function saveModuleSchematic(
       ? await delInd.not("id", "in", `(${keptInd.join(",")})`)
       : await delInd;
     if (delIndErr) return { error: delIndErr.message };
+
+    // Sync each industry's car types (freemon_industry_car_types). Resolve the
+    // authored car-type VALUES to rail_car_types ids, then replace each
+    // industry's links (delete-then-insert — the sets are tiny).
+    const wantedValues = [...new Set(industries.flatMap((i) => i.carTypes ?? []))];
+    const idOfValue = new Map<string, number>();
+    if (wantedValues.length) {
+      const { data: rows, error } = await supabase
+        .from("rail_car_types")
+        .select("id, value")
+        .in("value", wantedValues);
+      if (error) return { error: error.message };
+      for (const r of rows ?? []) idOfValue.set(r.value, r.id);
+    }
+    for (const ind of industries) {
+      if (ind.moduleIndustryId == null) continue;
+      const { error: clearErr } = await supabase
+        .from("freemon_industry_car_types")
+        .delete()
+        .eq("industry_id", ind.moduleIndustryId);
+      if (clearErr) return { error: clearErr.message };
+      const links = (ind.carTypes ?? [])
+        .map((v) => idOfValue.get(v))
+        .filter((id): id is number => id != null)
+        .map((car_type_id) => ({ industry_id: ind.moduleIndustryId!, car_type_id }));
+      if (links.length) {
+        const { error: insErr } = await supabase
+          .from("freemon_industry_car_types")
+          .insert(links);
+        if (insErr) return { error: insErr.message };
+      }
+    }
   }
 
   const nextVersion = doc ? (module.schematic_version ?? 0) + 1 : null;
