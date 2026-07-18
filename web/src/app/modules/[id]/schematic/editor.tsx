@@ -208,6 +208,7 @@ export function SchematicEditor({
   const wantsManualPose = poseNeedsManual(geometry.type) || state.loop;
   // The real physical module — its centre-line drives where track, turnouts and
   // signals actually sit on the board (not just in the straightened view).
+  const mainDrawn = state.mainPath.length >= 2;
   const footprint = useMemo(
     () =>
       moduleFootprint({
@@ -217,9 +218,24 @@ export function SchematicEditor({
         geometryOffsetInches: geometry.offset,
         endplateWidths: state.endplateWidths,
         outline: state.outline,
+        mainPath: state.mainPath,
       }),
-    [state.lengthInches, state.endplateWidths, state.outline, geometry],
+    [state.lengthInches, state.endplateWidths, state.outline, state.mainPath, geometry],
   );
+  // When the mainline is drawn, endplate B sits at the path's end, facing along
+  // the final tangent — so the endplate face + the layout join follow the shape.
+  const poses = useMemo(() => {
+    if (!mainDrawn) return derivedPoses;
+    const c = footprint.centerline;
+    if (c.length < 2) return derivedPoses;
+    const end = c[c.length - 1];
+    const prev = c[c.length - 2];
+    const heading = (Math.atan2(end.y - prev.y, end.x - prev.x) * 180) / Math.PI;
+    return derivedPoses.map((p) =>
+      p.id === "B" ? { ...p, x: end.x, y: end.y, heading } : p,
+    );
+  }, [mainDrawn, derivedPoses, footprint]);
+
   /** Everything except the main itself — the main IS the centre-line. */
   const canvasTracks = useMemo(
     () =>
@@ -536,6 +552,7 @@ export function SchematicEditor({
       if (!mod && !e.altKey) {
         if (e.key === "v" || e.key === "V") setTool("select");
         else if (e.key === "b" || e.key === "B") setTool("benchwork");
+        else if (e.key === "m" || e.key === "M") setTool("mainline");
         else if (e.key === "i" || e.key === "I") setTool("industry");
       }
     };
@@ -626,7 +643,9 @@ export function SchematicEditor({
                 outline={state.outline}
                 onChange={(next) => patch((s) => (s.outline = next))}
                 lengthInches={state.lengthInches}
-                poses={derivedPoses}
+                poses={poses}
+                mainPath={state.mainPath}
+                onMainPathChange={(next) => patch((s) => (s.mainPath = next))}
                 endplateWidths={state.endplateWidths}
                 centerline={footprint.centerline}
                 tracks={canvasTracks}
@@ -729,6 +748,7 @@ const TOOLS: {
 }[] = [
   { id: "select", key: "V", label: "Select", glyph: "▶", hint: "Select & move (V)" },
   { id: "benchwork", key: "B", label: "Benchwork", glyph: "▱", hint: "Draw the board outline (B)" },
+  { id: "mainline", key: "M", label: "Mainline", glyph: "〜", hint: "Draw / bend the mainline (M)" },
   { id: "industry", key: "I", label: "Industry", glyph: "▢", hint: "Place an industry on a track (I)" },
 ];
 const SOON_TOOLS = [

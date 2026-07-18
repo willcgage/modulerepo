@@ -71,7 +71,7 @@ export type CanvasSelection =
  * it guessed "add a benchwork corner" — so there was no way to click background
  * and mean "nothing". Select is the default; Benchwork is the drawing mode.
  */
-export type CanvasTool = "select" | "benchwork" | "industry";
+export type CanvasTool = "select" | "benchwork" | "industry" | "mainline";
 
 /**
  * Benchwork outline editor — draw a module's physical footprint as a polygon in
@@ -96,6 +96,8 @@ export function BenchworkEditor({
   onTrackEndMove,
   onIndustryEndMove,
   onAddIndustry,
+  mainPath = [],
+  onMainPathChange,
   selection = null,
   onSelect,
   tool = "select",
@@ -121,6 +123,10 @@ export function BenchworkEditor({
   onIndustryEndMove?: (id: string, end: "from" | "to", pos: number) => void;
   /** In the Industry tool, a click adds an industry on `track` at `pos`. */
   onAddIndustry?: (track: string, pos: number) => void;
+  /** The authored mainline path (module-local inches). Empty = derived; the
+   * Mainline tool seeds it from the centre-line, then edits it (#2d-track). */
+  mainPath?: BenchworkPoint[];
+  onMainPathChange?: (next: BenchworkPoint[]) => void;
   /** Selection is owned by the editor, which renders the inspector for it. */
   selection?: CanvasSelection | null;
   onSelect?: (s: CanvasSelection | null) => void;
@@ -130,6 +136,7 @@ export function BenchworkEditor({
   const svgRef = useRef<SVGSVGElement | null>(null);
   const dragRef = useRef<
     | { kind: "vertex" | "edge"; i: number }
+    | { kind: "mainVertex" | "mainEdge"; i: number }
     | { kind: "turnout"; id: string }
     | { kind: "trackEnd"; id: string; end: "from" | "to" }
     | { kind: "industryEnd"; id: string; end: "from" | "to" }
@@ -396,6 +403,63 @@ export function BenchworkEditor({
     return { x: (p0.x + p1.x) / 2 + nx * b, y: (p0.y + p1.y) / 2 + ny * b };
   };
 
+  // --- Mainline path editing (#2d-track) -------------------------------------
+  const commitMain = (next: BenchworkPoint[]) =>
+    onMainPathChange?.(
+      next.map((p) => ({
+        x: round(p.x),
+        y: round(p.y),
+        ...(p.bulge ? { bulge: round(p.bulge) } : {}),
+      })),
+    );
+  /** Seed control points from the derived centre-line: endpoints + a bulge that
+   * reproduces the current curve, so drawing starts matching the geometry. */
+  const seedMain = (): BenchworkPoint[] => {
+    if (centerline.length < 2) return [];
+    const a = centerline[0];
+    const b = centerline[centerline.length - 1];
+    const mid = centerline[Math.floor(centerline.length / 2)];
+    const dx = b.x - a.x;
+    const dy = b.y - a.y;
+    const c = Math.hypot(dx, dy) || 1;
+    const nx = -dy / c;
+    const ny = dx / c;
+    const sag = (mid.x - (a.x + b.x) / 2) * nx + (mid.y - (a.y + b.y) / 2) * ny;
+    return [
+      { x: a.x, y: a.y, ...(Math.abs(sag) > 0.5 ? { bulge: sag } : {}) },
+      { x: b.x, y: b.y },
+    ];
+  };
+  /** The path the Mainline tool edits — the authored one, or a fresh seed. */
+  const editMain = mainPath.length >= 2 ? mainPath : seedMain();
+  /** Midpoint handle for mainline edge i (open path, no wrap). */
+  const mainEdgeHandle = (i: number): Pt => {
+    const p0 = editMain[i];
+    const p1 = editMain[i + 1];
+    const dx = p1.x - p0.x;
+    const dy = p1.y - p0.y;
+    const c = Math.hypot(dx, dy) || 1;
+    return {
+      x: (p0.x + p1.x) / 2 + (-dy / c) * (p0.bulge ?? 0),
+      y: (p0.y + p1.y) / 2 + (dx / c) * (p0.bulge ?? 0),
+    };
+  };
+  const addMainVertex = (pt: Pt) => {
+    if (editMain.length < 2) return;
+    let best = 0;
+    let bestD = Infinity;
+    for (let i = 0; i < editMain.length - 1; i++) {
+      const d = distToSegment(pt, editMain[i], editMain[i + 1]);
+      if (d < bestD) {
+        bestD = d;
+        best = i;
+      }
+    }
+    const next = [...editMain];
+    next.splice(best + 1, 0, { x: pt.x, y: pt.y });
+    commitMain(next);
+  };
+
   const addOnNearestEdge = (pt: Pt) => {
     if (outline.length < 2) {
       commit([...outline, { x: pt.x, y: pt.y }]);
@@ -429,6 +493,11 @@ export function BenchworkEditor({
     // Industry tool: a background click drops an industry on the main here.
     if (tool === "industry") {
       if (onAddIndustry && centerline.length >= 2) onAddIndustry("main", posFrom(toLocal(e)));
+      return;
+    }
+    // Mainline tool: a background click adds a bend point on the mainline.
+    if (tool === "mainline") {
+      if (onMainPathChange) addMainVertex(toLocal(e));
       return;
     }
     // Only the Benchwork tool draws. Under Select, background means "nothing" —
@@ -507,6 +576,27 @@ export function BenchworkEditor({
         const other = ind ? (d.end === "from" ? ind.toPos : ind.fromPos) : pos;
         setReadout(lengthLabel(Math.abs(pos - other)));
       }
+      return;
+    }
+    if (d.kind === "mainVertex" || d.kind === "mainEdge") {
+      const next = editMain.map((pt) => ({ ...pt }));
+      if (d.kind === "mainVertex") {
+        if (d.i === 0) return; // endplate A anchors the frame at the origin
+        next[d.i] = { ...next[d.i], x: p.x, y: p.y };
+        setReadout(`${fmt(p.x)}, ${fmt(p.y)}″`);
+      } else {
+        const p0 = editMain[d.i];
+        const p1 = editMain[d.i + 1];
+        const dx = p1.x - p0.x;
+        const dy = p1.y - p0.y;
+        const c = Math.hypot(dx, dy) || 1;
+        const mx = (p0.x + p1.x) / 2;
+        const my = (p0.y + p1.y) / 2;
+        const bulge = (p.x - mx) * (-dy / c) + (p.y - my) * (dx / c);
+        next[d.i] = { ...next[d.i], bulge: Math.abs(bulge) < 0.5 ? 0 : bulge };
+        setReadout(`bow ${fmt(Math.abs(bulge))}″`);
+      }
+      commitMain(next);
       return;
     }
 
@@ -741,6 +831,11 @@ export function BenchworkEditor({
             Click a track to place an industry there (or the main) · then set its
             name and cars in the inspector.
           </span>
+        ) : tool === "mainline" ? (
+          <span className="text-gray-500">
+            Drag a mainline point ○ to move it · drag an edge&rsquo;s ◇ to curve
+            it · click the line to add a bend. Endplate A stays at the origin.
+          </span>
         ) : (
           <span className="text-gray-500">
             Click anything to select it · drag a turnout ● or a siding&rsquo;s end ○
@@ -775,7 +870,7 @@ export function BenchworkEditor({
         className={`min-h-0 flex-1 touch-none rounded-md border border-gray-300 bg-white ${
           spaceHeld
             ? "cursor-grab"
-            : tool === "benchwork" || tool === "industry"
+            : tool === "benchwork" || tool === "industry" || tool === "mainline"
               ? "cursor-crosshair"
               : ""
         }`}
@@ -1096,6 +1191,47 @@ export function BenchworkEditor({
             onPointerDown={(e) => beginDrag(e, { kind: "vertex", i })}
           />
         ))}
+
+        {/* --- Mainline edit handles (Mainline tool) — bend/drag the drawn main --- */}
+        {tool === "mainline" && editMain.length >= 2 && (
+          <>
+            {editMain.slice(0, -1).map((_, i) => {
+              const h = mainEdgeHandle(i);
+              return (
+                <rect
+                  key={`me${i}`}
+                  x={h.x - r * 0.9}
+                  y={sy(h.y) - r * 0.9}
+                  width={r * 1.8}
+                  height={r * 1.8}
+                  fill={editMain[i].bulge ? "#7c3aed" : "#fff"}
+                  stroke="#7c3aed"
+                  strokeWidth={r * 0.35}
+                  transform={`rotate(45 ${h.x} ${sy(h.y)})`}
+                  style={{ cursor: "grab" }}
+                  onPointerDown={(e) => beginDrag(e, { kind: "mainEdge", i })}
+                >
+                  <title>Drag to bow this stretch of mainline into a curve</title>
+                </rect>
+              );
+            })}
+            {editMain.map((p, i) => (
+              <circle
+                key={`mv${i}`}
+                cx={p.x}
+                cy={sy(p.y)}
+                r={r}
+                fill={i === 0 ? "#c4b5fd" : "#fff"}
+                stroke="#7c3aed"
+                strokeWidth={r * 0.4}
+                style={{ cursor: i === 0 ? "default" : "grab" }}
+                onPointerDown={(e) => beginDrag(e, { kind: "mainVertex", i })}
+              >
+                <title>{i === 0 ? "Endplate A (fixed origin)" : "Drag to move this mainline point"}</title>
+              </circle>
+            ))}
+          </>
+        )}
 
         {/* --- Dimension callouts: the board's overall W × H, drafting-style --- */}
         {extentW > 0 && (

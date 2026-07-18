@@ -5,6 +5,11 @@ Headings are `version — date` (YYYY-MM-DD).
 
 ---
 
+## v0.13.0 — 2026-07-18
+
+### Added
+- **Draw the mainline** — a new **M** tool: drag mainline points, bend a stretch into a curve (drag its ◇), or click the line to add a bend. The board and endplate B follow the shape you draw; the dispatcher view stays straightened. The length/geometry fields seed the initial path.
+
 ## v0.12.1 — 2026-07-18
 
 ### Fixed
