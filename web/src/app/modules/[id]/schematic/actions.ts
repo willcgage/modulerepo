@@ -139,6 +139,63 @@ export async function saveModuleSchematic(
       ? await del.not("id", "in", `(${keptIds.join(",")})`)
       : await del;
     if (delErr) return { error: delErr.message };
+
+    // Sync freemon_industries from the schematic's industries. The doc holds
+    // the geometry (span/side/label); freemon_industries is the row of record
+    // (name/type/track) the catalog and Free-Dispatcher read. Map each
+    // industry's doc track id → its module_tracks id (null = on the main).
+    const trackIdOf = (docTrackId: string): number | null =>
+      doc.tracks.find((t) => t.id === docTrackId)?.moduleTrackId ?? null;
+    const industries = doc.industries ?? [];
+    const keptInd: number[] = [];
+    // New rows get industry_number above the current max, so we never collide
+    // with a kept row (in case (module_id, industry_number) is unique).
+    const { data: maxRow } = await supabase
+      .from("freemon_industries")
+      .select("industry_number")
+      .eq("module_id", moduleId)
+      .order("industry_number", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    let nextNum = (maxRow?.industry_number ?? 0) + 1;
+    for (const ind of industries) {
+      const name = ind.name?.trim() || "Industry";
+      const type = (ind.type ?? "").trim() || "other";
+      const track_id = trackIdOf(ind.track);
+      if (ind.moduleIndustryId != null) {
+        const { error } = await supabase
+          .from("freemon_industries")
+          .update({ industry_name: name, industry_type: type, track_id })
+          .eq("id", ind.moduleIndustryId)
+          .eq("module_id", moduleId);
+        if (error) return { error: error.message };
+        keptInd.push(ind.moduleIndustryId);
+      } else {
+        // NOT-NULL columns without a default (label, industry_number) are set
+        // explicitly so an insert never depends on a DB trigger.
+        const { data: inserted, error } = await supabase
+          .from("freemon_industries")
+          .insert({
+            module_id: moduleId,
+            industry_number: nextNum++,
+            label: name,
+            industry_name: name,
+            industry_type: type,
+            track_id,
+          })
+          .select("id")
+          .single();
+        if (error || !inserted) return { error: error?.message ?? "industry insert failed" };
+        ind.moduleIndustryId = inserted.id;
+        keptInd.push(inserted.id);
+      }
+    }
+    // Remove industries the owner deleted (car-type links cascade).
+    const delInd = supabase.from("freemon_industries").delete().eq("module_id", moduleId);
+    const { error: delIndErr } = keptInd.length
+      ? await delInd.not("id", "in", `(${keptInd.join(",")})`)
+      : await delInd;
+    if (delIndErr) return { error: delIndErr.message };
   }
 
   const nextVersion = doc ? (module.schematic_version ?? 0) + 1 : null;

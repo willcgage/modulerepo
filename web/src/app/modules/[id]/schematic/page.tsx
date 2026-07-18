@@ -1,6 +1,7 @@
 import { notFound, redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
-import { docToState } from "@/lib/module-schematic";
+import { docToState, nextId, MAIN_TRACK_ID } from "@/lib/module-schematic";
+import { fetchIndustryTypes } from "@/lib/edge";
 import { SchematicEditor } from "./editor";
 
 export default async function ModuleSchematicPage({
@@ -38,6 +39,16 @@ export default async function ModuleSchematicPage({
     .eq("module_id", moduleId)
     .order("id");
 
+  // Existing industries (rows of record) + the type lookup for the inspector.
+  const [{ data: industryRows }, industryTypes] = await Promise.all([
+    supabase
+      .from("freemon_industries")
+      .select("id, industry_name, industry_type, track_id")
+      .eq("module_id", moduleId)
+      .order("id"),
+    fetchIndustryTypes(),
+  ]);
+
   // Geometry choices — the builder's first stage edits these, since they size
   // the board everything else is drawn on.
   const { data: geometries } = await supabase
@@ -70,6 +81,29 @@ export default async function ModuleSchematicPage({
   if (epA) initial.configA = epA;
   if (epB && !initial.loop) initial.configB = epB;
 
+  // Reconcile industries of record with the doc: the doc carries geometry
+  // (span/side) for industries already placed; any freemon_industries row not
+  // yet placed is added positionless so the owner can drop it on the canvas.
+  const placed = new Set(
+    initial.industries.map((i) => i.moduleIndustryId).filter((v): v is number => v != null),
+  );
+  for (const row of industryRows ?? []) {
+    if (placed.has(row.id)) continue;
+    const onTrack = initial.extraTracks.find((t) => t.moduleTrackId === row.track_id);
+    initial.industries.push({
+      id: nextId("ind", initial.industries.map((i) => i.id)),
+      name: row.industry_name ?? "",
+      type: row.industry_type ?? "",
+      track: onTrack?.id ?? MAIN_TRACK_ID,
+      fromPos: onTrack ? onTrack.fromPos : Math.round(initial.lengthInches * 0.35),
+      toPos: onTrack ? onTrack.toPos : Math.round(initial.lengthInches * 0.6),
+      side: "below",
+      labelMode: "none",
+      carTypes: [],
+      moduleIndustryId: row.id,
+    });
+  }
+
   // An editor is not an article: full-bleed, viewport-height, no page scroll —
   // the canvas gets the room, and each panel scrolls itself.
   return (
@@ -83,6 +117,7 @@ export default async function ModuleSchematicPage({
         newModule={isNew === "1"}
         lockedConfigs={{ a: epA != null, b: epB != null && !initial.loop }}
         geometries={geometries ?? []}
+        industryTypes={industryTypes}
         initialDimensions={{
           geometry_type: module.geometry_type ?? "",
           geometry_degrees: module.geometry_degrees?.toString() ?? "",

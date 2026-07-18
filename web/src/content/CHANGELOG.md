@@ -5,6 +5,11 @@ Headings are `version — date` (YYYY-MM-DD).
 
 ---
 
+## v0.11.0 — 2026-07-18
+
+### Added
+- **Industries on the canvas** — place a rail-served customer as a car-spot span on a track (name, type, side, span). Capacity in cars derives from the span; a name + optional car/length label draws on the board. Existing industries load in ready to position; a new **Industries** step appears in the readiness checklist.
+
 ## v0.10.0 — 2026-07-17
 
 ### Changed
