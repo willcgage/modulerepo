@@ -5,6 +5,15 @@ Headings are `version — date` (YYYY-MM-DD).
 
 ---
 
+## v0.7.0 — 2026-07-17
+
+### Added
+- **Drafting grid** — an inch grid that adapts as you zoom, with rulers down the top and left edges (origin at endplate A).
+- **Zoom & pan** — scroll to zoom toward the pointer, space-drag to pan, Fit to frame the board; the view no longer jumps every time you edit.
+- **Dimension callouts** — the board's overall length and depth are marked automatically, in inches and feet.
+- **Live measurements** — dragging a corner, turnout or siding end shows its position/length (with a car count) as you move it.
+- **Status bar** — board size, grid step, zoom and pointer position along the bottom.
+
 ## v0.6.0 — 2026-07-16
 
 ### Changed

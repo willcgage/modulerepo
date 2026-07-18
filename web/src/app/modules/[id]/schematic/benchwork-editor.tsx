@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useRef } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import {
   sampleBenchworkOutline,
   type BenchworkPoint,
@@ -9,7 +9,17 @@ import {
 import { lanePath, sampleAt, laneOffset, projectToCenterline } from "@/lib/physical-track";
 
 type Pt = { x: number; y: number };
+type ViewBox = { minX: number; minY: number; w: number; h: number };
 const DEG = Math.PI / 180;
+/** A 40-ft N-scale car is ~3.0″; ~3.3″ over the couplers — the real spacing a
+ * train occupies. Capacity in cars reads truer than scale feet for a builder. */
+const CAR_INCHES = 3.3;
+
+/** Round a raw span up to a friendly grid increment (inches). */
+function niceStep(raw: number): number {
+  const steps = [0.25, 0.5, 1, 2, 3, 6, 12, 24, 48, 96];
+  return steps.find((s) => s >= raw) ?? 192;
+}
 
 /** Track/feature context drawn under the benchwork layer. */
 export interface CanvasTrack {
@@ -96,6 +106,14 @@ export function BenchworkEditor({
     | { kind: "trackEnd"; id: string; end: "from" | "to" }
     | null
   >(null);
+  /** An in-progress pan: pointer origin + the view at grab time. */
+  const panRef = useRef<{ from: Pt; view: ViewBox } | null>(null);
+  /** Space-to-pan: held-key state, so any tool can pan without switching. */
+  const [spaceHeld, setSpaceHeld] = useState(false);
+  /** Pointer position in world inches — drives the status-bar readout. */
+  const [hover, setHover] = useState<Pt | null>(null);
+  /** A live measurement shown while dragging (corner xy, track length, pos). */
+  const [readout, setReadout] = useState<string | null>(null);
   /** The selected corner index, when a corner is what's selected. */
   const sel = selection?.kind === "corner" ? selection.i : null;
   const setSel = (i: number | null) => onSelect?.(i === null ? null : { kind: "corner", i });
@@ -157,7 +175,8 @@ export function BenchworkEditor({
     [centerline, signals],
   );
 
-  const bounds = useMemo(() => {
+  /** Content bounds in world (module-local) inches — what "Fit" frames to. */
+  const bounds = useMemo<ViewBox>(() => {
     const ctx = [...centerline, ...trackPaths.flatMap((t) => t.pts)];
     const xs = [0, lengthInches, ...anchors.map((a) => a.x), ...sampled.map((p) => p.x), ...ctx.map((p) => p.x)];
     const ys = [-16, 16, ...anchors.map((a) => a.y), ...sampled.map((p) => p.y), ...ctx.map((p) => p.y)];
@@ -165,16 +184,72 @@ export function BenchworkEditor({
     const maxX = Math.max(...xs);
     const minY = Math.min(...ys);
     const maxY = Math.max(...ys);
-    const pad = Math.max(8, (maxX - minX) * 0.06);
+    const pad = Math.max(8, (maxX - minX) * 0.08);
     return { minX: minX - pad, minY: minY - pad, w: maxX - minX + pad * 2, h: maxY - minY + pad * 2 };
   }, [lengthInches, anchors, sampled, centerline, trackPaths]);
 
-  const sy = (y: number) => -y;
-  const vb = `${bounds.minX} ${-(bounds.minY + bounds.h)} ${bounds.w} ${bounds.h}`;
-  const r = Math.max(1.5, bounds.w * 0.006);
-  const snapDist = Math.max(3, bounds.w * 0.02);
+  // The viewport in world inches. `null` = follow content (auto-fit) until the
+  // first zoom/pan — so a fresh module frames itself, but once you take control
+  // the view stops jumping every time you drag a corner.
+  const [view, setView] = useState<ViewBox | null>(null);
+  const vbBox = view ?? bounds;
 
-  const toLocal = (e: React.PointerEvent): Pt => {
+  // Measure the SVG in device pixels so line weights, handle sizes and grid
+  // density are constant on screen instead of drifting with zoom.
+  const [px, setPx] = useState({ w: 0, h: 0 });
+  useLayoutEffect(() => {
+    const el = svgRef.current;
+    if (!el) return;
+    // getBoundingClientRect is reliable for an inline SVG; ResizeObserver's
+    // contentRect can report 0 height for one, which would strand `scale` on
+    // its fallback (and peg the zoom readout at 100%).
+    const measure = () => {
+      const b = el.getBoundingClientRect();
+      if (b.width && b.height) setPx({ w: b.width, h: b.height });
+    };
+    measure();
+    const ro = new ResizeObserver(measure);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
+
+  // Hold space to pan from any tool (released → back to the active tool).
+  useEffect(() => {
+    const down = (e: KeyboardEvent) => {
+      if (e.code === "Space" && !isTypingTarget(e.target)) {
+        e.preventDefault();
+        setSpaceHeld(true);
+      }
+    };
+    const up = (e: KeyboardEvent) => {
+      if (e.code === "Space") setSpaceHeld(false);
+    };
+    window.addEventListener("keydown", down);
+    window.addEventListener("keyup", up);
+    return () => {
+      window.removeEventListener("keydown", down);
+      window.removeEventListener("keyup", up);
+    };
+  }, []);
+
+  const sy = (y: number) => -y;
+  const vb = `${vbBox.minX} ${-(vbBox.minY + vbBox.h)} ${vbBox.w} ${vbBox.h}`;
+  // preserveAspectRatio="meet" fits the viewBox inside the element, so the true
+  // uniform scale (device px per inch) is the smaller of the two ratios.
+  const scale =
+    px.w > 0 && px.h > 0 ? Math.min(px.w / vbBox.w, px.h / vbBox.h) : 1 / (vbBox.w * 0.006);
+  const fitScale =
+    px.w > 0 && px.h > 0 ? Math.min(px.w / bounds.w, px.h / bounds.h) : scale;
+  /** World inches for a given screen-pixel size — keeps marks device-constant. */
+  const world = (screenPx: number) => screenPx / scale;
+  const r = world(4);
+  const snapDist = world(10);
+
+  // Grid: aim for ~14px minor cells, snapped to a friendly inch increment.
+  const minorStep = niceStep(world(14));
+  const majorStep = minorStep * (minorStep >= 12 ? 4 : minorStep >= 3 ? 4 : 6);
+
+  const toLocal = (e: { clientX: number; clientY: number }): Pt => {
     const svg = svgRef.current!;
     const p = svg.createSVGPoint();
     p.x = e.clientX;
@@ -183,6 +258,38 @@ export function BenchworkEditor({
     const u = m ? p.matrixTransform(m.inverse()) : { x: 0, y: 0 };
     return { x: u.x, y: -u.y };
   };
+
+  /** Zoom about a world anchor point by a multiplicative factor. Functional
+   * update so it reads the live view without a stale closure. */
+  const zoomAbout = (anchor: Pt, factor: number) =>
+    setView((prev) => {
+      const b = prev ?? bounds;
+      const nw = Math.max(2, Math.min(2000, b.w * factor));
+      const nh = b.h * (nw / b.w);
+      return {
+        w: nw,
+        h: nh,
+        minX: anchor.x - (anchor.x - b.minX) * (nw / b.w),
+        minY: anchor.y - (anchor.y - b.minY) * (nh / b.h),
+      };
+    });
+  const zoomButtons = (factor: number) =>
+    zoomAbout({ x: vbBox.minX + vbBox.w / 2, y: vbBox.minY + vbBox.h / 2 }, factor);
+
+  // Wheel-to-zoom toward the pointer. React's onWheel is passive (can't
+  // preventDefault the browser's own zoom/scroll), so bind a native listener.
+  // Rebinds when `bounds` changes so the fallback view stays current.
+  useEffect(() => {
+    const el = svgRef.current;
+    if (!el) return;
+    const h = (e: WheelEvent) => {
+      e.preventDefault();
+      zoomAbout(toLocal(e), e.deltaY > 0 ? 1.12 : 1 / 1.12);
+    };
+    el.addEventListener("wheel", h, { passive: false });
+    return () => el.removeEventListener("wheel", h);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [bounds]);
 
   const commit = (next: BenchworkPoint[]) =>
     onChange(
@@ -242,6 +349,13 @@ export function BenchworkEditor({
 
   const onBgDown = (e: React.PointerEvent) => {
     if (dragRef.current) return;
+    // Space-drag or middle-button pans, whatever the tool.
+    if (spaceHeld || e.button === 1) {
+      e.preventDefault();
+      svgRef.current?.setPointerCapture?.(e.pointerId);
+      panRef.current = { from: toLocal(e), view: { ...vbBox } };
+      return;
+    }
     // Only the Benchwork tool draws. Under Select, background means "nothing" —
     // which is what makes deselecting possible at all.
     if (tool !== "benchwork") {
@@ -273,17 +387,40 @@ export function BenchworkEditor({
     ) / 10;
 
   const onMove = (e: React.PointerEvent) => {
+    // Panning: translate the view by the pointer delta (in world inches).
+    const pan = panRef.current;
+    if (pan) {
+      const now = toLocal(e);
+      setView({
+        ...pan.view,
+        minX: pan.view.minX - (now.x - pan.from.x),
+        minY: pan.view.minY - (now.y - pan.from.y),
+      });
+      return;
+    }
+
+    const p = toLocal(e);
+    setHover(p);
     const d = dragRef.current;
     if (!d) return;
-    const p = toLocal(e);
 
     // Track features are positional: project the pointer back onto the main.
     if (d.kind === "turnout") {
-      if (centerline.length >= 2) onTurnoutMove?.(d.id, posFrom(p));
+      if (centerline.length >= 2) {
+        const pos = posFrom(p);
+        onTurnoutMove?.(d.id, pos);
+        setReadout(`${fmt(pos)}″ from A`);
+      }
       return;
     }
     if (d.kind === "trackEnd") {
-      if (centerline.length >= 2) onTrackEndMove?.(d.id, d.end, posFrom(p));
+      if (centerline.length >= 2) {
+        const pos = posFrom(p);
+        onTrackEndMove?.(d.id, d.end, pos);
+        const t = tracks.find((x) => x.id === d.id);
+        const other = t ? (d.end === "from" ? t.toPos : t.fromPos) : pos;
+        setReadout(lengthLabel(Math.abs(pos - other)));
+      }
       return;
     }
 
@@ -291,6 +428,10 @@ export function BenchworkEditor({
     if (d.kind === "vertex") {
       const s = snapToAnchor(p);
       next[d.i] = { ...next[d.i], x: s.x, y: s.y };
+      const near = nearestAnchorDist(s);
+      setReadout(
+        `${fmt(s.x)}, ${fmt(s.y)}″` + (near != null ? ` · ${fmt(near)}″ to ◆` : ""),
+      );
     } else {
       // Set edge i's bulge = perpendicular offset of the handle from the chord.
       const p0 = outline[d.i];
@@ -304,12 +445,34 @@ export function BenchworkEditor({
       const my = (p0.y + p1.y) / 2;
       const bulge = (p.x - mx) * nx + (p.y - my) * ny;
       next[d.i] = { ...next[d.i], bulge: Math.abs(bulge) < 0.5 ? 0 : bulge };
+      setReadout(`bow ${fmt(Math.abs(bulge))}″`);
     }
     commit(next);
   };
-  const onUp = () => {
+  const onUp = (e: React.PointerEvent) => {
+    if (panRef.current) {
+      svgRef.current?.releasePointerCapture?.(e.pointerId);
+      panRef.current = null;
+    }
     dragRef.current = null;
+    setReadout(null);
   };
+  const onLeave = (e: React.PointerEvent) => {
+    setHover(null);
+    onUp(e);
+  };
+
+  /** Distance from a point to the nearest endplate anchor, or null if none. */
+  const nearestAnchorDist = (pt: Pt): number | null => {
+    let best: number | null = null;
+    for (const a of anchors) {
+      const d = Math.hypot(pt.x - a.x, pt.y - a.y);
+      if (best == null || d < best) best = d;
+    }
+    return best;
+  };
+  const lengthLabel = (inches: number) =>
+    `${fmt(inches)}″ · ${Math.floor(inches / CAR_INCHES)} cars`;
 
   const seedRectangle = () => {
     const d = 24;
@@ -324,10 +487,49 @@ export function BenchworkEditor({
 
   const polyPts = sampled.map((p) => `${p.x},${sy(p.y)}`).join(" ");
 
+  // Grid / ruler ticks in world inches, spanning the current view.
+  const ticks = (step: number, lo: number, hi: number) => {
+    const out: number[] = [];
+    for (let v = Math.ceil(lo / step) * step; v <= hi; v += step) out.push(round(v));
+    return out;
+  };
+  const gx = ticks(minorStep, vbBox.minX, vbBox.minX + vbBox.w);
+  const gy = ticks(minorStep, vbBox.minY, vbBox.minY + vbBox.h);
+  const rulerX = ticks(majorStep, vbBox.minX, vbBox.minX + vbBox.w);
+  const rulerY = ticks(majorStep, vbBox.minY, vbBox.minY + vbBox.h);
+  const topY = vbBox.minY + vbBox.h; // world-top of the view (rulers pin here)
+  const leftX = vbBox.minX;
+  const isMajor = (v: number) => Math.abs(v % majorStep) < 1e-6;
+  const zoomPct = Math.round((scale / fitScale) * 100);
+
+  // True content extent (no view padding) — the board's actual W×H, for the
+  // dimension callouts and the status bar.
+  const extent = (() => {
+    const pts = [
+      ...anchors,
+      ...sampled,
+      ...centerline,
+      ...trackPaths.flatMap((t) => t.pts),
+      { x: 0, y: 0 },
+      { x: lengthInches, y: 0 },
+    ];
+    const xs = pts.map((p) => p.x);
+    const ys = pts.map((p) => p.y);
+    return {
+      minX: Math.min(...xs),
+      maxX: Math.max(...xs),
+      minY: Math.min(...ys),
+      maxY: Math.max(...ys),
+    };
+  })();
+  const extentW = extent.maxX - extent.minX;
+  const extentH = extent.maxY - extent.minY;
+
   return (
     <div className="flex h-full min-h-0 flex-col">
-      {/* Tool options — only the active tool's controls, not a global toolbar. */}
-      <div className="mb-2 flex h-6 shrink-0 flex-wrap items-center gap-2 text-xs">
+      {/* Tool options (left) + view controls (right). Only the active tool's
+          controls show — not a global toolbar. */}
+      <div className="mb-2 flex min-h-6 shrink-0 flex-wrap items-center gap-2 text-xs">
         {tool === "benchwork" ? (
           <>
             <button type="button" onClick={seedRectangle} className={btn}>
@@ -357,6 +559,23 @@ export function BenchworkEditor({
             along the main to position it.
           </span>
         )}
+        <div className="ml-auto flex items-center gap-1">
+          <button type="button" onClick={() => zoomButtons(1 / 1.25)} className={iconBtn} title="Zoom in">
+            +
+          </button>
+          <button type="button" onClick={() => zoomButtons(1.25)} className={iconBtn} title="Zoom out">
+            −
+          </button>
+          <button
+            type="button"
+            onClick={() => setView(null)}
+            className={btn}
+            title="Fit the board to the view"
+          >
+            Fit
+          </button>
+          <span className="w-11 text-right tabular-nums text-gray-500">{zoomPct}%</span>
+        </div>
       </div>
 
       <svg
@@ -365,14 +584,57 @@ export function BenchworkEditor({
         width="100%"
         height="100%"
         preserveAspectRatio="xMidYMid meet"
-        className={`min-h-0 flex-1 touch-none rounded-md border border-gray-300 bg-gray-50 ${
-          tool === "benchwork" ? "cursor-crosshair" : ""
+        className={`min-h-0 flex-1 touch-none rounded-md border border-gray-300 bg-white ${
+          spaceHeld ? "cursor-grab" : tool === "benchwork" ? "cursor-crosshair" : ""
         }`}
         onPointerDown={onBgDown}
         onPointerMove={onMove}
         onPointerUp={onUp}
-        onPointerLeave={onUp}
+        onPointerLeave={onLeave}
       >
+        {/* --- Drafting grid (inches), under everything --- */}
+        <g pointerEvents="none">
+          {gx.map((x) => (
+            <line
+              key={`gx${x}`}
+              x1={x}
+              y1={sy(vbBox.minY)}
+              x2={x}
+              y2={sy(vbBox.minY + vbBox.h)}
+              stroke={isMajor(x) ? "#e2e8f0" : "#f1f5f9"}
+              strokeWidth={world(isMajor(x) ? 1 : 0.5)}
+            />
+          ))}
+          {gy.map((y) => (
+            <line
+              key={`gy${y}`}
+              x1={vbBox.minX}
+              y1={sy(y)}
+              x2={vbBox.minX + vbBox.w}
+              y2={sy(y)}
+              stroke={isMajor(y) ? "#e2e8f0" : "#f1f5f9"}
+              strokeWidth={world(isMajor(y) ? 1 : 0.5)}
+            />
+          ))}
+          {/* Origin axes — endplate A's track point (0,0) and the mainline y=0 */}
+          <line x1={vbBox.minX} y1={sy(0)} x2={vbBox.minX + vbBox.w} y2={sy(0)} stroke="#cbd5e1" strokeWidth={world(1)} />
+          <line x1={0} y1={sy(vbBox.minY)} x2={0} y2={sy(vbBox.minY + vbBox.h)} stroke="#cbd5e1" strokeWidth={world(1)} />
+        </g>
+
+        {/* --- Rulers, pinned to the current view's top and left edges --- */}
+        <g pointerEvents="none" fill="#94a3b8" fontSize={world(10)}>
+          {rulerX.map((x) => (
+            <text key={`rx${x}`} x={x + world(2)} y={sy(topY) + world(11)} textAnchor="start">
+              {fmt(x)}
+            </text>
+          ))}
+          {rulerY.map((y) => (
+            <text key={`ry${y}`} x={leftX + world(2)} y={sy(y) - world(2)} textAnchor="start">
+              {fmt(y)}
+            </text>
+          ))}
+        </g>
+
         {/* --- Track context: the REAL module, drawn under the board --- */}
         {/* Sidings / spurs / Main 2 — positioned along the main, offset to lane */}
         {trackPaths.map((t) => {
@@ -571,16 +833,100 @@ export function BenchworkEditor({
             onPointerDown={(e) => beginDrag(e, { kind: "vertex", i })}
           />
         ))}
+
+        {/* --- Dimension callouts: the board's overall W × H, drafting-style --- */}
+        {extentW > 0 && (
+          <g pointerEvents="none" stroke="#cbd5e1" fill="#64748b" fontSize={world(10)}>
+            {/* Overall length, below the board */}
+            {(() => {
+              const yd = extent.minY - world(18);
+              return (
+                <>
+                  <line x1={extent.minX} y1={sy(extent.minY)} x2={extent.minX} y2={sy(yd)} strokeWidth={world(0.5)} />
+                  <line x1={extent.maxX} y1={sy(extent.minY)} x2={extent.maxX} y2={sy(yd)} strokeWidth={world(0.5)} />
+                  <line x1={extent.minX} y1={sy(yd)} x2={extent.maxX} y2={sy(yd)} strokeWidth={world(0.75)} />
+                  <text
+                    x={(extent.minX + extent.maxX) / 2}
+                    y={sy(yd) + world(11)}
+                    textAnchor="middle"
+                    stroke="none"
+                  >
+                    {fmt(extentW)}″ · {feetLabel(extentW)}
+                  </text>
+                </>
+              );
+            })()}
+            {/* Overall depth, to the left of the board */}
+            {(() => {
+              const xd = extent.minX - world(18);
+              return (
+                <>
+                  <line x1={extent.minX} y1={sy(extent.minY)} x2={xd} y2={sy(extent.minY)} strokeWidth={world(0.5)} />
+                  <line x1={extent.minX} y1={sy(extent.maxY)} x2={xd} y2={sy(extent.maxY)} strokeWidth={world(0.5)} />
+                  <line x1={xd} y1={sy(extent.minY)} x2={xd} y2={sy(extent.maxY)} strokeWidth={world(0.75)} />
+                  <text
+                    x={xd - world(3)}
+                    y={sy((extent.minY + extent.maxY) / 2)}
+                    textAnchor="end"
+                    stroke="none"
+                  >
+                    {fmt(extentH)}″
+                  </text>
+                </>
+              );
+            })()}
+          </g>
+        )}
       </svg>
+
+      {/* Status bar — board size, zoom, grid, pointer. */}
+      <div className="mt-1 flex shrink-0 flex-wrap items-center gap-x-3 gap-y-0.5 px-0.5 text-[11px] text-gray-500">
+        <span className="font-medium text-gray-600">
+          {fmt(extentW)}″ × {fmt(extentH)}″ · {feetLabel(extentW)}
+        </span>
+        <span>grid {fmt(minorStep)}″</span>
+        <span className="tabular-nums">{zoomPct}%</span>
+        {hover && (
+          <span className="tabular-nums">
+            x {fmt(hover.x)} · y {fmt(hover.y)}
+          </span>
+        )}
+        {readout && (
+          <span className="ml-auto rounded bg-sky-50 px-1.5 py-0.5 font-medium text-sky-700 tabular-nums">
+            {readout}
+          </span>
+        )}
+      </div>
     </div>
   );
 }
 
 const btn =
   "rounded-md border border-gray-300 px-3 py-1 font-medium text-gray-700 hover:bg-gray-50";
+const iconBtn =
+  "flex h-6 w-6 items-center justify-center rounded-md border border-gray-300 text-sm font-medium text-gray-700 hover:bg-gray-50";
 
 function round(n: number): number {
   return Math.round(n * 100) / 100;
+}
+
+/** Compact inch label — drops the trailing ".0" but keeps real fractions. */
+function fmt(n: number): string {
+  return (Math.round(n * 10) / 10).toString();
+}
+
+/** Inches → feet′inches″, how a modular group sizes a board ("a four-footer"). */
+function feetLabel(inches: number): string {
+  const ft = Math.floor(inches / 12);
+  const inch = Math.round(inches - ft * 12);
+  return `${ft}′${inch}″`;
+}
+
+/** True when a key event targets a text field — so space doesn't hijack typing. */
+function isTypingTarget(t: EventTarget | null): boolean {
+  const el = t as HTMLElement | null;
+  const tag = el?.tagName;
+  return tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT" || !!el?.isContentEditable;
 }
 
 function distToSegment(p: Pt, a: Pt, b: Pt): number {
