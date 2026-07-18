@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState, useTransition } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import {
   MAIN_TRACK_ID,
@@ -71,8 +71,6 @@ export function SchematicEditor({
   recordNumber,
   moduleName,
   initial,
-  hadSchematic,
-  newModule = false,
   lockedConfigs = { a: false, b: false },
   geometries = [],
   initialDimensions,
@@ -113,8 +111,52 @@ export function SchematicEditor({
   );
   const geoSpec = geometries.find((g) => g.value === dims.geometry_type);
   const [error, setError] = useState<string | null>(null);
-  const [saved, setSaved] = useState(false);
-  const [isPending, startTransition] = useTransition();
+
+  // --- Undo / redo -----------------------------------------------------------
+  // The whole document is `state` + `dims`, both replaced immutably, so history
+  // is just a stack of snapshots. Rapid changes within one gesture (a drag) are
+  // coalesced into a single entry so one Ctrl+Z doesn't rewind pixel by pixel.
+  type Snap = { state: EditorState; dims: ModuleDimensions };
+  const past = useRef<Snap[]>([]);
+  const future = useRef<Snap[]>([]);
+  const lastEditAt = useRef(0);
+  // Mirror the stack depths into state so the undo/redo buttons re-render
+  // without reading refs during render (which React forbids).
+  const [hist, setHist] = useState({ undo: 0, redo: 0 });
+  const syncHist = () => setHist({ undo: past.current.length, redo: future.current.length });
+
+  const snapshot = () => {
+    const now = Date.now();
+    const coalesce = now - lastEditAt.current < 450 && past.current.length > 0;
+    lastEditAt.current = now;
+    if (coalesce) return; // same gesture — fold into the existing entry
+    past.current = [...past.current.slice(-99), { state, dims }];
+    future.current = [];
+    syncHist();
+  };
+  const restore = (snap: Snap) => {
+    setState(snap.state);
+    setDims(snap.dims);
+    lastEditAt.current = 0; // the next edit starts a fresh history entry
+  };
+  const undo = useCallback(() => {
+    const prev = past.current[past.current.length - 1];
+    if (!prev) return;
+    past.current = past.current.slice(0, -1);
+    future.current = [...future.current, { state, dims }];
+    restore(prev);
+    syncHist();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [state, dims]);
+  const redo = useCallback(() => {
+    const next = future.current[future.current.length - 1];
+    if (!next) return;
+    future.current = future.current.slice(0, -1);
+    past.current = [...past.current, { state, dims }];
+    restore(next);
+    syncHist();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [state, dims]);
 
   const doc = useMemo(() => stateToDoc(state, recordNumber), [state, recordNumber]);
   const isDouble = state.configA === "double" || state.configB === "double";
@@ -197,12 +239,14 @@ export function SchematicEditor({
     [state.extraTracks, isDouble],
   );
 
-  const patch = (fn: (s: EditorState) => void) =>
+  const patch = (fn: (s: EditorState) => void) => {
+    snapshot();
     setState((prev) => {
       const next = structuredClone(prev);
       fn(next);
       return next;
     });
+  };
 
   /**
    * Edit a dimension. The doc's mainline length follows the module's (mainline
@@ -210,9 +254,12 @@ export function SchematicEditor({
    * can't drift apart.
    */
   const setDim = (p: Partial<ModuleDimensions>) => {
+    snapshot();
     const next = { ...dims, ...p };
     setDims(next);
     const len = Number(next.mainline_length_inches || next.length_total_inches) || 0;
+    // NB: patch() also snapshots, but snapshot() coalesces within a gesture, so
+    // the dims + length change land in one undo entry.
     if (len > 0 && len !== state.lengthInches) patch((s) => (s.lengthInches = len));
   };
 
@@ -295,28 +342,112 @@ export function SchematicEditor({
     });
   }
 
-  function save(clear: boolean) {
+  // --- Autosave --------------------------------------------------------------
+  // No Save button: persist automatically ~1s after the last edit. Dimensions
+  // live on the module record and the rest in the doc, so each half is written
+  // only when its own signature changed. Refs (not closures) hold the live
+  // values so a save scheduled in one render still writes the latest.
+  type SaveState = "saved" | "unsaved" | "saving" | "error";
+  const [saveState, setSaveState] = useState<SaveState>("saved");
+  const docSig = useMemo(() => JSON.stringify(doc), [doc]);
+  const dimsSig = useMemo(() => JSON.stringify(dims), [dims]);
+  const docRef = useRef(doc);
+  const dimsRef = useRef(dims);
+  const sigRef = useRef({ doc: docSig, dims: dimsSig });
+  const savedSig = useRef({ doc: docSig, dims: dimsSig }); // last persisted
+  const savingRef = useRef(false);
+  // Keep the "live value" refs current for a save scheduled a second ago
+  // (writing refs during render is disallowed; this effect runs after commit).
+  useEffect(() => {
+    docRef.current = doc;
+    dimsRef.current = dims;
+    sigRef.current = { doc: docSig, dims: dimsSig };
+  });
+
+  const runSave = useCallback(async () => {
+    if (savingRef.current) return; // in flight; its finally re-checks
+    const target = { ...sigRef.current };
+    if (target.doc === savedSig.current.doc && target.dims === savedSig.current.dims) {
+      setSaveState("saved");
+      return;
+    }
+    savingRef.current = true;
+    setSaveState("saving");
     setError(null);
-    setSaved(false);
-    startTransition(async () => {
-      // Dimensions live on the module record, the rest in the doc — but they're
-      // one edit to the owner, so one Save writes both. Dimensions first: the
-      // doc is measured against them.
-      const dimsChanged = (Object.keys(dims) as (keyof ModuleDimensions)[]).some(
-        (k) => dims[k] !== initialDimensions[k],
-      );
-      if (dimsChanged) {
-        const dimResult = await updateModuleDimensions(moduleId, dims);
-        if (dimResult && "error" in dimResult) {
-          setError(dimResult.error);
-          return;
-        }
+    try {
+      if (target.dims !== savedSig.current.dims) {
+        const r = await updateModuleDimensions(moduleId, dimsRef.current);
+        if (r && "error" in r) throw new Error(r.error);
+        savedSig.current.dims = target.dims;
       }
-      const result = await saveModuleSchematic(moduleId, clear ? null : doc);
-      if (result && "error" in result) setError(result.error);
-      else setSaved(true);
+      if (target.doc !== savedSig.current.doc) {
+        const r = await saveModuleSchematic(moduleId, docRef.current);
+        if (r && "error" in r) throw new Error(r.error);
+        savedSig.current.doc = target.doc;
+      }
+      const clean =
+        sigRef.current.doc === savedSig.current.doc &&
+        sigRef.current.dims === savedSig.current.dims;
+      setSaveState(clean ? "saved" : "unsaved");
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Save failed");
+      setSaveState("error");
+    } finally {
+      savingRef.current = false;
+      // Edited while saving? A later effect run already scheduled the next pass.
+    }
+  }, [moduleId]);
+
+  // Debounce: settle 1s after the last change, then persist.
+  useEffect(() => {
+    if (docSig === savedSig.current.doc && dimsSig === savedSig.current.dims) {
+      if (!savingRef.current) setSaveState("saved");
+      return;
+    }
+    setSaveState((s) => (s === "saving" ? s : "unsaved"));
+    const t = setTimeout(() => void runSave(), 1000);
+    return () => clearTimeout(t);
+  }, [docSig, dimsSig, runSave]);
+
+  /** Erase the drawing (kept as a deliberate, confirmed action). Autosave then
+   * persists the emptied module. */
+  const clearDrawing = () => {
+    if (!window.confirm("Clear the whole schematic — outline, track, signals?")) return;
+    patch((s) => {
+      s.outline = [];
+      s.extraTracks = [];
+      s.turnouts = [];
+      s.crossings = [];
+      s.branches = [];
+      s.controlPoints = [];
+      s.poseOverrides = {};
     });
-  }
+  };
+
+  // --- Keyboard: tool shortcuts, undo/redo, pan (space handled in canvas) -----
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (isTypingTarget(e.target)) return;
+      const mod = e.ctrlKey || e.metaKey;
+      if (mod && (e.key === "z" || e.key === "Z")) {
+        e.preventDefault();
+        if (e.shiftKey) redo();
+        else undo();
+        return;
+      }
+      if (mod && (e.key === "y" || e.key === "Y")) {
+        e.preventDefault();
+        redo();
+        return;
+      }
+      if (!mod && !e.altKey) {
+        if (e.key === "v" || e.key === "V") setTool("select");
+        else if (e.key === "b" || e.key === "B") setTool("benchwork");
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [undo, redo]);
 
   return (
     <div className="flex h-full min-h-0 flex-col bg-gray-100">
@@ -334,67 +465,43 @@ export function SchematicEditor({
           <div className="truncate text-xs text-gray-500">{recordNumber}</div>
         </div>
         <Readiness state={state} onGo={setTool} />
-        <div className="ml-auto flex shrink-0 items-center gap-2">
-          {error && <span className="max-w-xs truncate text-xs text-red-700">{error}</span>}
-          {saved && !error && <span className="text-xs font-medium text-green-700">Saved ✓</span>}
-          {newModule && (
-            <span className="hidden text-xs text-blue-700 sm:inline">
-              Module created — lay it out, then Save.
-            </span>
-          )}
-          {hadSchematic && (
-            <button
-              type="button"
-              onClick={() => save(true)}
-              disabled={isPending}
-              className="rounded-md border border-gray-300 px-2.5 py-1 text-xs font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50"
-            >
-              Clear
-            </button>
-          )}
+        <div className="ml-auto flex shrink-0 items-center gap-1.5">
           <button
             type="button"
-            onClick={() => save(false)}
-            disabled={isPending}
-            className="rounded-md bg-blue-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-blue-700 disabled:opacity-50"
+            onClick={undo}
+            disabled={hist.undo === 0}
+            title="Undo (Ctrl+Z)"
+            className="rounded-md px-2 py-1 text-sm text-gray-600 hover:bg-gray-100 disabled:opacity-30"
           >
-            {isPending ? "Saving…" : "Save"}
+            ↶
+          </button>
+          <button
+            type="button"
+            onClick={redo}
+            disabled={hist.redo === 0}
+            title="Redo (Ctrl+Shift+Z)"
+            className="rounded-md px-2 py-1 text-sm text-gray-600 hover:bg-gray-100 disabled:opacity-30"
+          >
+            ↷
+          </button>
+          <span className="mx-1 h-5 w-px bg-gray-200" />
+          <SaveBadge state={saveState} error={error} />
+          <button
+            type="button"
+            onClick={clearDrawing}
+            title="Clear the whole schematic"
+            className="rounded-md px-2 py-1 text-xs font-medium text-gray-500 hover:bg-red-50 hover:text-red-700"
+          >
+            Clear
           </button>
         </div>
       </header>
 
-      {/* Body: canvas (+ dispatcher strip) | inspector */}
+      {/* Body: tool rail | canvas (+ dispatcher strip) | inspector */}
       <div className="flex min-h-0 flex-1">
+        <ToolRail tool={tool} setTool={setTool} />
         <div className="flex min-w-0 flex-1 flex-col">
           <div className="flex min-h-0 flex-1 flex-col p-3">
-            {/* Tool switch. The full rail (stage 2) replaces this; two modes is
-                the minimum that lets a background click mean "deselect". */}
-            <div className="mb-2 flex shrink-0 items-center gap-1">
-              {(
-                [
-                  ["select", "Select", "Click to select · drag to move"],
-                  ["benchwork", "Benchwork", "Click an edge to add a corner"],
-                ] as const
-              ).map(([id, label, hint]) => (
-                <button
-                  key={id}
-                  type="button"
-                  onClick={() => setTool(id)}
-                  title={hint}
-                  aria-pressed={tool === id}
-                  className={`rounded-md px-2.5 py-1 text-xs font-medium transition ${
-                    tool === id
-                      ? "bg-blue-600 text-white"
-                      : "border border-gray-300 bg-white text-gray-700 hover:bg-gray-50"
-                  }`}
-                >
-                  {label}
-                </button>
-              ))}
-              <span className="ml-2 text-xs text-gray-400">
-                {state.lengthInches}″ · to scale, inches
-              </span>
-            </div>
             <div className="min-h-0 flex-1 rounded-lg border border-gray-200 bg-white p-2">
               <BenchworkEditor
                 outline={state.outline}
@@ -464,6 +571,102 @@ export function SchematicEditor({
       </div>
     </div>
   );
+}
+
+/** The tools that decide what a canvas click means. Select and Benchwork are
+ * live; the rest are placeholders for later stages (drawn track, signals…) so
+ * the rail's shape is settled. Each has a single-key shortcut. */
+const TOOLS: {
+  id: CanvasTool;
+  key: string;
+  label: string;
+  glyph: string;
+  hint: string;
+  soon?: boolean;
+}[] = [
+  { id: "select", key: "V", label: "Select", glyph: "▶", hint: "Select & move (V)" },
+  { id: "benchwork", key: "B", label: "Benchwork", glyph: "▱", hint: "Draw the board outline (B)" },
+];
+const SOON_TOOLS = [
+  { key: "T", label: "Track", glyph: "═" },
+  { key: "W", label: "Turnout", glyph: "⋋" },
+  { key: "S", label: "Signal", glyph: "⚑" },
+  { key: "I", label: "Industry", glyph: "▢" },
+];
+
+function ToolRail({
+  tool,
+  setTool,
+}: {
+  tool: CanvasTool;
+  setTool: (t: CanvasTool) => void;
+}) {
+  return (
+    <div className="flex w-12 shrink-0 flex-col items-center gap-1 border-r border-gray-200 bg-white py-2">
+      {TOOLS.map((t) => {
+        const on = tool === t.id;
+        return (
+          <button
+            key={t.id}
+            type="button"
+            onClick={() => setTool(t.id)}
+            title={t.hint}
+            aria-pressed={on}
+            className={`flex h-9 w-9 flex-col items-center justify-center rounded-md text-base leading-none transition ${
+              on ? "bg-blue-600 text-white" : "text-gray-600 hover:bg-gray-100"
+            }`}
+          >
+            <span>{t.glyph}</span>
+            <span className="mt-0.5 text-[9px] font-medium">{t.key}</span>
+          </button>
+        );
+      })}
+      <div className="my-1 h-px w-6 bg-gray-200" />
+      {SOON_TOOLS.map((t) => (
+        <button
+          key={t.label}
+          type="button"
+          disabled
+          title={`${t.label} — coming soon`}
+          className="flex h-9 w-9 cursor-not-allowed flex-col items-center justify-center rounded-md text-base leading-none text-gray-300"
+        >
+          <span>{t.glyph}</span>
+          <span className="mt-0.5 text-[9px] font-medium">{t.key}</span>
+        </button>
+      ))}
+    </div>
+  );
+}
+
+/** Autosave status pill in the top bar (replaces the Save button). */
+function SaveBadge({
+  state,
+  error,
+}: {
+  state: "saved" | "unsaved" | "saving" | "error";
+  error: string | null;
+}) {
+  if (state === "error") {
+    return (
+      <span className="max-w-[16rem] truncate text-xs font-medium text-red-700" title={error ?? undefined}>
+        ⚠ {error ?? "Save failed"}
+      </span>
+    );
+  }
+  const map = {
+    saved: { text: "Saved", cls: "text-green-700" },
+    saving: { text: "Saving…", cls: "text-gray-500" },
+    unsaved: { text: "Unsaved", cls: "text-amber-600" },
+  } as const;
+  const { text, cls } = map[state];
+  return <span className={`text-xs font-medium ${cls}`}>{text}</span>;
+}
+
+/** True when a key event targets a text field — so shortcuts don't hijack typing. */
+function isTypingTarget(t: EventTarget | null): boolean {
+  const el = t as HTMLElement | null;
+  const tag = el?.tagName;
+  return tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT" || !!el?.isContentEditable;
 }
 
 /** The derived dispatcher view. Never authored — so it gets a strip, not a
