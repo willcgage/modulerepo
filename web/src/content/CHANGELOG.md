@@ -5,6 +5,16 @@ Headings are `version — date` (YYYY-MM-DD).
 
 ---
 
+## v0.8.0 — 2026-07-17
+
+### Added
+- **Tool rail** down the left — Select (V) and Benchwork (B), with single-key shortcuts. More tools are stubbed for later.
+- **Undo / redo** — Ctrl+Z and Ctrl+Shift+Z, with rapid drags folded into one step.
+- **Autosave** — changes save automatically about a second after you stop; the Save button is gone, replaced by a Saved / Saving / Unsaved indicator.
+
+### Changed
+- **Clear** now asks first, and empties the drawing (autosave persists it).
+
 ## v0.7.0 — 2026-07-17
 
 ### Added
