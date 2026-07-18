@@ -432,6 +432,11 @@ export function BenchworkEditor({
         ...(p.bulge ? { bulge: round(p.bulge) } : {}),
       })),
     );
+  /** Remove a mainline bend point (never the two endplate endpoints). */
+  const removeMainVertex = (i: number) => {
+    if (i <= 0 || i >= editMain.length - 1) return;
+    commitMain(editMain.filter((_, j) => j !== i));
+  };
   /** Seed control points from the derived centre-line: endpoints + a bulge that
    * reproduces the current curve, so drawing starts matching the geometry. */
   const seedMain = (): BenchworkPoint[] => {
@@ -519,6 +524,11 @@ export function BenchworkEditor({
     const th = spurThroat(t);
     if (th) pinned[0] = { ...pinned[0], x: round(th.x), y: round(th.y) };
     onTrackPathChange?.(t.id, pinned);
+  };
+  /** Remove a spur bend point (never the throat or the far stub end). */
+  const removeSpurVertex = (t: CanvasTrack, i: number) => {
+    if (i <= 0 || i >= editSpur.length - 1) return;
+    commitSpur(t, editSpur.filter((_, j) => j !== i));
   };
   const spurEdgeHandle = (pts: BenchworkPoint[], i: number): Pt => {
     const p0 = pts[i];
@@ -948,15 +958,33 @@ export function BenchworkEditor({
             name and cars in the inspector.
           </span>
         ) : tool === "mainline" ? (
-          <span className="text-gray-500">
-            Drag a mainline point ○ to move it · drag an edge&rsquo;s ◇ to curve
-            it · click the line to add a bend. Endplate A stays at the origin.
-          </span>
+          <>
+            {mainPath.length >= 2 && onMainPathChange && (
+              <button type="button" onClick={() => onMainPathChange([])} className={btn}>
+                Straighten
+              </button>
+            )}
+            <span className="text-gray-500">
+              Drag a point ○ to move it · edge ◇ to curve · click the line to add
+              a bend · Alt-click a point to remove it. Endplate A stays put.
+            </span>
+          </>
         ) : tool === "track" ? (
-          <span className="text-gray-500">
-            Click a siding/spur to select it, then drag its points ○ to bend or
-            rotate it (◇ to curve). The throat stays snapped to its turnout.
-          </span>
+          <>
+            {editSpurTrack?.path && editSpurTrack.path.length >= 2 && onTrackPathChange && (
+              <button
+                type="button"
+                onClick={() => onTrackPathChange(editSpurTrack.id, [])}
+                className={btn}
+              >
+                Un-draw
+              </button>
+            )}
+            <span className="text-gray-500">
+              Click a siding/spur, then drag its points ○ to bend/rotate (◇ to
+              curve, Alt-click to remove). The throat stays on its turnout.
+            </span>
+          </>
         ) : (
           <span className="text-gray-500">
             Click anything to select it · drag a turnout ● or a siding&rsquo;s end ○
@@ -1346,9 +1374,14 @@ export function BenchworkEditor({
                 stroke="#7c3aed"
                 strokeWidth={r * 0.4}
                 style={{ cursor: i === 0 ? "default" : "grab" }}
-                onPointerDown={(e) => beginDrag(e, { kind: "mainVertex", i })}
+                onPointerDown={(e) => {
+                  if (e.altKey) {
+                    e.stopPropagation();
+                    removeMainVertex(i);
+                  } else beginDrag(e, { kind: "mainVertex", i });
+                }}
               >
-                <title>{i === 0 ? "Endplate A (fixed origin)" : "Drag to move this mainline point"}</title>
+                <title>{i === 0 ? "Endplate A (fixed origin)" : "Drag to move · Alt-click to remove"}</title>
               </circle>
             ))}
           </>
@@ -1387,9 +1420,14 @@ export function BenchworkEditor({
                 stroke="#0f766e"
                 strokeWidth={r * 0.4}
                 style={{ cursor: i === 0 ? "default" : "grab" }}
-                onPointerDown={(e) => beginDrag(e, { kind: "spurVertex", id: editSpurTrack.id, i })}
+                onPointerDown={(e) => {
+                  if (e.altKey) {
+                    e.stopPropagation();
+                    removeSpurVertex(editSpurTrack, i);
+                  } else beginDrag(e, { kind: "spurVertex", id: editSpurTrack.id, i });
+                }}
               >
-                <title>{i === 0 ? "Throat — snapped to the turnout" : "Drag to move this point"}</title>
+                <title>{i === 0 ? "Throat — snapped to the turnout" : "Drag to move · Alt-click to remove"}</title>
               </circle>
             ))}
           </>

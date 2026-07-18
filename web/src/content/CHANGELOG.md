@@ -5,6 +5,15 @@ Headings are `version — date` (YYYY-MM-DD).
 
 ---
 
+## v0.14.1 — 2026-07-18
+
+### Fixed
+- **Both endplates follow a drawn mainline** — curving the mainline now rotates endplate A as well as B to match the track at each end.
+- **Remove drawn points** — Alt-click a mainline or spur point to delete it; a **Straighten** / **Un-draw** button resets a drawn path back to derived.
+
+### Added
+- **Save button** — save now on demand (changes still autosave).
+
 ## v0.14.0 — 2026-07-18
 
 ### Added
