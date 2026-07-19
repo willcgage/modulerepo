@@ -7,6 +7,9 @@ Headings are `version — date` (YYYY-MM-DD).
 
 ## v0.15.1 — 2026-07-18
 
+### Changed
+- **Tool rail grouped by job** — the left rail now reads in sections: **Select**, then everything you draw on the board (**Benchwork · Mainline · Track · Turnout · Signal**), then **Industry**. Turnout and Signal sit with the track tools instead of below Industry.
+
 ### Removed
 - **"Mainline length" field** — gone from the module inspector, the new-module wizard, and the edit form. A module whose rail runs a different distance than its board is now expressed by **drawing the mainline** (the **M** tool), not by typing a second length.
 
