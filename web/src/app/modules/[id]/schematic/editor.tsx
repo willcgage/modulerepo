@@ -286,6 +286,7 @@ export function SchematicEditor({
         onTrack: t.onTrack,
         divergeTrack: t.divergeTrack || undefined,
         curved: t.curved,
+        kind: t.kind,
       })),
     [state.turnouts],
   );

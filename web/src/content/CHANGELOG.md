@@ -5,6 +5,11 @@ Headings are `version — date` (YYYY-MM-DD).
 
 ---
 
+## v0.15.25 — 2026-07-19
+
+### Changed
+- **Wyes render symmetrically.** A wye turnout now splits into **two mirrored routes**, each diverging at half the frog angle from center — a proper Y — instead of a single one-sided leg. (Based on the Fast Tracks wye template.)
+
 ## v0.15.24 — 2026-07-19
 
 ### Changed

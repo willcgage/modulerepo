@@ -187,6 +187,9 @@ export interface CanvasTurnout {
   /** A curved turnout — the diverging leg bows into an arc instead of leaving
    * as a straight diagonal (#turnout-palette). */
   curved?: boolean;
+  /** Hand: left/right throw one route; a wye splits symmetrically (both routes
+   * diverge ± half the frog angle), so it draws a mirrored second leg. */
+  kind?: TurnoutKind;
 }
 export interface CanvasSignal {
   id: string;
@@ -410,7 +413,7 @@ export function BenchworkEditor({
   /** A turnout's diverging leg — the throat→frog route, sampled *along the host*
    * so it follows the mainline's curvature (a curved turnout), easing out to one
    * track over at the frog. Null if nothing diverges. */
-  const frogLegOf = (t: CanvasTurnout): Pt[] | null => {
+  const frogLegOf = (t: CanvasTurnout, forceSide?: 1 | -1): Pt[] | null => {
     const dt = tracks.find((x) => x.id === t.divergeTrack);
     if (!dt) return null;
     const host = hostPointsOf(t.onTrack);
@@ -423,7 +426,8 @@ export function BenchworkEditor({
     const tx = (b.x - a.x) / tl;
     const ty = (b.y - a.y) / tl;
     // The diverging track's far end (relative to the throat) fixes the leg's
-    // longitudinal (toward) and lateral (side) sense — host-agnostic.
+    // longitudinal (toward) and lateral (side) sense — host-agnostic. A wye's
+    // mirror leg forces the opposite side.
     const far =
       dt.path && dt.path.length >= 2
         ? dt.path[dt.path.length - 1]
@@ -432,28 +436,45 @@ export function BenchworkEditor({
             y: m.y + ty * LANE_SPACING_INCHES + m.ny * (laneOffset(dt.lane) || LANE_SPACING_INCHES),
           };
     const toward = Math.sign((far.x - m.x) * tx + (far.y - m.y) * ty) || 1;
-    const side = Math.sign((far.x - m.x) * m.nx + (far.y - m.y) * m.ny) || 1;
+    const side = forceSide ?? (Math.sign((far.x - m.x) * m.nx + (far.y - m.y) * m.ny) || 1);
     const size = t.size && t.size > 0 ? t.size : 6;
     // A curved turnout sweeps over a LONGER leg so its diverging route reads as a
     // pronounced arc (carrying the curve well past a bare frog, per the curved-
     // turnout prototype) instead of a subtle bow; a straight turnout uses the
     // nominal points→frog length.
     const L = size * LANE_SPACING_INCHES * (t.curved ? 2.2 : 1); // points → frog
+    // A wye splits SYMMETRICALLY — each leg diverges at half the frog angle (half
+    // the lateral clearance), so the two legs open ± equally about the incoming
+    // route. A left/right turnout throws the full clearance to one side.
+    const lateral = t.kind === "wye" ? LANE_SPACING_INCHES / 2 : LANE_SPACING_INCHES;
     // Walk the host from the throat, clearing to one track over at the frog, so
     // on a curved main the leg curves with it. A *curved* turnout eases the
     // lateral clearance quadratically (frac²) so the leg leaves tangent to the
     // host and bows into an arc; a straight turnout ramps over linearly (a
-    // straight diagonal). Both reach one track over at the frog.
+    // straight diagonal).
     const steps = 8;
     const leg: Pt[] = [];
     for (let i = 0; i <= steps; i++) {
       const frac = i / steps;
       const ease = t.curved ? frac * frac : frac;
       const p = sampleAt(host, Math.max(0, t.pos + toward * L * frac));
-      const off = side * LANE_SPACING_INCHES * ease;
+      const off = side * lateral * ease;
       leg.push({ x: p.x + off * p.nx, y: p.y + off * p.ny });
     }
     return leg;
+  };
+  /** The lateral side (±1) a turnout's diverging route leaves toward — so a wye
+   * can render a mirror leg on the opposite side. */
+  const divergeSideSign = (t: CanvasTurnout): 1 | -1 => {
+    const dt = tracks.find((x) => x.id === t.divergeTrack);
+    const host = hostPointsOf(t.onTrack);
+    if (!dt || host.length < 2) return 1;
+    const m = sampleAt(host, t.pos);
+    const far =
+      dt.path && dt.path.length >= 2
+        ? dt.path[dt.path.length - 1]
+        : { x: m.x + m.nx * (laneOffset(dt.lane) || LANE_SPACING_INCHES), y: m.y + m.ny * (laneOffset(dt.lane) || LANE_SPACING_INCHES) };
+    return (Math.sign((far.x - m.x) * m.nx + (far.y - m.y) * m.ny) || 1) as 1 | -1;
   };
   /** spur/siding id → its throat's curved diverging leg + endpoints, so a drawn
    * track starts at the frog (one continuous curved route with its turnout). */
@@ -508,6 +529,38 @@ export function BenchworkEditor({
     const tailLen = Math.max(2, Math.abs(t.toPos - t.fromPos) - legLen);
     return [...leg.map((p) => ({ x: p.x, y: p.y })), { x: frog.x + dx * tailLen, y: frog.y + dy * tailLen }];
   };
+
+  /** A wye's mirrored second route — the leg forced to the opposite side, then
+   * continued along its frog tangent to the same length as the (real) spur, so
+   * the switch reads as a symmetric Y. Rendered as a band; it isn't a separately
+   * editable track (a wye is symmetric — the two routes mirror). */
+  const wyeMirrorLegs = useMemo(() => {
+    if (centerline.length < 2) return [];
+    const out: { id: string; frog: Pt; pts: Pt[] }[] = [];
+    for (const t of turnouts) {
+      if (t.kind !== "wye" || !t.divergeTrack) continue;
+      const spur = tracks.find((x) => x.id === t.divergeTrack);
+      if (!spur) continue;
+      const leg = frogLegOf(t, (-divergeSideSign(t)) as 1 | -1);
+      if (!leg || leg.length < 2) continue;
+      const frog = leg[leg.length - 1];
+      const prev = leg[leg.length - 2];
+      const dl = Math.hypot(frog.x - prev.x, frog.y - prev.y) || 1;
+      const dx = (frog.x - prev.x) / dl;
+      const dy = (frog.y - prev.y) / dl;
+      let legLen = 0;
+      for (let i = 1; i < leg.length; i++)
+        legLen += Math.hypot(leg[i].x - leg[i - 1].x, leg[i].y - leg[i - 1].y);
+      const tailLen = Math.max(2, Math.abs(spur.toPos - spur.fromPos) - legLen);
+      out.push({
+        id: `${t.id}-wye`,
+        frog,
+        pts: [...leg.map((p) => ({ x: p.x, y: p.y })), { x: frog.x + dx * tailLen, y: frog.y + dy * tailLen }],
+      });
+    }
+    return out;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [turnouts, tracks, centerline, lengthInches]);
 
   const trackPaths = useMemo(
     () =>
@@ -1410,6 +1463,8 @@ export function BenchworkEditor({
       ? [{ id: "__main__", pts: centerline, main: true, selectable: false }]
       : []),
     ...trackPaths.map((t) => ({ id: t.id, pts: t.pts, main: false, selectable: true })),
+    // A wye's mirrored second route draws as a (non-selectable) band.
+    ...wyeMirrorLegs.map((w) => ({ id: w.id, pts: w.pts, main: false, selectable: false })),
   ];
 
   const renderTrack = (line: (typeof trackLines)[number]) => {
