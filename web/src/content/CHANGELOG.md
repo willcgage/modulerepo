@@ -5,6 +5,14 @@ Headings are `version — date` (YYYY-MM-DD).
 
 ---
 
+## v0.15.5 — 2026-07-18
+
+### Added
+- **Turnout tool (W)** — drop a turnout on the main by clicking. Pick its **number (frog size)** — #4 to #10 — in the toolbar first; it shows in the turnout's inspector and saves with the module. Then draw a spur or siding from the turnout with the Track tool.
+
+### Fixed
+- **You can extend a spur you just drew** — a freshly drawn spur or siding is now selected, so the Track tool edits *that track* (click the line to add a bend) instead of accidentally bending the mainline and breaking it.
+
 ## v0.15.4 — 2026-07-18
 
 ### Changed
