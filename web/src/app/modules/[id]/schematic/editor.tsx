@@ -275,8 +275,20 @@ export function SchematicEditor({
       });
   }, [doc, state.lengthInches, state.extraTracks, state.turnouts]);
   const canvasTurnouts = useMemo(
-    () => state.turnouts.map((t) => ({ id: t.id, pos: t.pos })),
-    [state.turnouts],
+    () =>
+      state.turnouts.map((t) => {
+        // The spur/siding this turnout diverges to — gives the side (lane) and
+        // the direction along the main the switch trails (toward the body).
+        const dt = state.extraTracks.find((x) => x.id === t.divergeTrack);
+        return {
+          id: t.id,
+          pos: t.pos,
+          size: t.size,
+          divergeLane: dt?.lane,
+          divergeToward: dt ? Math.sign(dt.toPos - t.pos) || 1 : 1,
+        };
+      }),
+    [state.turnouts, state.extraTracks],
   );
   const canvasSignals = useMemo(
     () =>

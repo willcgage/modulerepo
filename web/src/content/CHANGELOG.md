@@ -5,6 +5,11 @@ Headings are `version — date` (YYYY-MM-DD).
 
 ---
 
+## v0.15.7 — 2026-07-18
+
+### Changed
+- **Turnouts draw as switches** — a turnout that a spur or siding diverges from now shows its **frog rail** leaving the main at the real frog angle (from its #), on the correct hand/side, instead of a bare dot. Higher numbers diverge more gently. (A turnout with nothing diverging yet stays a marker until you draw a track from it.)
+
 ## v0.15.6 — 2026-07-18
 
 ### Fixed

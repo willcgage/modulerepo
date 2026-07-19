@@ -46,6 +46,12 @@ export interface CanvasTrack {
 export interface CanvasTurnout {
   id: string;
   pos: number;
+  /** Frog number ("size") — governs the diverging angle (atan(1/size)). */
+  size?: number;
+  /** Lane of the track it diverges to (side of the main), if any yet. */
+  divergeLane?: number;
+  /** +1/-1 along the main toward the diverging body. */
+  divergeToward?: number;
 }
 export interface CanvasSignal {
   id: string;
@@ -240,9 +246,32 @@ export function BenchworkEditor({
   const turnoutPts = useMemo(
     () =>
       centerline.length >= 2
-        ? turnouts.map((t) => ({ id: t.id, ...sampleAt(centerline, t.pos) }))
+        ? turnouts.map((t) => {
+            const m = sampleAt(centerline, t.pos);
+            // Frog rail: the diverging route leaving the main at atan(1/size),
+            // toward the diverging body, one track over. Only once a spur/siding
+            // diverges from it (divergeLane set) — a bare turnout is a marker.
+            let frog: Pt | null = null;
+            if (t.divergeLane != null) {
+              const size = t.size && t.size > 0 ? t.size : 6;
+              const eps = 0.5;
+              const a = sampleAt(centerline, Math.max(0, t.pos - eps));
+              const b = sampleAt(centerline, Math.min(lengthInches, t.pos + eps));
+              const tl = Math.hypot(b.x - a.x, b.y - a.y) || 1;
+              const tx = (b.x - a.x) / tl;
+              const ty = (b.y - a.y) / tl;
+              const side = Math.sign(laneOffset(t.divergeLane)) || 1;
+              const toward = t.divergeToward ?? 1;
+              const L = size * LANE_SPACING_INCHES; // points → frog
+              frog = {
+                x: m.x + toward * L * tx + side * LANE_SPACING_INCHES * m.nx,
+                y: m.y + toward * L * ty + side * LANE_SPACING_INCHES * m.ny,
+              };
+            }
+            return { id: t.id, x: m.x, y: m.y, frog };
+          })
         : [],
-    [centerline, turnouts],
+    [centerline, turnouts, lengthInches],
   );
   /** Draggable end handles for sidings/spurs (not the derived Main 2). */
   const trackEnds = useMemo(() => {
@@ -1295,22 +1324,35 @@ export function BenchworkEditor({
         {turnoutPts.map((t) => {
           const on = selection?.kind === "turnout" && selection.id === t.id;
           return (
-            <circle
-              key={`to${t.id}`}
-              cx={t.x}
-              cy={sy(t.y)}
-              r={onTurnoutMove ? r * 0.7 : r * 0.5}
-              fill={on ? "#0284c7" : "#475569"}
-              stroke={on ? "#0284c7" : "none"}
-              strokeWidth={r * 0.5}
-              strokeOpacity={0.3}
-              style={onTurnoutMove ? { cursor: "ew-resize" } : undefined}
-              onPointerDown={
-                onTurnoutMove ? (e) => beginDrag(e, { kind: "turnout", id: t.id }) : undefined
-              }
-            >
-              {onTurnoutMove && <title>Drag along the track to move this turnout</title>}
-            </circle>
+            <g key={`to${t.id}`}>
+              {t.frog && (
+                <line
+                  x1={t.x}
+                  y1={sy(t.y)}
+                  x2={t.frog.x}
+                  y2={sy(t.frog.y)}
+                  stroke={on ? "#0284c7" : "#475569"}
+                  strokeWidth={world(1.4)}
+                  strokeLinecap="round"
+                  pointerEvents="none"
+                />
+              )}
+              <circle
+                cx={t.x}
+                cy={sy(t.y)}
+                r={onTurnoutMove ? r * 0.7 : r * 0.5}
+                fill={on ? "#0284c7" : "#475569"}
+                stroke={on ? "#0284c7" : "none"}
+                strokeWidth={r * 0.5}
+                strokeOpacity={0.3}
+                style={onTurnoutMove ? { cursor: "ew-resize" } : undefined}
+                onPointerDown={
+                  onTurnoutMove ? (e) => beginDrag(e, { kind: "turnout", id: t.id }) : undefined
+                }
+              >
+                {onTurnoutMove && <title>Drag along the track to move this turnout</title>}
+              </circle>
+            </g>
           );
         })}
         {/* Signals — a mast (stem from the track it governs) + a head. */}
