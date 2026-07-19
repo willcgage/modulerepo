@@ -525,7 +525,7 @@ export function BenchworkEditor({
   /** spur/siding id → its throat's curved diverging leg + endpoints, so a drawn
    * track starts at the frog (one continuous curved route with its turnout). */
   const switchByTrack = useMemo(() => {
-    const map = new Map<string, { throat: Pt; frog: Pt; leg: Pt[] }>();
+    const map = new Map<string, { throat: Pt; frog: Pt; leg: Pt[]; turnoutId: string }>();
     if (centerline.length >= 2) {
       for (const t of turnouts) {
         // A crossover's connector has a turnout on BOTH lanes diverging to it —
@@ -533,7 +533,12 @@ export function BenchworkEditor({
         if (!t.divergeTrack || map.has(t.divergeTrack)) continue;
         const leg = frogLegOf(t);
         if (!leg || leg.length < 2) continue;
-        map.set(t.divergeTrack, { throat: leg[0], frog: leg[leg.length - 1], leg });
+        map.set(t.divergeTrack, {
+          throat: leg[0],
+          frog: leg[leg.length - 1],
+          leg,
+          turnoutId: t.id,
+        });
       }
     }
     return map;
@@ -666,11 +671,15 @@ export function BenchworkEditor({
             // The turnout sits on its host track (main or a spur); its frog node
             // marks where the diverging leg has cleared one track over.
             const m = sampleAt(hostPointsOf(t.onTrack), t.pos);
+            // The frog marker belongs to the turnout whose leg draws the route —
+            // a crossover connector has a turnout on BOTH ends, and drawing the
+            // shared frog from both doubled the circles at the far end.
+            const sw = t.divergeTrack ? switchByTrack.get(t.divergeTrack) : undefined;
             return {
               id: t.id,
               x: m.x,
               y: m.y,
-              frog: t.divergeTrack ? (switchByTrack.get(t.divergeTrack)?.frog ?? null) : null,
+              frog: sw && sw.turnoutId === t.id ? sw.frog : null,
             };
           })
         : [],

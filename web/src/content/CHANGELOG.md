@@ -5,6 +5,13 @@ Headings are `version — date` (YYYY-MM-DD).
 
 ---
 
+## v0.15.28 — 2026-07-19
+
+### Fixed
+- **Cleaner dispatcher view around crossovers.** A crossover's parallel track no longer draws spurious end-dips into the main in the operations preview — it renders flat, with the crossover diagonal as its only connection. (Classic passing sidings are unchanged.)
+- **No more doubled switch nodes.** The frog circle is drawn once per switch — a crossover put a turnout on both ends of its connector and the shared frog drew twice.
+- **Tidy lengths in the Objects list.** Track lengths and positions round to 0.1″ instead of showing floating-point noise (18.800000000000004″).
+
 ## v0.15.27 — 2026-07-19
 
 ### Added
