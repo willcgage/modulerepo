@@ -5,6 +5,11 @@ Headings are `version — date` (YYYY-MM-DD).
 
 ---
 
+## v0.15.8 — 2026-07-18
+
+### Changed
+- **Spurs start at the frog** — a drawn spur now begins at its turnout's **frog** point, so the switch's diverging rail and the spur read as **one continuous route** instead of two lines leaving the throat. (Fixes the stray extra line that appeared next to a drawn spur.)
+
 ## v0.15.7 — 2026-07-18
 
 ### Changed

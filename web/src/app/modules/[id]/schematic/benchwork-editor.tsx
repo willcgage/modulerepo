@@ -48,6 +48,8 @@ export interface CanvasTurnout {
   pos: number;
   /** Frog number ("size") — governs the diverging angle (atan(1/size)). */
   size?: number;
+  /** The track id it diverges to (so the spur can start at the frog), if any. */
+  divergeTrack?: string;
   /** Lane of the track it diverges to (side of the main), if any yet. */
   divergeLane?: number;
   /** +1/-1 along the main toward the diverging body. */
@@ -228,6 +230,46 @@ export function BenchworkEditor({
 
   // Track context. A track with an authored 2-D path draws along it; otherwise
   // it's laid onto the main centre-line, offset to its lane (#2d-track).
+  /** A turnout's frog point — where its diverging route clears one track over,
+   * at the frog angle atan(1/size). Null for a bare (nothing-diverging) turnout. */
+  const frogOf = (t: CanvasTurnout): Pt | null => {
+    if (t.divergeLane == null || centerline.length < 2) return null;
+    const m = sampleAt(centerline, t.pos);
+    const size = t.size && t.size > 0 ? t.size : 6;
+    const eps = 0.5;
+    const a = sampleAt(centerline, Math.max(0, t.pos - eps));
+    const b = sampleAt(centerline, Math.min(lengthInches, t.pos + eps));
+    const tl = Math.hypot(b.x - a.x, b.y - a.y) || 1;
+    const tx = (b.x - a.x) / tl;
+    const ty = (b.y - a.y) / tl;
+    const side = Math.sign(laneOffset(t.divergeLane)) || 1;
+    const toward = t.divergeToward ?? 1;
+    const L = size * LANE_SPACING_INCHES; // points → frog
+    return {
+      x: m.x + toward * L * tx + side * LANE_SPACING_INCHES * m.nx,
+      y: m.y + toward * L * ty + side * LANE_SPACING_INCHES * m.ny,
+    };
+  };
+  /** spur/siding id → its throat's frog point, so a drawn track starts at the
+   * frog (one continuous route with its turnout) instead of on the main. */
+  const frogByTrack = useMemo(() => {
+    const map = new Map<string, Pt>();
+    for (const t of turnouts) {
+      if (!t.divergeTrack) continue;
+      const f = frogOf(t);
+      if (f) map.set(t.divergeTrack, f);
+    }
+    return map;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [turnouts, centerline, lengthInches]);
+  /** A drawn spur's path with its throat (point 0) pinned to the frog. */
+  const frogPinnedPath = (t: CanvasTrack): BenchworkPoint[] => {
+    const path = t.path;
+    if (!path || path.length < 2) return path ?? [];
+    const f = frogByTrack.get(t.id);
+    return f ? [{ ...path[0], x: f.x, y: f.y }, ...path.slice(1)] : path;
+  };
+
   const trackPaths = useMemo(
     () =>
       centerline.length >= 2
@@ -236,41 +278,25 @@ export function BenchworkEditor({
               id: t.id,
               pts:
                 t.path && t.path.length >= 2
-                  ? samplePath(t.path)
+                  ? samplePath(frogPinnedPath(t))
                   : lanePath(centerline, t.fromPos, t.toPos, t.lane),
             }))
             .filter((t) => t.pts.length > 1)
         : [],
-    [centerline, tracks],
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [centerline, tracks, frogByTrack],
   );
   const turnoutPts = useMemo(
     () =>
       centerline.length >= 2
         ? turnouts.map((t) => {
             const m = sampleAt(centerline, t.pos);
-            // Frog rail: the diverging route leaving the main at atan(1/size),
-            // toward the diverging body, one track over. Only once a spur/siding
-            // diverges from it (divergeLane set) — a bare turnout is a marker.
-            let frog: Pt | null = null;
-            if (t.divergeLane != null) {
-              const size = t.size && t.size > 0 ? t.size : 6;
-              const eps = 0.5;
-              const a = sampleAt(centerline, Math.max(0, t.pos - eps));
-              const b = sampleAt(centerline, Math.min(lengthInches, t.pos + eps));
-              const tl = Math.hypot(b.x - a.x, b.y - a.y) || 1;
-              const tx = (b.x - a.x) / tl;
-              const ty = (b.y - a.y) / tl;
-              const side = Math.sign(laneOffset(t.divergeLane)) || 1;
-              const toward = t.divergeToward ?? 1;
-              const L = size * LANE_SPACING_INCHES; // points → frog
-              frog = {
-                x: m.x + toward * L * tx + side * LANE_SPACING_INCHES * m.nx,
-                y: m.y + toward * L * ty + side * LANE_SPACING_INCHES * m.ny,
-              };
-            }
-            return { id: t.id, x: m.x, y: m.y, frog };
+            // The frog rail (points → frog) is the turnout's diverging leg; the
+            // drawn spur continues from the same frog point, so they read as one.
+            return { id: t.id, x: m.x, y: m.y, frog: frogOf(t) };
           })
         : [],
+    // eslint-disable-next-line react-hooks/exhaustive-deps
     [centerline, turnouts, lengthInches],
   );
   /** Draggable end handles for sidings/spurs (not the derived Main 2). */
@@ -566,8 +592,11 @@ export function BenchworkEditor({
             (tool === "track" || (t.path != null && t.path.length >= 2)),
         )
       : undefined;
-  /** The throat point (on the main at the spur's turnout), or null. */
+  /** The throat point — the turnout's frog (so the spur is continuous with the
+   * switch), falling back to the on-main turnout point if there's no frog yet. */
   const spurThroat = (t: CanvasTrack): Pt | null => {
+    const f = frogByTrack.get(t.id);
+    if (f) return f;
     if (t.throatPos == null || centerline.length < 2) return null;
     const p = sampleAt(centerline, t.throatPos);
     return { x: p.x, y: p.y };
@@ -585,7 +614,7 @@ export function BenchworkEditor({
   };
   const editSpur: BenchworkPoint[] = editSpurTrack
     ? editSpurTrack.path && editSpurTrack.path.length >= 2
-      ? editSpurTrack.path
+      ? frogPinnedPath(editSpurTrack)
       : spurSeed(editSpurTrack)
     : [];
   /** Commit a spur path — the throat (point 0) is always re-pinned to its
