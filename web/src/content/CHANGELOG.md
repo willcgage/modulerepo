@@ -5,6 +5,14 @@ Headings are `version — date` (YYYY-MM-DD).
 
 ---
 
+## v0.15.3 — 2026-07-18
+
+### Changed
+- **One Track tool** — the Mainline (M) and Track (T) tools are now a single **Track (T)** tool. With nothing selected you draw and bend the mainline; click a siding or spur to bend/rotate it. Press **Esc** to deselect and go back to the mainline. The separate M tool is gone.
+
+### Fixed
+- **Clear now clears everything** — the drawn/curved mainline and any industries used to survive a Clear; they're wiped too. (The mainline collapses back to a plain straight line — the module's baseline — since positions are measured along it.)
+
 ## v0.15.2 — 2026-07-18
 
 ### Changed
