@@ -5,6 +5,11 @@ Headings are `version — date` (YYYY-MM-DD).
 
 ---
 
+## v0.15.17 — 2026-07-19
+
+### Added
+- **Signal tool (S)** — drop a signal on the main by clicking; each signal is a **control point** (a block boundary, or an interlocking once you group turnouts under it). Signal masts are now **clickable** — select one to set its direction, side, position, and the turnouts/crossings it governs in the inspector.
+
 ## v0.15.16 — 2026-07-19
 
 ### Changed
