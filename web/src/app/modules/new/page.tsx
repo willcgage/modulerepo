@@ -13,16 +13,10 @@ export default async function NewModulePage() {
     redirect("/login");
   }
 
-  const [{ data: categories }, { data: geometries }] = await Promise.all([
-    supabase
-      .from("module_categories")
-      .select("value, display_label")
-      .order("display_label"),
-    supabase
-      .from("module_geometries")
-      .select("value, display_label, requires_degrees, requires_offset_inches")
-      .order("display_label"),
-  ]);
+  const { data: categories } = await supabase
+    .from("module_categories")
+    .select("value, display_label")
+    .order("display_label");
 
   return (
     <div className="mx-auto max-w-md px-4 py-12">
@@ -34,7 +28,7 @@ export default async function NewModulePage() {
         Enough to start drawing — you&rsquo;ll lay out the board and track on the canvas.
       </p>
 
-      <QuickCreate categories={categories ?? []} geometries={geometries ?? []} />
+      <QuickCreate categories={categories ?? []} />
     </div>
   );
 }

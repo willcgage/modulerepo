@@ -606,7 +606,7 @@ export function BenchworkEditor({
     ];
   };
   /** The path the Track tool edits when no spur is selected — the authored one, or a fresh seed. */
-  const editMain = mainPath.length >= 2 ? mainPath : seedMain();
+  const editMain = mainPath.length >= 1 ? mainPath : seedMain();
   /** Midpoint handle for mainline edge i (open path, no wrap). */
   const mainEdgeHandle = (i: number): Pt => {
     const p0 = editMain[i];
@@ -777,7 +777,13 @@ export function BenchworkEditor({
     // when no spur is selected (mainline + spur editing are one tool now).
     if (tool === "track") {
       if (editSpurTrack && onTrackPathChange) addSpurVertex(editSpurTrack, toLocal(e));
-      else if (onMainPathChange) addMainVertex(toLocal(e));
+      else if (onMainPathChange) {
+        // No main yet (a fresh module opens blank) → draw one from scratch: each
+        // click extends the mainline. Otherwise add a bend to the existing main.
+        if (mainPath.length < 2 && centerline.length < 2) {
+          onMainPathChange([...mainPath, snapToAnchor(toLocal(e))]);
+        } else addMainVertex(toLocal(e));
+      }
       return;
     }
     // Only the Benchwork tool draws. Under Select, background means "nothing" —
@@ -1272,7 +1278,9 @@ export function BenchworkEditor({
               <span className="text-gray-500">
                 {editSpurTrack
                   ? "Drag the spur's points ○ to bend/rotate (◇ to curve · Alt-click to remove). The throat stays on its turnout."
-                  : "Drag the mainline's points ○ · edge ◇ to curve · click the line to add a bend · Alt-click to remove. Click a siding or spur to edit it."}
+                  : mainPath.length < 2 && centerline.length < 2
+                    ? "Draw the mainline — click near one end of the board, then the other. Then drag a point ○ to move it, or an edge ◇ to curve it."
+                    : "Drag the mainline's points ○ · edge ◇ to curve · click the line to add a bend · Alt-click to remove. Click a siding or spur to edit it."}
               </span>
             </>
           )
@@ -1676,6 +1684,20 @@ export function BenchworkEditor({
           />
         ))}
 
+        {/* Drawing a new main from scratch — the first placed point (#layers). */}
+        {tool === "track" && !editSpurTrack && !pendingTrack && editMain.length === 1 && (
+          <circle
+            cx={editMain[0].x}
+            cy={sy(editMain[0].y)}
+            r={r}
+            fill="#c4b5fd"
+            stroke="#7c3aed"
+            strokeWidth={r * 0.4}
+            pointerEvents="none"
+          >
+            <title>Mainline start — click the other end to finish</title>
+          </circle>
+        )}
         {/* --- Mainline edit handles (Track tool, no spur selected) — bend/drag the main --- */}
         {tool === "track" && !editSpurTrack && !pendingTrack && editMain.length >= 2 && (
           <>

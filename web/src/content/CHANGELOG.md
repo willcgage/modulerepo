@@ -5,6 +5,11 @@ Headings are `version — date` (YYYY-MM-DD).
 
 ---
 
+## v0.15.16 — 2026-07-19
+
+### Changed
+- **A new module opens blank** — just the board, no track. **Geometry is gone from the new-module form**; you draw the mainline on the canvas (Track tool — click one end of the board, then the other), then build up the layers: track, turnouts, signals, industries. Existing modules (which carry a geometry) are unchanged.
+
 ## v0.15.15 — 2026-07-19
 
 ### Added

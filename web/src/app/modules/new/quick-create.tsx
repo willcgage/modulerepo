@@ -5,38 +5,27 @@ import Link from "next/link";
 import { checkModuleName, createModule, type BasicsInput } from "./actions";
 
 type Option = { value: string; display_label: string };
-type Geometry = Option & {
-  requires_degrees: boolean;
-  requires_offset_inches: boolean;
-};
 
 const inp =
   "mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 text-sm text-gray-900 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500";
 
 /**
  * The fast path to a new module: just what's needed to start drawing — name,
- * category, geometry and footprint length — then straight to the canvas with a
- * board already seeded. Endplates, track and industries are authored there, not
- * up front. The detailed wizard stays one link away for anyone who wants it.
+ * category and footprint length — then straight to the canvas with a blank
+ * board. The mainline, track and industries are drawn there, layer by layer,
+ * not up front. The detailed wizard stays one link away for anyone who wants it.
  */
 export function QuickCreate({
   categories,
-  geometries,
 }: {
   categories: Option[];
-  geometries: Geometry[];
 }) {
   const [name, setName] = useState("");
   const [category, setCategory] = useState("");
-  const [geometryType, setGeometryType] = useState("");
-  const [degrees, setDegrees] = useState("");
-  const [offset, setOffset] = useState("");
   const [length, setLength] = useState("");
   const [nameStatus, setNameStatus] = useState<"idle" | "checking" | "ok" | "taken">("idle");
   const [error, setError] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
-
-  const geo = geometries.find((g) => g.value === geometryType);
 
   async function onNameBlur() {
     const n = name.trim();
@@ -51,13 +40,7 @@ export function QuickCreate({
   }
 
   const ready =
-    name.trim() &&
-    category &&
-    geometryType &&
-    Number(length) > 0 &&
-    nameStatus !== "taken" &&
-    (!geo?.requires_degrees || degrees !== "") &&
-    (!geo?.requires_offset_inches || offset !== "");
+    name.trim() && category && Number(length) > 0 && nameStatus !== "taken";
 
   function submit() {
     setError(null);
@@ -65,9 +48,9 @@ export function QuickCreate({
       module_name: name,
       description: "",
       category,
-      geometry_type: geometryType,
-      geometry_degrees: geo?.requires_degrees ? degrees : "",
-      geometry_offset_inches: geo?.requires_offset_inches ? offset : "",
+      geometry_type: "",
+      geometry_degrees: "",
+      geometry_offset_inches: "",
       length_total_inches: length,
       mainline_length_inches: "",
       has_mss: false,
@@ -116,63 +99,21 @@ export function QuickCreate({
           </select>
         </label>
 
-        <div className="grid grid-cols-2 gap-4">
-          <label className="block text-sm font-medium text-gray-700">
-            Geometry
-            <select
-              value={geometryType}
-              onChange={(e) => {
-                setGeometryType(e.target.value);
-                setDegrees("");
-                setOffset("");
-              }}
-              className={inp}
-            >
-              <option value="">Choose…</option>
-              {geometries.map((g) => (
-                <option key={g.value} value={g.value}>
-                  {g.display_label}
-                </option>
-              ))}
-            </select>
-          </label>
-          <label className="block text-sm font-medium text-gray-700">
-            Footprint length (in)
-            <input
-              type="number"
-              min={1}
-              step={0.5}
-              value={length}
-              onChange={(e) => setLength(e.target.value)}
-              className={inp}
-              placeholder="48"
-            />
-          </label>
-          {geo?.requires_degrees && (
-            <label className="block text-sm font-medium text-gray-700">
-              Degrees
-              <input
-                type="number"
-                step={0.5}
-                value={degrees}
-                onChange={(e) => setDegrees(e.target.value)}
-                className={inp}
-              />
-            </label>
-          )}
-          {geo?.requires_offset_inches && (
-            <label className="block text-sm font-medium text-gray-700">
-              Offset (in)
-              <input
-                type="number"
-                step={0.5}
-                value={offset}
-                onChange={(e) => setOffset(e.target.value)}
-                className={inp}
-              />
-            </label>
-          )}
-        </div>
+        <label className="block text-sm font-medium text-gray-700">
+          Footprint length (in)
+          <input
+            type="number"
+            min={1}
+            step={0.5}
+            value={length}
+            onChange={(e) => setLength(e.target.value)}
+            className={inp}
+            placeholder="48"
+          />
+          <span className="mt-1 block text-xs font-normal text-gray-500">
+            The board opens blank — draw the mainline, then add track, on the canvas.
+          </span>
+        </label>
 
         {error && <p className="rounded-md bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>}
 
