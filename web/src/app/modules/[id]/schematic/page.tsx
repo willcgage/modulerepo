@@ -141,7 +141,11 @@ export default async function ModuleSchematicPage({
         initial={initial}
         hadSchematic={module.schematic != null}
         newModule={isNew === "1"}
-        lockedConfigs={{ a: epA != null, b: epB != null && !initial.loop }}
+        // Endplate rows FOLLOW the schematic now (saveModuleSchematic syncs
+        // track_config on every save), so existing rows no longer lock the
+        // configs — the canvas is the source of truth; rows still SEED the
+        // configs above for legacy modules whose doc predates the sync.
+        lockedConfigs={{ a: false, b: false }}
         geometries={geometries ?? []}
         industryTypes={industryTypes}
         carTypes={carTypes}
