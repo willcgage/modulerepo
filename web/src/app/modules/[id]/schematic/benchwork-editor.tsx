@@ -148,12 +148,23 @@ export function BenchworkEditor({
    * the canvas captures a press-drag and calls onPlaceTrack with the drawn
    * geometry instead of editing the main/spur. */
   pendingTrack?: "siding" | "spur" | null;
-  onPlaceTrack?: (p: {
-    role: "siding" | "spur";
-    fromPos: number;
-    toPos: number;
-    path?: BenchworkPoint[];
-  }) => void;
+  onPlaceTrack?: (
+    p:
+      | {
+          role: "spur";
+          throatTurnoutId: string;
+          fromPos: number;
+          toPos: number;
+          path?: BenchworkPoint[];
+        }
+      | {
+          role: "siding";
+          fromTurnoutId: string;
+          toTurnoutId: string;
+          fromPos: number;
+          toPos: number;
+        },
+  ) => void;
   onCancelPlace?: () => void;
   /** Selection is owned by the editor, which renders the inspector for it. */
   selection?: CanvasSelection | null;
@@ -173,8 +184,8 @@ export function BenchworkEditor({
   >(null);
   /** An in-progress pan: pointer origin + the view at grab time. */
   const panRef = useRef<{ from: Pt; view: ViewBox } | null>(null);
-  /** Draw-to-create in progress: the throat (snapped to the main) + live end. */
-  const placeRef = useRef<{ start: Pt; end: Pt } | null>(null);
+  /** Draw-to-create in progress: the throat turnout it diverges from + live end. */
+  const placeRef = useRef<{ start: Pt; end: Pt; turnoutId: string } | null>(null);
   const [placePreview, setPlacePreview] = useState<{ start: Pt; end: Pt } | null>(null);
   /** Space-to-pan: held-key state, so any tool can pan without switching. */
   const [spaceHeld, setSpaceHeld] = useState(false);
@@ -607,14 +618,15 @@ export function BenchworkEditor({
       panRef.current = { from: toLocal(e), view: { ...vbBox } };
       return;
     }
-    // Draw-to-create (#51): a press starts placing a new siding/spur. Its
-    // throat snaps onto the main; the drag sets the far end.
+    // Draw-to-create (#51): a press starts drawing a new siding/spur from a
+    // turnout. The throat snaps to the nearest turnout on the main; the drag
+    // sets the far end. No turnout to anchor to → nothing happens (the hint
+    // tells the owner to place one first).
     if (pendingTrack && centerline.length >= 2) {
-      const raw = toLocal(e);
-      const m = sampleAt(centerline, posFrom(raw));
-      const start = { x: m.x, y: m.y };
-      placeRef.current = { start, end: raw };
-      setPlacePreview({ start, end: raw });
+      const nt = nearestTurnout(toLocal(e));
+      if (!nt) return;
+      placeRef.current = { start: nt.pt, end: nt.pt, turnoutId: nt.id };
+      setPlacePreview({ start: nt.pt, end: nt.pt });
       svgRef.current?.setPointerCapture?.(e.pointerId);
       return;
     }
@@ -661,22 +673,48 @@ export function BenchworkEditor({
       Math.max(0, Math.min(lengthInches, projectToCenterline(centerline, p).pos)) * 10,
     ) / 10;
 
-  /** Finish a draw-to-create: turn the drawn line into track geometry and hand
-   * it up to the editor, which builds the actual track (#51). */
-  const finishPlacement = (start: Pt, end: Pt) => {
+  /** The turnout nearest a canvas point, by position along the main. */
+  const nearestTurnout = (p: Pt): { id: string; pos: number; pt: Pt } | null => {
+    if (centerline.length < 2 || turnouts.length === 0) return null;
+    const at = posFrom(p);
+    let best: CanvasTurnout | null = null;
+    let bestD = Infinity;
+    for (const tn of turnouts) {
+      const d = Math.abs(tn.pos - at);
+      if (d < bestD) {
+        bestD = d;
+        best = tn;
+      }
+    }
+    if (!best) return null;
+    const m = sampleAt(centerline, best.pos);
+    return { id: best.id, pos: best.pos, pt: { x: m.x, y: m.y } };
+  };
+
+  /** Finish a draw-to-create: turn the drawn line into track geometry, anchored
+   * to its turnout(s), and hand it up to the editor to build (#51). */
+  const finishPlacement = (start: Pt, end: Pt, turnoutId: string) => {
     if (!onPlaceTrack || centerline.length < 2) return;
-    const fromPos = posFrom(start);
     const drawnLen = Math.hypot(end.x - start.x, end.y - start.y);
     if (drawnLen < 2) return; // too short — treat as a mis-click, stay armed
+    const fromPos = posFrom(start);
     if (pendingTrack === "siding") {
-      // A passing siding runs parallel to the main; both ends sit on it.
-      const endPos = posFrom(end);
-      const from = Math.min(fromPos, endPos);
-      const to = Math.max(fromPos, endPos);
-      if (to - from < 2) return;
-      onPlaceTrack({ role: "siding", fromPos: from, toPos: to });
+      // A passing siding connects two turnouts — the far end must land on a
+      // second one (the owner places both first, then draws between them).
+      const to = nearestTurnout(end);
+      if (!to || to.id === turnoutId) {
+        setReadout("Release on a second turnout");
+        return;
+      }
+      onPlaceTrack({
+        role: "siding",
+        fromTurnoutId: turnoutId,
+        toTurnoutId: to.id,
+        fromPos: Math.min(fromPos, to.pos),
+        toPos: Math.max(fromPos, to.pos),
+      });
     } else {
-      // A spur diverges at the throat (on the main) and dead-ends at the stub;
+      // A spur / yard lead diverges at its turnout and dead-ends at the stub;
       // its capacity is the drawn length, laid along the main from the throat.
       const endPos = posFrom(end);
       const dir = endPos >= fromPos ? 1 : -1;
@@ -686,6 +724,7 @@ export function BenchworkEditor({
       );
       onPlaceTrack({
         role: "spur",
+        throatTurnoutId: turnoutId,
         fromPos,
         toPos,
         path: [
@@ -713,7 +752,7 @@ export function BenchworkEditor({
     if (placeRef.current) {
       const pt = toLocal(e);
       setHover(pt);
-      placeRef.current = { start: placeRef.current.start, end: pt };
+      placeRef.current = { ...placeRef.current, end: pt };
       setPlacePreview({ start: placeRef.current.start, end: pt });
       setReadout(
         lengthLabel(Math.hypot(pt.x - placeRef.current.start.x, pt.y - placeRef.current.start.y)),
@@ -827,12 +866,12 @@ export function BenchworkEditor({
   const onUp = (e: React.PointerEvent) => {
     // Draw-to-create: releasing finishes the new track.
     if (placeRef.current) {
-      const { start, end } = placeRef.current;
+      const { start, end, turnoutId } = placeRef.current;
       placeRef.current = null;
       setPlacePreview(null);
       svgRef.current?.releasePointerCapture?.(e.pointerId);
       setReadout(null);
-      finishPlacement(start, end);
+      finishPlacement(start, end, turnoutId);
       return;
     }
     if (panRef.current) {
@@ -1043,11 +1082,19 @@ export function BenchworkEditor({
         ) : tool === "track" ? (
           pendingTrack ? (
             <>
-              <span className="font-medium text-teal-700">
-                {pendingTrack === "siding"
-                  ? "Draw the siding — press on the main and drag to its other end."
-                  : "Draw the spur — press on the main at the throat and drag to the stub end."}
-              </span>
+              {turnouts.length < (pendingTrack === "siding" ? 2 : 1) ? (
+                <span className="font-medium text-amber-700">
+                  {pendingTrack === "siding"
+                    ? "A siding connects two turnouts — place two on the main first (+ Turnout)."
+                    : "A spur diverges from a turnout — place one on the main first (+ Turnout)."}
+                </span>
+              ) : (
+                <span className="font-medium text-teal-700">
+                  {pendingTrack === "siding"
+                    ? "Draw the siding — press on one turnout and drag to another."
+                    : "Draw the spur — press on the turnout and drag out to the stub end."}
+                </span>
+              )}
               <button type="button" onClick={onCancelPlace} className={btn}>
                 Cancel
               </button>

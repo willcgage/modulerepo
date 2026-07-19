@@ -8,7 +8,7 @@ Headings are `version — date` (YYYY-MM-DD).
 ## v0.15.4 — 2026-07-18
 
 ### Changed
-- **Draw sidings & spurs** — picking **Siding** or **Spur** from the **+ Track** menu now lets you **draw** the track (press on the main, drag to the far end) instead of dropping one at a default spot. A siding snaps both ends onto the main; a spur runs from its throat on the main out to where you release. **Esc** or **Cancel** aborts. Then shape it with the Track tool as before.
+- **Draw sidings & spurs from a turnout** — a siding or spur now diverges from a **turnout** you place on the main first, instead of dropping at a default spot. Place a turnout, then pick **Spur** and drag out from it to the stub, or pick **Siding** and drag from one turnout to another. The **+ Track** menu keeps Spur/Siding disabled until enough turnouts exist (one for a spur, two for a siding). **Esc** or **Cancel** aborts; shape the track with the Track tool afterwards.
 
 ## v0.15.3 — 2026-07-18
 

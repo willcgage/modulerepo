@@ -6,7 +6,6 @@ import {
   MAIN_TRACK_ID,
   MAIN2_TRACK_ID,
   stateToDoc,
-  buildPassingSiding,
   buildTransition,
   buildCrossover,
   isTransitionTurnout,
@@ -373,50 +372,77 @@ export function SchematicEditor({
     setPendingTrack("spur");
     setTool("track");
   }
-  /** Build a passing siding, then slide its whole feature (track + turnouts +
-   * signals) onto the drawn span — a linear remap of every along-main position
-   * from the builder's default span to [fromPos, toPos]. Structure-agnostic. */
-  function placeSiding(fromPos: number, toPos: number) {
+  const nextLane = (s: EditorState) => {
+    // Lane 1 is Main 2 on a double module; first free lane is above it.
+    const base = s.configA === "double" || s.configB === "double" ? 2 : 1;
+    return Math.max(base, ...s.extraTracks.map((t) => t.lane + 1));
+  };
+  /** A spur / yard lead diverging from `throatTurnoutId`, drawn out to a stub. */
+  function placeSpur(
+    throatTurnoutId: string,
+    fromPos: number,
+    toPos: number,
+    path: BenchworkPoint[],
+  ) {
     patch((s) => {
-      const { track, turnouts, controlPoints } = buildPassingSiding(s);
-      const of = track.fromPos;
-      const span = track.toPos - of || 1;
-      const map = (p: number) =>
-        Math.round((fromPos + ((p - of) / span) * (toPos - fromPos)) * 10) / 10;
-      track.fromPos = map(track.fromPos);
-      track.toPos = map(track.toPos);
-      turnouts.forEach((t) => (t.pos = map(t.pos)));
-      controlPoints.forEach((c) => c.signals.forEach((sig) => (sig.pos = map(sig.pos))));
-      s.extraTracks.push(track);
-      s.turnouts.push(...turnouts);
-      s.controlPoints.push(...controlPoints);
-    });
-  }
-  function placeSpur(fromPos: number, toPos: number, path: BenchworkPoint[]) {
-    patch((s) => {
-      // Lane 1 is Main 2 on a double module; first free lane is above it.
-      const base = s.configA === "double" || s.configB === "double" ? 2 : 1;
-      const lane = Math.max(base, ...s.extraTracks.map((t) => t.lane + 1));
+      const id = nextId("spur", s.extraTracks.map((t) => t.id));
       s.extraTracks.push({
-        id: nextId("spur", s.extraTracks.map((t) => t.id)),
+        id,
         role: "spur",
-        lane,
+        lane: nextLane(s),
         fromPos,
         toPos,
         ...(path.length >= 2 ? { path } : {}),
         moduleTrackId: null,
         trackName: "",
       });
+      // Link the throat turnout to the new spur so it reads (and snaps) as one.
+      const tn = s.turnouts.find((t) => t.id === throatTurnoutId);
+      if (tn) tn.divergeTrack = id;
     });
   }
-  const onPlaceTrack = (p: {
-    role: "siding" | "spur";
-    fromPos: number;
-    toPos: number;
-    path?: BenchworkPoint[];
-  }) => {
-    if (p.role === "siding") placeSiding(p.fromPos, p.toPos);
-    else placeSpur(p.fromPos, p.toPos, p.path ?? []);
+  /** A passing siding drawn between two already-placed turnouts. */
+  function placeSiding(
+    fromTurnoutId: string,
+    toTurnoutId: string,
+    fromPos: number,
+    toPos: number,
+  ) {
+    patch((s) => {
+      const id = nextId("sid", s.extraTracks.map((t) => t.id));
+      s.extraTracks.push({
+        id,
+        role: "siding",
+        lane: nextLane(s),
+        fromPos,
+        toPos,
+        moduleTrackId: null,
+        trackName: "Passing siding",
+      });
+      // Both turnouts now diverge to this siding.
+      for (const t of s.turnouts)
+        if (t.id === fromTurnoutId || t.id === toTurnoutId) t.divergeTrack = id;
+    });
+  }
+  const onPlaceTrack = (
+    p:
+      | {
+          role: "spur";
+          throatTurnoutId: string;
+          fromPos: number;
+          toPos: number;
+          path?: BenchworkPoint[];
+        }
+      | {
+          role: "siding";
+          fromTurnoutId: string;
+          toTurnoutId: string;
+          fromPos: number;
+          toPos: number;
+        },
+  ) => {
+    if (p.role === "siding") placeSiding(p.fromTurnoutId, p.toTurnoutId, p.fromPos, p.toPos);
+    else placeSpur(p.throatTurnoutId, p.fromPos, p.toPos, p.path ?? []);
     setPendingTrack(null);
   };
   function addCrossover() {
@@ -672,6 +698,7 @@ export function SchematicEditor({
       mainlineDouble={isDouble}
       mainlineLocked={lockedConfigs.a || lockedConfigs.b}
       canCrossover={canCrossover}
+      turnoutCount={state.turnouts.length}
       align="left"
     />
   );
@@ -2127,6 +2154,7 @@ function AddTrackMenu({
   mainlineDouble,
   mainlineLocked,
   canCrossover,
+  turnoutCount,
   align = "right",
 }: {
   add: {
@@ -2138,6 +2166,7 @@ function AddTrackMenu({
   mainlineDouble: boolean;
   mainlineLocked: boolean;
   canCrossover: boolean;
+  turnoutCount: number;
   align?: "left" | "right";
 }) {
   const [open, setOpen] = useState(false);
@@ -2171,12 +2200,29 @@ function AddTrackMenu({
               </div>
             )}
             <div className="my-1 border-t border-gray-100" />
-            <button type="button" className={item} onClick={() => run(add.passingSiding)}>
+            <button
+              type="button"
+              className={item}
+              disabled={turnoutCount < 2}
+              onClick={() => run(add.passingSiding)}
+            >
               Siding
             </button>
-            <button type="button" className={item} onClick={() => run(add.spur)}>
+            <button
+              type="button"
+              className={item}
+              disabled={turnoutCount < 1}
+              onClick={() => run(add.spur)}
+            >
               Spur / Yard
             </button>
+            {turnoutCount < 2 && (
+              <div className="px-2 py-0.5 text-[10px] text-gray-400">
+                {turnoutCount < 1
+                  ? "Add a turnout first — sidings & spurs diverge from one."
+                  : "A siding needs a second turnout."}
+              </div>
+            )}
             {canCrossover && (
               <button type="button" className={item} onClick={() => run(add.crossover)}>
                 Crossover
@@ -2268,6 +2314,7 @@ function ObjectsList({
             mainlineDouble={mainlineDouble}
             mainlineLocked={mainlineLocked}
             canCrossover={canCrossover}
+            turnoutCount={state.turnouts.length}
           />
         }
       >
