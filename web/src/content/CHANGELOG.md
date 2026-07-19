@@ -5,6 +5,11 @@ Headings are `version — date` (YYYY-MM-DD).
 
 ---
 
+## v0.15.14 — 2026-07-19
+
+### Fixed
+- **Drop a turnout on a spur** — with the **W** tool, clicking a spur now drops a turnout on it instead of just selecting the spur, so house-track turnouts work again.
+
 ## v0.15.13 — 2026-07-19
 
 ### Added
