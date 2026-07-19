@@ -5,6 +5,11 @@ Headings are `version — date` (YYYY-MM-DD).
 
 ---
 
+## v0.15.23 — 2026-07-19
+
+### Changed
+- **Prominent switch nodes** — a turnout now shows clear white **snap circles** at its points (where the diverging route leaves the main) and at its frog, so a switch reads as connected sections meeting at the round node, like a track plan.
+
 ## v0.15.22 — 2026-07-19
 
 ### Fixed
