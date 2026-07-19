@@ -5,6 +5,11 @@ Headings are `version — date` (YYYY-MM-DD).
 
 ---
 
+## v0.15.27 — 2026-07-19
+
+### Added
+- **Crossovers** — the palette's **single LH, single RH, and double (scissors) crossover** glyphs are now live. Drop one on the main: the side you drop on picks where the parallel lane goes, a turnout lands on each track with the **diagonal connector** between them (sized by the frog # — the diagonal crosses one track-spacing at the frog angle), and if a parallel track already covers that spot it's **reused** (a siding, say); otherwise a short parallel stub appears for you to **draw out to length**.
+
 ## v0.15.26 — 2026-07-19
 
 ### Changed
