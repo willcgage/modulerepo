@@ -5,6 +5,11 @@ Headings are `version — date` (YYYY-MM-DD).
 
 ---
 
+## v0.15.10 — 2026-07-18
+
+### Changed
+- **Cleaner track & switches** — track now draws as a simple **outlined band** with **no ties**, and a turnout shows its **points and frog** through the band geometry with small node markers instead of the old triangle symbols.
+
 ## v0.15.9 — 2026-07-18
 
 ### Changed
