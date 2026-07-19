@@ -5,6 +5,11 @@ Headings are `version — date` (YYYY-MM-DD).
 
 ---
 
+## v0.15.6 — 2026-07-18
+
+### Fixed
+- **Drag a drawn spur to resize or reorient it** — a spur/siding you drew is now grab-and-drag editable with the **Select** tool too, not only the Track tool. Select it and drag its stub end to lengthen, shorten, or swing it; its throat stays on the turnout.
+
 ## v0.15.5 — 2026-07-18
 
 ### Added

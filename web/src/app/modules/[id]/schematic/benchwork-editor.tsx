@@ -526,8 +526,16 @@ export function BenchworkEditor({
 
   // --- Spur path editing (Track tool) — the selected editable spur ------------
   const editSpurTrack =
-    tool === "track" && selection?.kind === "track"
-      ? tracks.find((t) => t.id === selection.id && t.editable)
+    selection?.kind === "track" && (tool === "track" || tool === "select")
+      ? tracks.find(
+          (t) =>
+            t.id === selection.id &&
+            t.editable &&
+            // In Select, only a *drawn* spur (with a path) gets reshape handles,
+            // so you can drag it to resize/reorient; a plain spur keeps its
+            // along-main ○ end handles. In Track, any editable spur is shapeable.
+            (tool === "track" || (t.path != null && t.path.length >= 2)),
+        )
       : undefined;
   /** The throat point (on the main at the spur's turnout), or null. */
   const spurThroat = (t: CanvasTrack): Pt | null => {
