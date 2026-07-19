@@ -603,10 +603,9 @@ export function SchematicEditor({
     const sw2 = nextId("sw", [...swIds, sw1]);
     const sw3 = nextId("sw", [...swIds, sw1, sw2]);
     const sw4 = nextId("sw", [...swIds, sw1, sw2, sw3]);
-    // Turnout positions on the parallel track are measured along ITS polyline.
+    // Turnout positions are ABSOLUTE (inches from A) everywhere — the canvas
+    // converts to host-relative when sampling the parallel track's polyline.
     const stubFrom = existing ? existing.fromPos : Math.max(0, Math.round((p.posA - 6) * 10) / 10);
-    const relA = Math.round((p.posA - stubFrom) * 10) / 10;
-    const relB = Math.round((p.posB - stubFrom) * 10) / 10;
     // The hand is the way the diagonal throws facing B: diverging left with the
     // parallel above means the diagonal runs forward; below, backward.
     const forward = p.double ? true : (p.side > 0) === (p.hand === "left");
@@ -641,14 +640,14 @@ export function SchematicEditor({
         conn(xoB, false);
         // Host-side turnout FIRST per connector — the canvas draws its leg.
         swp(sw1, p.posA, MAIN_TRACK_ID, xoA, p.side > 0 ? "left" : "right");
-        swp(sw2, relB, parId, xoA, p.side > 0 ? "right" : "left");
+        swp(sw2, p.posB, parId, xoA, p.side > 0 ? "right" : "left");
         swp(sw3, p.posB, MAIN_TRACK_ID, xoB, p.side > 0 ? "right" : "left");
-        swp(sw4, relA, parId, xoB, p.side > 0 ? "left" : "right");
+        swp(sw4, p.posA, parId, xoB, p.side > 0 ? "left" : "right");
       } else {
         conn(xoA, forward);
         const hand = p.hand ?? "left";
         swp(sw1, forward ? p.posA : p.posB, MAIN_TRACK_ID, xoA, hand);
-        swp(sw2, forward ? relB : relA, parId, xoA, opp(hand));
+        swp(sw2, forward ? p.posB : p.posA, parId, xoA, opp(hand));
       }
     });
     // Select the parallel track — its ends are what the owner draws out next.
