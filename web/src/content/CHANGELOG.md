@@ -5,6 +5,11 @@ Headings are `version — date` (YYYY-MM-DD).
 
 ---
 
+## v0.15.4 — 2026-07-18
+
+### Changed
+- **Draw sidings & spurs** — picking **Siding** or **Spur** from the **+ Track** menu now lets you **draw** the track (press on the main, drag to the far end) instead of dropping one at a default spot. A siding snaps both ends onto the main; a spur runs from its throat on the main out to where you release. **Esc** or **Cancel** aborts. Then shape it with the Track tool as before.
+
 ## v0.15.3 — 2026-07-18
 
 ### Changed

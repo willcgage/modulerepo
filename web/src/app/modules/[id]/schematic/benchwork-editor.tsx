@@ -107,6 +107,9 @@ export function BenchworkEditor({
   onMainPathChange,
   onTrackPathChange,
   trackMenu,
+  pendingTrack = null,
+  onPlaceTrack,
+  onCancelPlace,
   selection = null,
   onSelect,
   tool = "select",
@@ -141,6 +144,17 @@ export function BenchworkEditor({
   onTrackPathChange?: (id: string, next: BenchworkPoint[]) => void;
   /** The "+ Track" add menu (owned by the editor) — shown on the Track tool. */
   trackMenu?: React.ReactNode;
+  /** Draw-to-create (#51): a track role armed by the + Track menu. When set,
+   * the canvas captures a press-drag and calls onPlaceTrack with the drawn
+   * geometry instead of editing the main/spur. */
+  pendingTrack?: "siding" | "spur" | null;
+  onPlaceTrack?: (p: {
+    role: "siding" | "spur";
+    fromPos: number;
+    toPos: number;
+    path?: BenchworkPoint[];
+  }) => void;
+  onCancelPlace?: () => void;
   /** Selection is owned by the editor, which renders the inspector for it. */
   selection?: CanvasSelection | null;
   onSelect?: (s: CanvasSelection | null) => void;
@@ -159,6 +173,9 @@ export function BenchworkEditor({
   >(null);
   /** An in-progress pan: pointer origin + the view at grab time. */
   const panRef = useRef<{ from: Pt; view: ViewBox } | null>(null);
+  /** Draw-to-create in progress: the throat (snapped to the main) + live end. */
+  const placeRef = useRef<{ start: Pt; end: Pt } | null>(null);
+  const [placePreview, setPlacePreview] = useState<{ start: Pt; end: Pt } | null>(null);
   /** Space-to-pan: held-key state, so any tool can pan without switching. */
   const [spaceHeld, setSpaceHeld] = useState(false);
   /** Pointer position in world inches — drives the status-bar readout. */
@@ -590,6 +607,17 @@ export function BenchworkEditor({
       panRef.current = { from: toLocal(e), view: { ...vbBox } };
       return;
     }
+    // Draw-to-create (#51): a press starts placing a new siding/spur. Its
+    // throat snaps onto the main; the drag sets the far end.
+    if (pendingTrack && centerline.length >= 2) {
+      const raw = toLocal(e);
+      const m = sampleAt(centerline, posFrom(raw));
+      const start = { x: m.x, y: m.y };
+      placeRef.current = { start, end: raw };
+      setPlacePreview({ start, end: raw });
+      svgRef.current?.setPointerCapture?.(e.pointerId);
+      return;
+    }
     // Industry tool: a background click drops an industry on the main here.
     if (tool === "industry") {
       if (onAddIndustry && centerline.length >= 2) onAddIndustry("main", posFrom(toLocal(e)));
@@ -633,6 +661,41 @@ export function BenchworkEditor({
       Math.max(0, Math.min(lengthInches, projectToCenterline(centerline, p).pos)) * 10,
     ) / 10;
 
+  /** Finish a draw-to-create: turn the drawn line into track geometry and hand
+   * it up to the editor, which builds the actual track (#51). */
+  const finishPlacement = (start: Pt, end: Pt) => {
+    if (!onPlaceTrack || centerline.length < 2) return;
+    const fromPos = posFrom(start);
+    const drawnLen = Math.hypot(end.x - start.x, end.y - start.y);
+    if (drawnLen < 2) return; // too short — treat as a mis-click, stay armed
+    if (pendingTrack === "siding") {
+      // A passing siding runs parallel to the main; both ends sit on it.
+      const endPos = posFrom(end);
+      const from = Math.min(fromPos, endPos);
+      const to = Math.max(fromPos, endPos);
+      if (to - from < 2) return;
+      onPlaceTrack({ role: "siding", fromPos: from, toPos: to });
+    } else {
+      // A spur diverges at the throat (on the main) and dead-ends at the stub;
+      // its capacity is the drawn length, laid along the main from the throat.
+      const endPos = posFrom(end);
+      const dir = endPos >= fromPos ? 1 : -1;
+      const toPos = Math.max(
+        0,
+        Math.min(lengthInches, Math.round((fromPos + dir * drawnLen) * 10) / 10),
+      );
+      onPlaceTrack({
+        role: "spur",
+        fromPos,
+        toPos,
+        path: [
+          { x: round(start.x), y: round(start.y) },
+          { x: round(end.x), y: round(end.y) },
+        ],
+      });
+    }
+  };
+
   const onMove = (e: React.PointerEvent) => {
     // Panning: translate the view by the pointer delta (in world inches).
     const pan = panRef.current;
@@ -643,6 +706,18 @@ export function BenchworkEditor({
         minX: pan.view.minX - (now.x - pan.from.x),
         minY: pan.view.minY - (now.y - pan.from.y),
       });
+      return;
+    }
+
+    // Draw-to-create: track the pointer as the far end of the new track.
+    if (placeRef.current) {
+      const pt = toLocal(e);
+      setHover(pt);
+      placeRef.current = { start: placeRef.current.start, end: pt };
+      setPlacePreview({ start: placeRef.current.start, end: pt });
+      setReadout(
+        lengthLabel(Math.hypot(pt.x - placeRef.current.start.x, pt.y - placeRef.current.start.y)),
+      );
       return;
     }
 
@@ -750,6 +825,16 @@ export function BenchworkEditor({
     commit(next);
   };
   const onUp = (e: React.PointerEvent) => {
+    // Draw-to-create: releasing finishes the new track.
+    if (placeRef.current) {
+      const { start, end } = placeRef.current;
+      placeRef.current = null;
+      setPlacePreview(null);
+      svgRef.current?.releasePointerCapture?.(e.pointerId);
+      setReadout(null);
+      finishPlacement(start, end);
+      return;
+    }
     if (panRef.current) {
       svgRef.current?.releasePointerCapture?.(e.pointerId);
       panRef.current = null;
@@ -956,28 +1041,41 @@ export function BenchworkEditor({
             name and cars in the inspector.
           </span>
         ) : tool === "track" ? (
-          <>
-            {trackMenu}
-            {!editSpurTrack && mainPath.length >= 2 && onMainPathChange && (
-              <button type="button" onClick={() => onMainPathChange([])} className={btn}>
-                Straighten
+          pendingTrack ? (
+            <>
+              <span className="font-medium text-teal-700">
+                {pendingTrack === "siding"
+                  ? "Draw the siding — press on the main and drag to its other end."
+                  : "Draw the spur — press on the main at the throat and drag to the stub end."}
+              </span>
+              <button type="button" onClick={onCancelPlace} className={btn}>
+                Cancel
               </button>
-            )}
-            {editSpurTrack?.path && editSpurTrack.path.length >= 2 && onTrackPathChange && (
-              <button
-                type="button"
-                onClick={() => onTrackPathChange(editSpurTrack.id, [])}
-                className={btn}
-              >
-                Un-draw
-              </button>
-            )}
-            <span className="text-gray-500">
-              {editSpurTrack
-                ? "Drag the spur's points ○ to bend/rotate (◇ to curve · Alt-click to remove). The throat stays on its turnout."
-                : "Drag the mainline's points ○ · edge ◇ to curve · click the line to add a bend · Alt-click to remove. Click a siding or spur to edit it."}
-            </span>
-          </>
+            </>
+          ) : (
+            <>
+              {trackMenu}
+              {!editSpurTrack && mainPath.length >= 2 && onMainPathChange && (
+                <button type="button" onClick={() => onMainPathChange([])} className={btn}>
+                  Straighten
+                </button>
+              )}
+              {editSpurTrack?.path && editSpurTrack.path.length >= 2 && onTrackPathChange && (
+                <button
+                  type="button"
+                  onClick={() => onTrackPathChange(editSpurTrack.id, [])}
+                  className={btn}
+                >
+                  Un-draw
+                </button>
+              )}
+              <span className="text-gray-500">
+                {editSpurTrack
+                  ? "Drag the spur's points ○ to bend/rotate (◇ to curve · Alt-click to remove). The throat stays on its turnout."
+                  : "Drag the mainline's points ○ · edge ◇ to curve · click the line to add a bend · Alt-click to remove. Click a siding or spur to edit it."}
+              </span>
+            </>
+          )
         ) : (
           <span className="text-gray-500">
             Click anything to select it · drag a turnout ● or a siding&rsquo;s end ○
@@ -1335,7 +1433,7 @@ export function BenchworkEditor({
         ))}
 
         {/* --- Mainline edit handles (Track tool, no spur selected) — bend/drag the main --- */}
-        {tool === "track" && !editSpurTrack && editMain.length >= 2 && (
+        {tool === "track" && !editSpurTrack && !pendingTrack && editMain.length >= 2 && (
           <>
             {editMain.slice(0, -1).map((_, i) => {
               const h = mainEdgeHandle(i);
@@ -1381,7 +1479,7 @@ export function BenchworkEditor({
         )}
 
         {/* --- Spur edit handles (Track tool) — bend/rotate the selected spur --- */}
-        {editSpurTrack && editSpur.length >= 2 && (
+        {editSpurTrack && !pendingTrack && editSpur.length >= 2 && (
           <>
             {editSpur.slice(0, -1).map((_, i) => {
               const h = spurEdgeHandle(editSpur, i);
@@ -1424,6 +1522,29 @@ export function BenchworkEditor({
               </circle>
             ))}
           </>
+        )}
+
+        {/* --- Draw-to-create preview (#51) — rubber-band from throat to stub --- */}
+        {placePreview && (
+          <g pointerEvents="none">
+            <line
+              x1={placePreview.start.x}
+              y1={sy(placePreview.start.y)}
+              x2={placePreview.end.x}
+              y2={sy(placePreview.end.y)}
+              stroke="#0f766e"
+              strokeWidth={world(1.5)}
+              strokeDasharray={`${world(2)} ${world(1.5)}`}
+            />
+            <circle
+              cx={placePreview.start.x}
+              cy={sy(placePreview.start.y)}
+              r={r}
+              fill="#99f6e4"
+              stroke="#0f766e"
+              strokeWidth={r * 0.4}
+            />
+          </g>
         )}
 
         {/* --- Dimension callouts: the board's overall W × H, drafting-style --- */}

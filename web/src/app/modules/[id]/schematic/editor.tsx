@@ -16,6 +16,7 @@ import {
   nextId,
   inchesToScaleFeet,
   carCapacity,
+  type BenchworkPoint,
   type EditorState,
   type TrackRole,
   type TurnoutKind,
@@ -117,6 +118,9 @@ export function SchematicEditor({
   const [selection, setSelection] = useState<Selection | null>(null);
   /** What a canvas background click means. */
   const [tool, setTool] = useState<CanvasTool>("select");
+  /** Draw-to-create: a track role armed from the + Track menu, waiting to be
+   * drawn on the canvas (#51). null = not placing. */
+  const [pendingTrack, setPendingTrack] = useState<"siding" | "spur" | null>(null);
   /** Car-type choices, seeded from the server + grown by suggestions. */
   const [carTypeOptions, setCarTypeOptions] = useState<CarTypeOption[]>(carTypes);
   const addCarTypeOption = (o: CarTypeOption) =>
@@ -357,15 +361,38 @@ export function SchematicEditor({
       else delete s.endplateWidths[id];
     });
 
-  function addPassingSiding() {
+  // --- Draw-to-create sidings & spurs (#51) ---------------------------------
+  // Picking Siding/Spur from the + Track menu no longer drops a track at a
+  // default spot — it arms placement and the canvas captures the draw, which
+  // calls onPlaceTrack below with the drawn geometry.
+  function armSiding() {
+    setPendingTrack("siding");
+    setTool("track");
+  }
+  function armSpur() {
+    setPendingTrack("spur");
+    setTool("track");
+  }
+  /** Build a passing siding, then slide its whole feature (track + turnouts +
+   * signals) onto the drawn span — a linear remap of every along-main position
+   * from the builder's default span to [fromPos, toPos]. Structure-agnostic. */
+  function placeSiding(fromPos: number, toPos: number) {
     patch((s) => {
       const { track, turnouts, controlPoints } = buildPassingSiding(s);
+      const of = track.fromPos;
+      const span = track.toPos - of || 1;
+      const map = (p: number) =>
+        Math.round((fromPos + ((p - of) / span) * (toPos - fromPos)) * 10) / 10;
+      track.fromPos = map(track.fromPos);
+      track.toPos = map(track.toPos);
+      turnouts.forEach((t) => (t.pos = map(t.pos)));
+      controlPoints.forEach((c) => c.signals.forEach((sig) => (sig.pos = map(sig.pos))));
       s.extraTracks.push(track);
       s.turnouts.push(...turnouts);
       s.controlPoints.push(...controlPoints);
     });
   }
-  function addSpur() {
+  function placeSpur(fromPos: number, toPos: number, path: BenchworkPoint[]) {
     patch((s) => {
       // Lane 1 is Main 2 on a double module; first free lane is above it.
       const base = s.configA === "double" || s.configB === "double" ? 2 : 1;
@@ -374,13 +401,24 @@ export function SchematicEditor({
         id: nextId("spur", s.extraTracks.map((t) => t.id)),
         role: "spur",
         lane,
-        fromPos: Math.round(s.lengthInches * 0.4),
-        toPos: Math.round(s.lengthInches * 0.7),
+        fromPos,
+        toPos,
+        ...(path.length >= 2 ? { path } : {}),
         moduleTrackId: null,
         trackName: "",
       });
     });
   }
+  const onPlaceTrack = (p: {
+    role: "siding" | "spur";
+    fromPos: number;
+    toPos: number;
+    path?: BenchworkPoint[];
+  }) => {
+    if (p.role === "siding") placeSiding(p.fromPos, p.toPos);
+    else placeSpur(p.fromPos, p.toPos, p.path ?? []);
+    setPendingTrack(null);
+  };
   function addCrossover() {
     patch((s) => {
       const built = buildCrossover(s);
@@ -579,7 +617,10 @@ export function SchematicEditor({
         else if (e.key === "b" || e.key === "B") setTool("benchwork");
         else if (e.key === "t" || e.key === "T") setTool("track");
         else if (e.key === "i" || e.key === "I") setTool("industry");
-        else if (e.key === "Escape") setSelection(null);
+        else if (e.key === "Escape") {
+          setSelection(null);
+          setPendingTrack(null);
+        }
       }
     };
     window.addEventListener("keydown", onKey);
@@ -614,8 +655,8 @@ export function SchematicEditor({
   // Shared "+ Track" wiring — used both on the Track drawing tool (canvas
   // context bar) and in the Objects list.
   const trackAdd = {
-    passingSiding: addPassingSiding,
-    spur: addSpur,
+    passingSiding: armSiding,
+    spur: armSpur,
     crossover: addCrossover,
     mainline: (config: "single" | "double") =>
       patch((s) => {
@@ -738,6 +779,9 @@ export function SchematicEditor({
                 }
                 onAddIndustry={addIndustryAt}
                 trackMenu={trackMenu}
+                pendingTrack={pendingTrack}
+                onPlaceTrack={onPlaceTrack}
+                onCancelPlace={() => setPendingTrack(null)}
                 onTrackPathChange={(id, path) =>
                   patch((s) => {
                     const t = s.extraTracks.find((x) => x.id === id);
