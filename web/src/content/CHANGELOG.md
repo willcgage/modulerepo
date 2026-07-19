@@ -5,6 +5,11 @@ Headings are `version — date` (YYYY-MM-DD).
 
 ---
 
+## v0.15.26 — 2026-07-19
+
+### Changed
+- **True 2-way wyes** — the straight main no longer draws through a wye; the two mirrored legs take over where it splits, so it reads as a real Y. (The main stays the coordinate spine underneath.)
+
 ## v0.15.25 — 2026-07-19
 
 ### Changed
