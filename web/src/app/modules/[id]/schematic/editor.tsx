@@ -2422,6 +2422,50 @@ function Inspector({
           </div>
         </label>
       </div>
+      {/* Promote a parallel lane-1 track to MAIN 2 — the module becomes double
+          track (both endplates), Main 2 runs endplate to endplate, and
+          everything attached to this track moves onto it (#double-mainline). */}
+      {t.lane === 1 &&
+        !(t.path && t.path.length >= 2) &&
+        t.role !== "spur" &&
+        t.role !== "crossover" &&
+        state.configA !== "double" &&
+        state.configB !== "double" &&
+        !state.loop &&
+        !lockedConfigs.a &&
+        !lockedConfigs.b && (
+          <button
+            type="button"
+            onClick={() => {
+              patch((s) => {
+                const tr = s.extraTracks.find((x) => x.id === t.id);
+                if (!tr) return;
+                s.configA = "double";
+                s.configB = "double";
+                for (const sw of s.turnouts) {
+                  if (sw.onTrack === tr.id) sw.onTrack = MAIN2_TRACK_ID;
+                  if (sw.divergeTrack === tr.id) sw.divergeTrack = MAIN2_TRACK_ID;
+                }
+                for (const ind of s.industries) {
+                  if (ind.track === tr.id) ind.track = MAIN2_TRACK_ID;
+                  for (const sp of ind.spots) if (sp.track === tr.id) sp.track = MAIN2_TRACK_ID;
+                }
+                for (const x of s.crossings) {
+                  if (x.trackA === tr.id) x.trackA = MAIN2_TRACK_ID;
+                  if (x.trackB === tr.id) x.trackB = MAIN2_TRACK_ID;
+                }
+                for (const cp of s.controlPoints)
+                  for (const sig of cp.signals) if (sig.track === tr.id) sig.track = MAIN2_TRACK_ID;
+                s.extraTracks.splice(s.extraTracks.findIndex((x) => x.id === tr.id), 1);
+              });
+              select(null);
+            }}
+            className="w-full rounded-md border border-blue-300 bg-blue-50 px-3 py-1.5 text-xs font-medium text-blue-700 hover:bg-blue-100"
+            title="Both endplates become double-track; Main 2 runs endplate to endplate, and everything on this track (turnouts, industries, signals) moves onto it."
+          >
+            Make this the second main (double mainline)
+          </button>
+        )}
       {state.loop && (
         <label className="flex items-center gap-2 text-xs text-gray-700">
           <input

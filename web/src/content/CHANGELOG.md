@@ -5,6 +5,11 @@ Headings are `version — date` (YYYY-MM-DD).
 
 ---
 
+## v0.15.32 — 2026-07-19
+
+### Added
+- **Make a parallel track the second main.** A plain lane-1 track (your merged crossover parallel, say) now has a **"Make this the second main (double mainline)"** button in its inspector: both endplates become double-track, **Main 2 runs endplate to endplate**, and everything attached — turnouts, industries, signals — moves onto it. (Hidden when the endplate records lock the config, on loops, or if the main is already double.)
+
 ## v0.15.31 — 2026-07-19
 
 ### Changed
