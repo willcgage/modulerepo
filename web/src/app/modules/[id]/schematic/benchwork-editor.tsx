@@ -296,6 +296,7 @@ export function BenchworkEditor({
   onDropCrossover,
   onDropSignal,
   onTrackEndDrop,
+  onTurnoutDrop,
   turnoutSize = 6,
   onTurnoutSizeChange,
   selection = null,
@@ -386,8 +387,12 @@ export function BenchworkEditor({
    * the main (inches from A) (#53). */
   onDropSignal?: (pos: number) => void;
   /** Fired when a track-end drag is released — the editor merges the track into
-   * one with any same-lane track it now abuts (the snap makes ends meet). */
+   * one with any same-lane track it now abuts (the snap makes ends meet), and
+   * reflects endplate contact (a track ON a plate = a double-track plate). */
   onTrackEndDrop?: (id: string) => void;
+  /** Fired when a turnout drag is released — an End-of-Double-Track turnout
+   * dragged onto the single end's plate completes the double main. */
+  onTurnoutDrop?: (id: string) => void;
   /** The frog number the Turnout tool drops (governs the diverging angle). */
   turnoutSize?: number;
   onTurnoutSizeChange?: (size: number) => void;
@@ -1565,8 +1570,12 @@ export function BenchworkEditor({
       panRef.current = null;
     }
     // Releasing a track-end drag: the editor merges the track with any same-lane
-    // track it now abuts (the snap made the ends meet exactly) into ONE track.
+    // track it now abuts (the snap made the ends meet exactly) into ONE track,
+    // and reflects endplate contact (a track ON a plate = a double-track plate).
     if (dragRef.current?.kind === "trackEnd") onTrackEndDrop?.(dragRef.current.id);
+    // Releasing a turnout drag: an End-of-Double-Track turnout dragged onto the
+    // single end's plate completes the double main (the editor flips the config).
+    if (dragRef.current?.kind === "turnout") onTurnoutDrop?.(dragRef.current.id);
     dragRef.current = null;
     setReadout(null);
   };

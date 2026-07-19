@@ -5,6 +5,11 @@ Headings are `version — date` (YYYY-MM-DD).
 
 ---
 
+## v0.15.33 — 2026-07-19
+
+### Changed
+- **A track on an endplate makes it a double-track endplate.** Drag a parallel track's end onto an endplate and the module reflects it automatically (so modules snap together correctly downstream): that plate flips to double and the track becomes **Main 2**. Touch one plate and you get a proper **transition module** — the End of Double Track turnout and control point land exactly where your track ended. Then drag that turnout onto the far plate to complete the full double main. (Endplate records stay authoritative — locked configs are never overridden.)
+
 ## v0.15.32 — 2026-07-19
 
 ### Added

@@ -660,13 +660,31 @@ export function SchematicEditor({
    * the other record is removed. Spurs (throat-directional) and crossover
    * connectors are never merged. */
   const mergeAbutting = (id: string) => {
-    let survivor: string | null = null;
+    let select: { kind: "track"; id: string } | null = null;
     patch((s) => {
-      const eps = 0.05;
+      /** Re-point every reference from one track id to another. */
+      const repoint = (from: string, to: string) => {
+        for (const sw of s.turnouts) {
+          if (sw.onTrack === from) sw.onTrack = to;
+          if (sw.divergeTrack === from) sw.divergeTrack = to;
+        }
+        for (const ind of s.industries) {
+          if (ind.track === from) ind.track = to;
+          for (const sp of ind.spots) if (sp.track === from) sp.track = to;
+        }
+        for (const x of s.crossings) {
+          if (x.trackA === from) x.trackA = to;
+          if (x.trackB === from) x.trackB = to;
+        }
+        for (const cp of s.controlPoints)
+          for (const sig of cp.signals) if (sig.track === from) sig.track = to;
+      };
       const plain = (t: (typeof s.extraTracks)[number]) =>
         !(t.path && t.path.length >= 2) && t.role !== "spur" && t.role !== "crossover";
       const A = s.extraTracks.find((t) => t.id === id);
       if (!A || !plain(A)) return;
+      // ---- Merge: joined tracks become ONE track ------------------------------
+      const eps = 0.05;
       const B = s.extraTracks.find(
         (t) =>
           t.id !== A.id &&
@@ -676,32 +694,88 @@ export function SchematicEditor({
             (e) => Math.abs(e - A.fromPos) < eps || Math.abs(e - A.toPos) < eps,
           ),
       );
-      if (!B) return;
-      const lo = Math.min(A.fromPos, A.toPos, B.fromPos, B.toPos);
-      const hi = Math.max(A.fromPos, A.toPos, B.fromPos, B.toPos);
-      A.fromPos = Math.round(lo * 10) / 10;
-      A.toPos = Math.round(hi * 10) / 10;
-      if (!A.trackName && B.trackName) A.trackName = B.trackName;
-      // Keep the DB row linkage if the survivor doesn't have one yet.
-      if (A.moduleTrackId == null && B.moduleTrackId != null) A.moduleTrackId = B.moduleTrackId;
-      for (const sw of s.turnouts) {
-        if (sw.onTrack === B.id) sw.onTrack = A.id;
-        if (sw.divergeTrack === B.id) sw.divergeTrack = A.id;
+      if (B) {
+        const lo = Math.min(A.fromPos, A.toPos, B.fromPos, B.toPos);
+        const hi = Math.max(A.fromPos, A.toPos, B.fromPos, B.toPos);
+        A.fromPos = Math.round(lo * 10) / 10;
+        A.toPos = Math.round(hi * 10) / 10;
+        if (!A.trackName && B.trackName) A.trackName = B.trackName;
+        // Keep the DB row linkage if the survivor doesn't have one yet.
+        if (A.moduleTrackId == null && B.moduleTrackId != null) A.moduleTrackId = B.moduleTrackId;
+        repoint(B.id, A.id);
+        s.extraTracks.splice(s.extraTracks.findIndex((t) => t.id === B.id), 1);
       }
-      for (const ind of s.industries) {
-        if (ind.track === B.id) ind.track = A.id;
-        for (const sp of ind.spots) if (sp.track === B.id) sp.track = A.id;
+      select = { kind: "track", id: A.id };
+      // ---- Endplate contact: a track ON a plate = a DOUBLE-TRACK plate --------
+      // (FD snaps modules by endplate config, so the config must follow the
+      // geometry.) The track becomes Main 2: both plates touched → full double;
+      // one plate → a transition module, with the End-of-Double-Track turnout +
+      // control point at the drawn track's inner end.
+      if (A.lane !== 1 || s.loop) return;
+      if (s.configA === "double" || s.configB === "double") return;
+      const plateEps = 0.5;
+      const lo2 = Math.min(A.fromPos, A.toPos);
+      const hi2 = Math.max(A.fromPos, A.toPos);
+      const touchesA = lo2 <= plateEps;
+      const touchesB = hi2 >= s.lengthInches - plateEps;
+      if (!touchesA && !touchesB) return;
+      // Endplate records are authoritative — never override a locked config.
+      if ((touchesA && lockedConfigs.a) || (touchesB && lockedConfigs.b)) return;
+      repoint(A.id, MAIN2_TRACK_ID);
+      s.extraTracks.splice(s.extraTracks.findIndex((t) => t.id === A.id), 1);
+      select = null;
+      if (touchesA) s.configA = "double";
+      if (touchesB) s.configB = "double";
+      if (touchesA !== touchesB) {
+        // Transition module: Main 2 ends where the drawn track ended.
+        const p = Math.round((touchesA ? hi2 : lo2) * 10) / 10;
+        const swId = nextId("sw", s.turnouts.map((x) => x.id));
+        s.turnouts.push({
+          id: swId,
+          name: "End of Double Track",
+          pos: p,
+          onTrack: MAIN2_TRACK_ID,
+          divergeTrack: MAIN_TRACK_ID,
+          kind: touchesA ? "left" : "right",
+          size: turnoutSize,
+        });
+        const cpId = nextId("cp", s.controlPoints.map((c) => c.id));
+        s.controlPoints.push({
+          id: cpId,
+          name: "End of Double Track",
+          turnouts: [swId],
+          signals: [
+            { id: `${cpId}-AtoB`, pos: p, track: MAIN_TRACK_ID, facing: "AtoB", side: "above" },
+            { id: `${cpId}-BtoA`, pos: p, track: MAIN_TRACK_ID, facing: "BtoA", side: "below" },
+          ],
+        });
       }
-      for (const x of s.crossings) {
-        if (x.trackA === B.id) x.trackA = A.id;
-        if (x.trackB === B.id) x.trackB = A.id;
-      }
-      for (const cp of s.controlPoints)
-        for (const sig of cp.signals) if (sig.track === B.id) sig.track = A.id;
-      s.extraTracks.splice(s.extraTracks.findIndex((t) => t.id === B.id), 1);
-      survivor = A.id;
     });
-    if (survivor) setSelection({ kind: "track", id: survivor });
+    setSelection(select);
+  };
+  /** Completing the double: an End-of-Double-Track turnout dragged onto the
+   * single end's plate means the double now spans the module — flip that plate
+   * to double and retire the transition (turnout + its control point). */
+  const onTurnoutDrop = (id: string) => {
+    patch((s) => {
+      const sw = s.turnouts.find((x) => x.id === id);
+      if (!sw || !isTransitionTurnout(sw) || s.loop) return;
+      const aD = s.configA === "double";
+      const bD = s.configB === "double";
+      if (aD === bD) return; // not a transition module
+      const eps = 0.5;
+      const atFarPlate = aD ? sw.pos >= s.lengthInches - eps : sw.pos <= eps;
+      if (!atFarPlate) return;
+      if (aD ? lockedConfigs.b : lockedConfigs.a) return;
+      if (aD) s.configB = "double";
+      else s.configA = "double";
+      s.turnouts.splice(s.turnouts.findIndex((x) => x.id === sw.id), 1);
+      for (const cp of s.controlPoints) cp.turnouts = cp.turnouts.filter((t) => t !== id);
+      const cpi = s.controlPoints.findIndex(
+        (cp) => cp.name === "End of Double Track" && cp.turnouts.length === 0,
+      );
+      if (cpi >= 0) s.controlPoints.splice(cpi, 1);
+    });
   };
   function addCrossing() {
     patch((s) => {
@@ -1054,6 +1128,7 @@ export function SchematicEditor({
                 onDropCrossover={onDropCrossover}
                 onDropSignal={onDropSignal}
                 onTrackEndDrop={mergeAbutting}
+                onTurnoutDrop={onTurnoutDrop}
                 turnoutSize={turnoutSize}
                 onTurnoutSizeChange={setTurnoutSize}
                 onTrackPathChange={(id, path) =>
