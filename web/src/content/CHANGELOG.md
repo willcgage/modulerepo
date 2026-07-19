@@ -5,6 +5,11 @@ Headings are `version — date` (YYYY-MM-DD).
 
 ---
 
+## v0.15.12 — 2026-07-19
+
+### Changed
+- **Curved turnouts** — on a curved mainline, a turnout's diverging leg now **follows the curve** (a smooth arc easing out to one track over at the frog) instead of poking out as a straight chord, so the whole switch reads as one curved piece. Straight-main turnouts are unchanged.
+
 ## v0.15.11 — 2026-07-19
 
 ### Added
