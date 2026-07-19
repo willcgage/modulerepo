@@ -1040,14 +1040,10 @@ export function BenchworkEditor({
   const extentW = extent.maxX - extent.minX;
   const extentH = extent.maxY - extent.minY;
 
-  // --- Track fidelity (stage 4) ----------------------------------------------
-  // Rails and ties only read once the ~0.35″ N gauge spans a few screen pixels;
-  // below that a single weighted line is cleaner. All physical (inches), so they
-  // scale with the board.
-  const GAUGE = 0.354; // N-scale track gauge (9 mm), inches
+  // --- Track rendering -------------------------------------------------------
+  // Track reads as a clean outlined band (roadbed fill + edge lines), no ties —
+  // the switch points/frog emerge from where the bands converge and cross.
   const ROADBED = 1.3; // ballast-shoulder band width, inches
-  const showRails = GAUGE * scale > 4;
-  const railW = world(1);
   const poly = (pts: Pt[]) => pts.map((p) => `${p.x},${sy(p.y)}`).join(" ");
   /** Mainline + sidings/spurs as one list, so all get the same rendering. */
   const trackLines: { id: string; pts: Pt[]; main: boolean; selectable: boolean }[] = [
@@ -1088,50 +1084,27 @@ export function BenchworkEditor({
             strokeLinejoin="round"
           />
         )}
-        {/* Roadbed — subtle ballast band under the rails. */}
+        {/* Roadbed band fill. */}
         <polyline
           points={poly(line.pts)}
           fill="none"
-          stroke="#e9e2d4"
+          stroke="#e7e2d6"
           strokeWidth={ROADBED}
           strokeLinecap="round"
           strokeLinejoin="round"
         />
-        {showRails ? (
-          <>
-            {tiesAlong(line.pts, 1.4, GAUGE * 1.35).map((ti, k) => (
-              <line
-                key={`tie${k}`}
-                x1={ti.x1}
-                y1={sy(ti.y1)}
-                x2={ti.x2}
-                y2={sy(ti.y2)}
-                stroke="#a8a29e"
-                strokeWidth={world(0.8)}
-              />
-            ))}
-            {[GAUGE / 2, -GAUGE / 2].map((o, k) => (
-              <polyline
-                key={`rail${k}`}
-                points={poly(offsetPath(line.pts, o))}
-                fill="none"
-                stroke={on ? "#0284c7" : "#475569"}
-                strokeWidth={railW}
-                strokeLinecap="round"
-                strokeLinejoin="round"
-              />
-            ))}
-          </>
-        ) : (
+        {/* Band outline — the two edges (no ties, cleaner). */}
+        {[ROADBED / 2, -ROADBED / 2].map((o, k) => (
           <polyline
-            points={poly(line.pts)}
+            key={`edge${k}`}
+            points={poly(offsetPath(line.pts, o))}
             fill="none"
-            stroke={on ? "#0284c7" : line.main ? "#64748b" : "#94a3b8"}
-            strokeWidth={on ? r * 0.9 : line.main ? r * 0.7 : r * 0.5}
+            stroke={on ? "#0284c7" : line.main ? "#475569" : "#64748b"}
+            strokeWidth={world(0.7)}
             strokeLinecap="round"
             strokeLinejoin="round"
           />
-        )}
+        ))}
         <title>{line.main ? "Mainline" : line.id}</title>
       </g>
     );
@@ -1364,39 +1337,28 @@ export function BenchworkEditor({
         {/* Turnouts — drag along the track to set their position */}
         {turnoutPts.map((t) => {
           const on = selection?.kind === "turnout" && selection.id === t.id;
-          const hw = on ? "#0284c7" : "#334155"; // switch-hardware colour
-          // Frog casting + switch points, oriented along the diverging leg.
-          const sw = t.frog
-            ? (() => {
-                const dx = t.frog.x - t.x;
-                const dy = t.frog.y - t.y;
-                const dl = Math.hypot(dx, dy) || 1;
-                const ux = dx / dl;
-                const uy = dy / dl;
-                const nx = -uy;
-                const ny = ux;
-                const tri = (cx: number, cy: number, dir: number, len: number, wid: number) =>
-                  `${cx + dir * ux * len},${sy(cy + dir * uy * len)} ` +
-                  `${cx - dir * ux * len * 0.6 + nx * wid},${sy(cy - dir * uy * len * 0.6 + ny * wid)} ` +
-                  `${cx - dir * ux * len * 0.6 - nx * wid},${sy(cy - dir * uy * len * 0.6 - ny * wid)}`;
-                return {
-                  // Frog: point toward the throat (prototype).
-                  frog: tri(t.frog.x, t.frog.y, -1, world(2.4), world(1.3)),
-                  // Points: just past the throat, aimed at the frog.
-                  points: tri(t.x + ux * world(1.6), t.y + uy * world(1.6), 1, world(2), world(1)),
-                };
-              })()
-            : null;
+          const node = on ? "#0284c7" : "#475569";
           return (
             <g key={`to${t.id}`}>
-              {sw && <polygon points={sw.points} fill={hw} pointerEvents="none" />}
-              {sw && <polygon points={sw.frog} fill={hw} pointerEvents="none" />}
+              {/* Frog node — where the routes cross (the band shows the geometry). */}
+              {t.frog && (
+                <circle
+                  cx={t.frog.x}
+                  cy={sy(t.frog.y)}
+                  r={r * 0.4}
+                  fill="#fff"
+                  stroke={node}
+                  strokeWidth={r * 0.3}
+                  pointerEvents="none"
+                />
+              )}
+              {/* Throat / points node — the draggable control. */}
               <circle
                 cx={t.x}
                 cy={sy(t.y)}
                 r={onTurnoutMove ? r * 0.6 : r * 0.45}
                 fill="#fff"
-                stroke={on ? "#0284c7" : "#475569"}
+                stroke={node}
                 strokeWidth={r * 0.35}
                 style={onTurnoutMove ? { cursor: "ew-resize" } : undefined}
                 onPointerDown={
@@ -1850,30 +1812,3 @@ function offsetPath(pts: Pt[], off: number): Pt[] {
 
 /** Tie marks perpendicular to a polyline, evenly spaced by arc length. Capped so
  * a long track can't spawn unbounded elements. */
-function tiesAlong(
-  pts: Pt[],
-  spacing: number,
-  half: number,
-): { x1: number; y1: number; x2: number; y2: number }[] {
-  const out: { x1: number; y1: number; x2: number; y2: number }[] = [];
-  let carry = 0;
-  for (let i = 0; i < pts.length - 1; i++) {
-    const a = pts[i];
-    const b = pts[i + 1];
-    const dx = b.x - a.x;
-    const dy = b.y - a.y;
-    const seg = Math.hypot(dx, dy);
-    if (seg === 0) continue;
-    const nx = -dy / seg;
-    const ny = dx / seg;
-    for (let d = carry; d < seg; d += spacing) {
-      const t = d / seg;
-      const cx = a.x + dx * t;
-      const cy = a.y + dy * t;
-      out.push({ x1: cx - nx * half, y1: cy - ny * half, x2: cx + nx * half, y2: cy + ny * half });
-      if (out.length > 600) return out;
-    }
-    carry = spacing - ((seg - carry) % spacing);
-  }
-  return out;
-}
