@@ -78,7 +78,7 @@ export type CanvasSelection =
  * it guessed "add a benchwork corner" — so there was no way to click background
  * and mean "nothing". Select is the default; Benchwork is the drawing mode.
  */
-export type CanvasTool = "select" | "benchwork" | "industry" | "track";
+export type CanvasTool = "select" | "benchwork" | "industry" | "track" | "turnout";
 
 /**
  * Benchwork outline editor — draw a module's physical footprint as a polygon in
@@ -110,6 +110,9 @@ export function BenchworkEditor({
   pendingTrack = null,
   onPlaceTrack,
   onCancelPlace,
+  onDropTurnout,
+  turnoutSize = 6,
+  onTurnoutSizeChange,
   selection = null,
   onSelect,
   tool = "select",
@@ -166,6 +169,11 @@ export function BenchworkEditor({
         },
   ) => void;
   onCancelPlace?: () => void;
+  /** Turnout tool (W): a click on the main drops a turnout there (#52). */
+  onDropTurnout?: (pos: number) => void;
+  /** The frog number the Turnout tool drops (governs the diverging angle). */
+  turnoutSize?: number;
+  onTurnoutSizeChange?: (size: number) => void;
   /** Selection is owned by the editor, which renders the inspector for it. */
   selection?: CanvasSelection | null;
   onSelect?: (s: CanvasSelection | null) => void;
@@ -635,6 +643,11 @@ export function BenchworkEditor({
       if (onAddIndustry && centerline.length >= 2) onAddIndustry("main", posFrom(toLocal(e)));
       return;
     }
+    // Turnout tool: a click on the main drops a turnout there (#52).
+    if (tool === "turnout") {
+      if (onDropTurnout && centerline.length >= 2) onDropTurnout(posFrom(toLocal(e)));
+      return;
+    }
     // Track tool: a background click bends the selected spur, or the mainline
     // when no spur is selected (mainline + spur editing are one tool now).
     if (tool === "track") {
@@ -1079,6 +1092,27 @@ export function BenchworkEditor({
             Click a track to place an industry there (or the main) · then set its
             name and cars in the inspector.
           </span>
+        ) : tool === "turnout" ? (
+          <>
+            <label className="flex items-center gap-1 font-medium text-gray-600">
+              Turnout #
+              <select
+                value={turnoutSize}
+                onChange={(e) => onTurnoutSizeChange?.(Number(e.target.value))}
+                className="rounded border border-gray-300 px-1 py-0.5 text-xs"
+              >
+                {[4, 5, 6, 7, 8, 10].map((n) => (
+                  <option key={n} value={n}>
+                    #{n}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <span className="text-gray-500">
+              Click the main to drop a #{turnoutSize} turnout · then draw a
+              spur/siding from it with the Track tool.
+            </span>
+          </>
         ) : tool === "track" ? (
           pendingTrack ? (
             <>
@@ -1157,7 +1191,7 @@ export function BenchworkEditor({
         className={`min-h-0 flex-1 touch-none rounded-md border border-gray-300 bg-white ${
           spaceHeld
             ? "cursor-grab"
-            : tool === "benchwork" || tool === "industry" || tool === "track"
+            : tool === "benchwork" || tool === "industry" || tool === "track" || tool === "turnout"
               ? "cursor-crosshair"
               : ""
         }`}

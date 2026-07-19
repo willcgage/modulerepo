@@ -120,6 +120,8 @@ export function SchematicEditor({
   /** Draw-to-create: a track role armed from the + Track menu, waiting to be
    * drawn on the canvas (#51). null = not placing. */
   const [pendingTrack, setPendingTrack] = useState<"siding" | "spur" | null>(null);
+  /** The frog number the Turnout (W) tool drops (#52). */
+  const [turnoutSize, setTurnoutSize] = useState(6);
   /** Car-type choices, seeded from the server + grown by suggestions. */
   const [carTypeOptions, setCarTypeOptions] = useState<CarTypeOption[]>(carTypes);
   const addCarTypeOption = (o: CarTypeOption) =>
@@ -384,8 +386,8 @@ export function SchematicEditor({
     toPos: number,
     path: BenchworkPoint[],
   ) {
+    const id = nextId("spur", state.extraTracks.map((t) => t.id));
     patch((s) => {
-      const id = nextId("spur", s.extraTracks.map((t) => t.id));
       s.extraTracks.push({
         id,
         role: "spur",
@@ -400,6 +402,8 @@ export function SchematicEditor({
       const tn = s.turnouts.find((t) => t.id === throatTurnoutId);
       if (tn) tn.divergeTrack = id;
     });
+    // Select it so the Track tool edits the new spur (not the mainline) next.
+    setSelection({ kind: "track", id });
   }
   /** A passing siding drawn between two already-placed turnouts. */
   function placeSiding(
@@ -408,8 +412,8 @@ export function SchematicEditor({
     fromPos: number,
     toPos: number,
   ) {
+    const id = nextId("sid", state.extraTracks.map((t) => t.id));
     patch((s) => {
-      const id = nextId("sid", s.extraTracks.map((t) => t.id));
       s.extraTracks.push({
         id,
         role: "siding",
@@ -423,6 +427,7 @@ export function SchematicEditor({
       for (const t of s.turnouts)
         if (t.id === fromTurnoutId || t.id === toTurnoutId) t.divergeTrack = id;
     });
+    setSelection({ kind: "track", id });
   }
   const onPlaceTrack = (
     p:
@@ -464,9 +469,27 @@ export function SchematicEditor({
         onTrack: MAIN_TRACK_ID,
         divergeTrack: diverge,
         kind: "right",
+        size: turnoutSize,
       });
     });
   }
+  /** Turnout (W) tool: drop a turnout at `pos` on the main, sized by the tool,
+   * with nothing diverging yet — a spur/siding drawn from it links later (#52). */
+  const onDropTurnout = (pos: number) => {
+    const id = nextId("sw", state.turnouts.map((t) => t.id));
+    patch((s) => {
+      s.turnouts.push({
+        id,
+        name: "",
+        pos: Math.round(pos),
+        onTrack: MAIN_TRACK_ID,
+        divergeTrack: "",
+        kind: "right",
+        size: turnoutSize,
+      });
+    });
+    setSelection({ kind: "turnout", id });
+  };
   function addCrossing() {
     patch((s) => {
       s.crossings.push({
@@ -642,6 +665,7 @@ export function SchematicEditor({
         if (e.key === "v" || e.key === "V") setTool("select");
         else if (e.key === "b" || e.key === "B") setTool("benchwork");
         else if (e.key === "t" || e.key === "T") setTool("track");
+        else if (e.key === "w" || e.key === "W") setTool("turnout");
         else if (e.key === "i" || e.key === "I") setTool("industry");
         else if (e.key === "Escape") {
           setSelection(null);
@@ -809,6 +833,9 @@ export function SchematicEditor({
                 pendingTrack={pendingTrack}
                 onPlaceTrack={onPlaceTrack}
                 onCancelPlace={() => setPendingTrack(null)}
+                onDropTurnout={onDropTurnout}
+                turnoutSize={turnoutSize}
+                onTurnoutSizeChange={setTurnoutSize}
                 onTrackPathChange={(id, path) =>
                   patch((s) => {
                     const t = s.extraTracks.find((x) => x.id === id);
@@ -895,7 +922,7 @@ const TOOL_GROUPS: RailTool[][] = [
   [
     { id: "benchwork", key: "B", label: "Benchwork", glyph: "▱", hint: "Draw the board outline (B)" },
     { id: "track", key: "T", label: "Track", glyph: "═", hint: "Draw the mainline · bend a siding or spur (T)" },
-    { key: "W", label: "Turnout", glyph: "⋋", hint: "Turnout — coming soon", soon: true },
+    { id: "turnout", key: "W", label: "Turnout", glyph: "⋋", hint: "Drop a turnout on the main (W)" },
     { key: "S", label: "Signal", glyph: "⚑", hint: "Signal — coming soon", soon: true },
   ],
   [{ id: "industry", key: "I", label: "Industry", glyph: "▢", hint: "Place an industry on a track (I)" }],
@@ -1591,18 +1618,33 @@ function Inspector({
             </select>
           </label>
         </div>
-        <label className="block text-xs font-medium text-gray-600">
-          Hand
-          <select
-            value={t.kind}
-            onChange={(e) => patch((s) => (s.turnouts[i].kind = e.target.value as TurnoutKind))}
-            className={`mt-0.5 ${inp}`}
-          >
-            {KIND_OPTIONS.map((o) => (
-              <option key={o.value} value={o.value}>{o.label}</option>
-            ))}
-          </select>
-        </label>
+        <div className="grid grid-cols-2 gap-2">
+          <label className="block text-xs font-medium text-gray-600">
+            Hand
+            <select
+              value={t.kind}
+              onChange={(e) => patch((s) => (s.turnouts[i].kind = e.target.value as TurnoutKind))}
+              className={`mt-0.5 ${inp}`}
+            >
+              {KIND_OPTIONS.map((o) => (
+                <option key={o.value} value={o.value}>{o.label}</option>
+              ))}
+            </select>
+          </label>
+          <label className="block text-xs font-medium text-gray-600">
+            Turnout # (size)
+            <select
+              value={t.size ?? 6}
+              onChange={(e) => patch((s) => (s.turnouts[i].size = Number(e.target.value)))}
+              className={`mt-0.5 ${inp}`}
+              title="Frog number — governs the diverging angle."
+            >
+              {[4, 5, 6, 7, 8, 10].map((n) => (
+                <option key={n} value={n}>#{n}</option>
+              ))}
+            </select>
+          </label>
+        </div>
       </>,
       { fn: () => patch((s) => s.turnouts.splice(i, 1)), label: "Remove turnout" },
     );
