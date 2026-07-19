@@ -285,6 +285,7 @@ export function SchematicEditor({
         // derives the frog geometry from these.
         onTrack: t.onTrack,
         divergeTrack: t.divergeTrack || undefined,
+        curved: t.curved,
       })),
     [state.turnouts],
   );
@@ -529,7 +530,11 @@ export function SchematicEditor({
    * its `toPos`, so dragging its ○ end to size it can't shift what you dropped
    * (the old draw-to-create re-projected the drawn end and changed the length).
    * The stub is selected so its end handle is right there to pull out. */
-  const onDropTurnout = (kind: TurnoutKind, onTrack: string, pos: number) => {
+  const onDropTurnout = (
+    spec: { kind: TurnoutKind; curved?: boolean },
+    onTrack: string,
+    pos: number,
+  ) => {
     const swId = nextId("sw", state.turnouts.map((t) => t.id));
     const spId = nextId("spur", state.extraTracks.map((t) => t.id));
     const p = Math.round(pos * 10) / 10;
@@ -554,8 +559,9 @@ export function SchematicEditor({
         pos: p,
         onTrack,
         divergeTrack: spId,
-        kind,
+        kind: spec.kind,
         size: turnoutSize,
+        ...(spec.curved ? { curved: true } : {}),
       });
     });
     // Select the stub — its end ○ is now the thing to drag to length.
@@ -1742,6 +1748,16 @@ function Inspector({
             </select>
           </label>
         </div>
+        <label className="flex items-center gap-2 text-xs font-medium text-gray-600">
+          <input
+            type="checkbox"
+            checked={!!t.curved}
+            onChange={(e) =>
+              patch((s) => (s.turnouts[i].curved = e.target.checked || undefined))
+            }
+          />
+          Curved — the diverging leg bows into an arc
+        </label>
       </>,
       { fn: () => patch((s) => s.turnouts.splice(i, 1)), label: "Remove turnout" },
     );

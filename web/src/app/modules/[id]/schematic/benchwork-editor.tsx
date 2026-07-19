@@ -46,13 +46,32 @@ const TURNOUT_PALETTE: { kind: PaletteKind; label: string; soon?: boolean }[] = 
   { kind: "right", label: "Right-hand" },
   { kind: "left", label: "Left-hand" },
   { kind: "wye", label: "Wye" },
-  { kind: "curved-right", label: "Curved right", soon: true },
-  { kind: "curved-left", label: "Curved left", soon: true },
+  { kind: "curved-right", label: "Curved right" },
+  { kind: "curved-left", label: "Curved left" },
   { kind: "crossover-single", label: "Single crossover", soon: true },
   { kind: "crossover-double", label: "Double crossover", soon: true },
   { kind: "slip-single", label: "Single slip", soon: true },
   { kind: "slip-double", label: "Double slip", soon: true },
 ];
+
+/** A palette glyph → the turnout it drops: its hand + whether the diverging leg
+ * is curved. Null for the not-yet-buildable kinds (crossover/slip). */
+function specForPalette(k: PaletteKind): { kind: TurnoutKind; curved: boolean } | null {
+  switch (k) {
+    case "left":
+      return { kind: "left", curved: false };
+    case "right":
+      return { kind: "right", curved: false };
+    case "wye":
+      return { kind: "wye", curved: false };
+    case "curved-left":
+      return { kind: "left", curved: true };
+    case "curved-right":
+      return { kind: "right", curved: true };
+    default:
+      return null;
+  }
+}
 
 /** A little schematic icon for each turnout kind — a straight route plus the
  * diverging leg(s), so the palette reads like the switches it drops. */
@@ -165,6 +184,9 @@ export interface CanvasTurnout {
   onTrack?: string;
   /** The track id it diverges to (so the spur can start at the frog), if any. */
   divergeTrack?: string;
+  /** A curved turnout — the diverging leg bows into an arc instead of leaving
+   * as a straight diagonal (#turnout-palette). */
+  curved?: boolean;
 }
 export interface CanvasSignal {
   id: string;
@@ -302,10 +324,14 @@ export function BenchworkEditor({
         },
   ) => void;
   onCancelPlace?: () => void;
-  /** Turnout tool (W): drop a turnout of a chosen hand onto a track — from a
+  /** Turnout tool (W): drop a turnout of a chosen kind onto a track — from a
    * canvas click or a palette drag. It lands with a short diverging spur stub
    * (#turnout-palette). */
-  onDropTurnout?: (kind: TurnoutKind, onTrack: string, pos: number) => void;
+  onDropTurnout?: (
+    spec: { kind: TurnoutKind; curved?: boolean },
+    onTrack: string,
+    pos: number,
+  ) => void;
   /** Signal tool (S): a click drops a signal (a block control point) at pos on
    * the main (inches from A) (#53). */
   onDropSignal?: (pos: number) => void;
@@ -333,12 +359,12 @@ export function BenchworkEditor({
   /** Draw-to-create in progress: the throat turnout it diverges from + live end. */
   const placeRef = useRef<{ start: Pt; end: Pt; turnoutId: string } | null>(null);
   const [placePreview, setPlacePreview] = useState<{ start: Pt; end: Pt } | null>(null);
-  /** The turnout hand armed in the palette — a canvas click drops this one, and
-   * it's the hand a palette drag carries (#turnout-palette). */
-  const [armedKind, setArmedKind] = useState<TurnoutKind>("right");
-  /** A palette glyph being dragged toward the board: its hand + live client
+  /** The turnout armed in the palette — a canvas click drops this one, and it's
+   * what a palette drag carries (#turnout-palette). */
+  const [armedPalette, setArmedPalette] = useState<PaletteKind>("right");
+  /** A palette glyph being dragged toward the board: its kind + live client
    * position, so a ghost can follow the pointer until it's dropped. */
-  const [paletteDrag, setPaletteDrag] = useState<{ kind: TurnoutKind; x: number; y: number } | null>(
+  const [paletteDrag, setPaletteDrag] = useState<{ kind: PaletteKind; x: number; y: number } | null>(
     null,
   );
   /** Space-to-pan: held-key state, so any tool can pan without switching. */
@@ -407,13 +433,17 @@ export function BenchworkEditor({
     const size = t.size && t.size > 0 ? t.size : 6;
     const L = size * LANE_SPACING_INCHES; // points → frog
     // Walk the host from the throat, clearing to one track over at the frog, so
-    // on a curved main the leg curves with it.
+    // on a curved main the leg curves with it. A *curved* turnout eases the
+    // lateral clearance quadratically (frac²) so the leg leaves tangent to the
+    // host and bows into an arc; a straight turnout ramps over linearly (a
+    // straight diagonal). Both reach one track over at the frog.
     const steps = 8;
     const leg: Pt[] = [];
     for (let i = 0; i <= steps; i++) {
       const frac = i / steps;
+      const ease = t.curved ? frac * frac : frac;
       const p = sampleAt(host, Math.max(0, t.pos + toward * L * frac));
-      const off = side * LANE_SPACING_INCHES * frac;
+      const off = side * LANE_SPACING_INCHES * ease;
       leg.push({ x: p.x + off * p.nx, y: p.y + off * p.ny });
     }
     return leg;
@@ -906,9 +936,10 @@ export function BenchworkEditor({
     // Turnout tool: a click on a track drops the armed turnout there — a palette
     // drag can also land it (below). Either way it arrives with a spur stub.
     if (tool === "turnout") {
-      if (onDropTurnout && centerline.length >= 2) {
+      const spec = specForPalette(armedPalette);
+      if (onDropTurnout && spec && centerline.length >= 2) {
         const hit = nearestTrackPos(toLocal(e));
-        if (hit) onDropTurnout(armedKind, hit.onTrack, hit.pos);
+        if (hit) onDropTurnout(spec, hit.onTrack, hit.pos);
       }
       return;
     }
@@ -997,9 +1028,9 @@ export function BenchworkEditor({
    * pointer; releasing over a track drops the turnout there (snapped to the
    * nearest track), with its spur stub. Releasing off-board just cancels. Uses
    * window listeners so the drag survives leaving the little glyph button. */
-  const startPaletteDrag = (kind: TurnoutKind, e: React.PointerEvent) => {
+  const startPaletteDrag = (kind: PaletteKind, e: React.PointerEvent) => {
     e.preventDefault();
-    setArmedKind(kind);
+    setArmedPalette(kind);
     setPaletteDrag({ kind, x: e.clientX, y: e.clientY });
     const move = (ev: PointerEvent) => setPaletteDrag({ kind, x: ev.clientX, y: ev.clientY });
     const up = (ev: PointerEvent) => {
@@ -1007,13 +1038,14 @@ export function BenchworkEditor({
       window.removeEventListener("pointerup", up);
       setPaletteDrag(null);
       const svg = svgRef.current;
-      if (!svg || !onDropTurnout || centerline.length < 2) return;
+      const spec = specForPalette(kind);
+      if (!svg || !onDropTurnout || !spec || centerline.length < 2) return;
       const r = svg.getBoundingClientRect();
       const over =
         ev.clientX >= r.left && ev.clientX <= r.right && ev.clientY >= r.top && ev.clientY <= r.bottom;
       if (!over) return;
       const hit = nearestTrackPos(toLocal(ev));
-      if (hit) onDropTurnout(kind, hit.onTrack, hit.pos);
+      if (hit) onDropTurnout(spec, hit.onTrack, hit.pos);
     };
     window.addEventListener("pointermove", move);
     window.addEventListener("pointerup", up);
@@ -1405,17 +1437,15 @@ export function BenchworkEditor({
             </label>
             <div className="flex items-center gap-0.5">
               {TURNOUT_PALETTE.map((p) => {
-                const armed = !p.soon && armedKind === (p.kind as TurnoutKind);
+                const armed = !p.soon && armedPalette === p.kind;
                 return (
                   <button
                     key={p.kind}
                     type="button"
                     title={p.soon ? `${p.label} — coming soon` : `${p.label} — drag onto a track, or click it then click the board`}
                     disabled={p.soon}
-                    onPointerDown={
-                      p.soon ? undefined : (e) => startPaletteDrag(p.kind as TurnoutKind, e)
-                    }
-                    onClick={p.soon ? undefined : () => setArmedKind(p.kind as TurnoutKind)}
+                    onPointerDown={p.soon ? undefined : (e) => startPaletteDrag(p.kind, e)}
+                    onClick={p.soon ? undefined : () => setArmedPalette(p.kind)}
                     className={`flex h-7 w-8 items-center justify-center rounded border ${
                       armed
                         ? "border-blue-500 bg-blue-50 text-blue-700 ring-1 ring-blue-400"

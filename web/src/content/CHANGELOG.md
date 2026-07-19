@@ -5,6 +5,11 @@ Headings are `version — date` (YYYY-MM-DD).
 
 ---
 
+## v0.15.21 — 2026-07-19
+
+### Added
+- **Curved turnouts** — the turnout palette's **curved left/right** glyphs are now live. Drop one and the diverging leg **bows into an arc** (both routes curve the same way) instead of leaving as a straight diagonal — the prototypical look for a switch on a curve. Any turnout can be made curved (or straightened) with the new **Curved** toggle in its inspector.
+
 ## v0.15.20 — 2026-07-19
 
 ### Fixed
