@@ -37,7 +37,8 @@ type PaletteKind =
   | TurnoutKind
   | "curved-left"
   | "curved-right"
-  | "crossover-single"
+  | "crossover-lh"
+  | "crossover-rh"
   | "crossover-double"
   | "slip-single"
   | "slip-double";
@@ -48,8 +49,9 @@ const TURNOUT_PALETTE: { kind: PaletteKind; label: string; soon?: boolean }[] = 
   { kind: "wye", label: "Wye" },
   { kind: "curved-right", label: "Curved right" },
   { kind: "curved-left", label: "Curved left" },
-  { kind: "crossover-single", label: "Single crossover", soon: true },
-  { kind: "crossover-double", label: "Double crossover", soon: true },
+  { kind: "crossover-lh", label: "Single crossover (LH)" },
+  { kind: "crossover-rh", label: "Single crossover (RH)" },
+  { kind: "crossover-double", label: "Double crossover" },
   { kind: "slip-single", label: "Single slip", soon: true },
   { kind: "slip-double", label: "Double slip", soon: true },
 ];
@@ -68,6 +70,23 @@ function specForPalette(k: PaletteKind): { kind: TurnoutKind; curved: boolean } 
       return { kind: "left", curved: true };
     case "curved-right":
       return { kind: "right", curved: true };
+    default:
+      return null;
+  }
+}
+
+/** A crossover glyph → its spec: the hand (which way the single diagonal throws,
+ * facing endplate B) or double (a scissors). Null for non-crossover kinds. */
+function crossoverSpecForPalette(
+  k: PaletteKind,
+): { hand?: "left" | "right"; double?: boolean } | null {
+  switch (k) {
+    case "crossover-lh":
+      return { hand: "left" };
+    case "crossover-rh":
+      return { hand: "right" };
+    case "crossover-double":
+      return { double: true };
     default:
       return null;
   }
@@ -121,7 +140,15 @@ function TurnoutGlyph({ kind, className }: { kind: PaletteKind; className?: stri
             <path d="M10 9 Q19 12 25 15" {...s} />
           </>
         );
-      case "crossover-single":
+      case "crossover-lh":
+        return (
+          <>
+            <line x1={3} y1={5} x2={25} y2={5} {...s} />
+            <line x1={3} y1={13} x2={25} y2={13} {...s} />
+            <path d="M10 13 L18 5" {...s} />
+          </>
+        );
+      case "crossover-rh":
         return (
           <>
             <line x1={3} y1={5} x2={25} y2={5} {...s} />
@@ -266,6 +293,7 @@ export function BenchworkEditor({
   onPlaceTrack,
   onCancelPlace,
   onDropTurnout,
+  onDropCrossover,
   onDropSignal,
   turnoutSize = 6,
   onTurnoutSizeChange,
@@ -335,6 +363,24 @@ export function BenchworkEditor({
     onTrack: string,
     pos: number,
   ) => void;
+  /** Crossover glyphs (#turnout-palette): drop a self-contained crossover on the
+   * main — a turnout on each of the two parallel lanes plus the diagonal
+   * connector(s) between them (double = scissors). The canvas computes the
+   * geometry (module-local inches); the editor builds/reuses the tracks. */
+  onDropCrossover?: (p: {
+    hand?: "left" | "right";
+    double?: boolean;
+    /** Which side of the main the parallel lane sits (from the drop point). */
+    side: 1 | -1;
+    /** The crossover's span along the main (inches from A). */
+    posA: number;
+    posB: number;
+    /** The four corner points: on the main at posA/posB, and one lane over. */
+    hostA: BenchworkPoint;
+    hostB: BenchworkPoint;
+    parA: BenchworkPoint;
+    parB: BenchworkPoint;
+  }) => void;
   /** Signal tool (S): a click drops a signal (a block control point) at pos on
    * the main (inches from A) (#53). */
   onDropSignal?: (pos: number) => void;
@@ -482,7 +528,9 @@ export function BenchworkEditor({
     const map = new Map<string, { throat: Pt; frog: Pt; leg: Pt[] }>();
     if (centerline.length >= 2) {
       for (const t of turnouts) {
-        if (!t.divergeTrack) continue;
+        // A crossover's connector has a turnout on BOTH lanes diverging to it —
+        // keep the FIRST (the host-side one; its leg draws the diagonal).
+        if (!t.divergeTrack || map.has(t.divergeTrack)) continue;
         const leg = frogLegOf(t);
         if (!leg || leg.length < 2) continue;
         map.set(t.divergeTrack, { throat: leg[0], frog: leg[leg.length - 1], leg });
@@ -1081,8 +1129,14 @@ export function BenchworkEditor({
     // Turnout tool: a click on a track drops the armed turnout there — a palette
     // drag can also land it (below). Either way it arrives with a spur stub.
     if (tool === "turnout") {
+      if (centerline.length < 2) return;
+      const xo = crossoverSpecForPalette(armedPalette);
+      if (xo) {
+        dropCrossoverAt(xo, toLocal(e));
+        return;
+      }
       const spec = specForPalette(armedPalette);
-      if (onDropTurnout && spec && centerline.length >= 2) {
+      if (onDropTurnout && spec) {
         const hit = nearestTrackPos(toLocal(e));
         if (hit) dropTurnoutGuarded(spec, hit.onTrack, hit.pos);
       }
@@ -1163,6 +1217,43 @@ export function BenchworkEditor({
     onDropTurnout?.(spec, onTrack, pos);
   };
 
+  /** Place a crossover from the palette. The span follows the prototype: the
+   * diagonal clears one track-spacing at the frog angle atan(1/#), so its run
+   * along the main = # × spacing (tt-n-c-*). Centred on the drop point; the
+   * side you drop on picks where the parallel lane goes. The editor reuses a
+   * covering parallel track there or creates a stub the owner draws out. */
+  const dropCrossoverAt = (
+    spec: { hand?: "left" | "right"; double?: boolean },
+    pt: Pt,
+  ) => {
+    if (!onDropCrossover || centerline.length < 2) return;
+    const size = turnoutSize > 0 ? turnoutSize : 6;
+    const span = size * LANE_SPACING_INCHES;
+    if (lengthInches < span + 2) {
+      setDropWarn("Not enough room for a crossover at this frog number.");
+      return;
+    }
+    const raw = projectToCenterline(centerline, pt).pos;
+    const posA =
+      Math.round(Math.max(1, Math.min(lengthInches - span - 1, raw - span / 2)) * 10) / 10;
+    const posB = Math.round((posA + span) * 10) / 10;
+    const a = sampleAt(centerline, posA);
+    const b = sampleAt(centerline, posB);
+    const side = (Math.sign((pt.x - a.x) * a.nx + (pt.y - a.y) * a.ny) || 1) as 1 | -1;
+    const off = side * LANE_SPACING_INCHES;
+    setDropWarn(null);
+    onDropCrossover({
+      ...spec,
+      side,
+      posA,
+      posB,
+      hostA: { x: a.x, y: a.y },
+      hostB: { x: b.x, y: b.y },
+      parA: { x: a.x + a.nx * off, y: a.y + a.ny * off },
+      parB: { x: b.x + b.nx * off, y: b.y + b.ny * off },
+    });
+  };
+
   /** The turnout nearest a canvas point, by straight-line distance to its point
    * on its host track — so it works whether the turnout is on the main or a spur. */
   const nearestTurnout = (p: Pt): { id: string; pos: number; pt: Pt } | null => {
@@ -1214,13 +1305,20 @@ export function BenchworkEditor({
       window.removeEventListener("pointerup", up);
       setPaletteDrag(null);
       const svg = svgRef.current;
-      const spec = specForPalette(kind);
-      if (!svg || !onDropTurnout || !spec || centerline.length < 2) return;
+      if (!svg || centerline.length < 2) return;
       const r = svg.getBoundingClientRect();
       const over =
         ev.clientX >= r.left && ev.clientX <= r.right && ev.clientY >= r.top && ev.clientY <= r.bottom;
       if (!over) return;
-      const hit = nearestTrackPos(toLocal(ev));
+      const pt = toLocal(ev);
+      const xo = crossoverSpecForPalette(kind);
+      if (xo) {
+        dropCrossoverAt(xo, pt);
+        return;
+      }
+      const spec = specForPalette(kind);
+      if (!spec || !onDropTurnout) return;
+      const hit = nearestTrackPos(pt);
       if (hit) dropTurnoutGuarded(spec, hit.onTrack, hit.pos);
     };
     window.addEventListener("pointermove", move);

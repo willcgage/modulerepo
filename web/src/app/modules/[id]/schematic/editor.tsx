@@ -568,6 +568,92 @@ export function SchematicEditor({
     // Select the stub — its end ○ is now the thing to drag to length.
     setSelection({ kind: "track", id: spId });
   };
+  /** Crossover drop (#turnout-palette): a self-contained element between the
+   * main and a parallel lane — a turnout on each end + the diagonal connector(s)
+   * (double = scissors). A plain parallel track already covering the span on
+   * that side is reused (a siding, say); otherwise a short parallel stub is
+   * created for the owner to draw out to length. The connector carries an
+   * authored 2-pt path (host end → parallel end) so the canvas renders the
+   * diagonal and the leg walks the right way for both slants. */
+  const onDropCrossover = (p: {
+    hand?: "left" | "right";
+    double?: boolean;
+    side: 1 | -1;
+    posA: number;
+    posB: number;
+    hostA: BenchworkPoint;
+    hostB: BenchworkPoint;
+    parA: BenchworkPoint;
+    parB: BenchworkPoint;
+  }) => {
+    const lane = p.side;
+    const existing = state.extraTracks.find(
+      (t) =>
+        t.lane === lane &&
+        !(t.path && t.path.length >= 2) &&
+        t.fromPos <= p.posA &&
+        t.toPos >= p.posB,
+    );
+    const ids = state.extraTracks.map((t) => t.id);
+    const parId = existing?.id ?? nextId("sid", ids);
+    const xoA = nextId("xo", [...ids, parId]);
+    const xoB = nextId("xo", [...ids, parId, xoA]);
+    const swIds = state.turnouts.map((t) => t.id);
+    const sw1 = nextId("sw", swIds);
+    const sw2 = nextId("sw", [...swIds, sw1]);
+    const sw3 = nextId("sw", [...swIds, sw1, sw2]);
+    const sw4 = nextId("sw", [...swIds, sw1, sw2, sw3]);
+    // Turnout positions on the parallel track are measured along ITS polyline.
+    const stubFrom = existing ? existing.fromPos : Math.max(0, Math.round((p.posA - 6) * 10) / 10);
+    const relA = Math.round((p.posA - stubFrom) * 10) / 10;
+    const relB = Math.round((p.posB - stubFrom) * 10) / 10;
+    // The hand is the way the diagonal throws facing B: diverging left with the
+    // parallel above means the diagonal runs forward; below, backward.
+    const forward = p.double ? true : (p.side > 0) === (p.hand === "left");
+    const opp = (k: TurnoutKind): TurnoutKind => (k === "left" ? "right" : "left");
+    patch((s) => {
+      if (!existing) {
+        s.extraTracks.push({
+          id: parId,
+          role: "siding",
+          lane,
+          fromPos: stubFrom,
+          toPos: Math.min(s.lengthInches, Math.round((p.posB + 6) * 10) / 10),
+          moduleTrackId: null,
+          trackName: "",
+        });
+      }
+      const conn = (id: string, fwd: boolean) =>
+        s.extraTracks.push({
+          id,
+          role: "crossover",
+          lane,
+          fromPos: p.posA,
+          toPos: p.posB,
+          path: fwd ? [p.hostA, p.parB] : [p.hostB, p.parA],
+          moduleTrackId: null,
+          trackName: "Crossover",
+        });
+      const swp = (id: string, pos: number, onTrack: string, diverge: string, kind: TurnoutKind) =>
+        s.turnouts.push({ id, name: "Crossover", pos, onTrack, divergeTrack: diverge, kind, size: turnoutSize });
+      if (p.double) {
+        conn(xoA, true);
+        conn(xoB, false);
+        // Host-side turnout FIRST per connector — the canvas draws its leg.
+        swp(sw1, p.posA, MAIN_TRACK_ID, xoA, p.side > 0 ? "left" : "right");
+        swp(sw2, relB, parId, xoA, p.side > 0 ? "right" : "left");
+        swp(sw3, p.posB, MAIN_TRACK_ID, xoB, p.side > 0 ? "right" : "left");
+        swp(sw4, relA, parId, xoB, p.side > 0 ? "left" : "right");
+      } else {
+        conn(xoA, forward);
+        const hand = p.hand ?? "left";
+        swp(sw1, forward ? p.posA : p.posB, MAIN_TRACK_ID, xoA, hand);
+        swp(sw2, forward ? relB : relA, parId, xoA, opp(hand));
+      }
+    });
+    // Select the parallel track — its ends are what the owner draws out next.
+    setSelection({ kind: "track", id: parId });
+  };
   function addCrossing() {
     patch((s) => {
       s.crossings.push({
@@ -916,6 +1002,7 @@ export function SchematicEditor({
                 onPlaceTrack={onPlaceTrack}
                 onCancelPlace={() => setPendingTrack(null)}
                 onDropTurnout={onDropTurnout}
+                onDropCrossover={onDropCrossover}
                 onDropSignal={onDropSignal}
                 turnoutSize={turnoutSize}
                 onTurnoutSizeChange={setTurnoutSize}
