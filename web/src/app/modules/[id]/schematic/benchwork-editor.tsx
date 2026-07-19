@@ -78,7 +78,7 @@ export type CanvasSelection =
  * it guessed "add a benchwork corner" — so there was no way to click background
  * and mean "nothing". Select is the default; Benchwork is the drawing mode.
  */
-export type CanvasTool = "select" | "benchwork" | "industry" | "mainline" | "track";
+export type CanvasTool = "select" | "benchwork" | "industry" | "track";
 
 /**
  * Benchwork outline editor — draw a module's physical footprint as a polygon in
@@ -133,7 +133,7 @@ export function BenchworkEditor({
   /** In the Industry tool, a click adds an industry on `track` at `pos`. */
   onAddIndustry?: (track: string, pos: number) => void;
   /** The authored mainline path (module-local inches). Empty = derived; the
-   * Mainline tool seeds it from the centre-line, then edits it (#2d-track). */
+   * Track tool seeds it from the centre-line, then edits it (#2d-track). */
   mainPath?: BenchworkPoint[];
   onMainPathChange?: (next: BenchworkPoint[]) => void;
   /** Author a spur/siding's 2-D path (module-local inches) — bend/rotate it in
@@ -458,7 +458,7 @@ export function BenchworkEditor({
       { x: b.x, y: b.y },
     ];
   };
-  /** The path the Mainline tool edits — the authored one, or a fresh seed. */
+  /** The path the Track tool edits when no spur is selected — the authored one, or a fresh seed. */
   const editMain = mainPath.length >= 2 ? mainPath : seedMain();
   /** Midpoint handle for mainline edge i (open path, no wrap). */
   const mainEdgeHandle = (i: number): Pt => {
@@ -595,16 +595,11 @@ export function BenchworkEditor({
       if (onAddIndustry && centerline.length >= 2) onAddIndustry("main", posFrom(toLocal(e)));
       return;
     }
-    // Mainline tool: a background click adds a bend point on the mainline.
-    if (tool === "mainline") {
-      if (onMainPathChange) addMainVertex(toLocal(e));
-      return;
-    }
-    // Track tool: with a spur selected, a background click adds a bend to it;
-    // otherwise clear so the next spur click selects.
+    // Track tool: a background click bends the selected spur, or the mainline
+    // when no spur is selected (mainline + spur editing are one tool now).
     if (tool === "track") {
       if (editSpurTrack && onTrackPathChange) addSpurVertex(editSpurTrack, toLocal(e));
-      else onSelect?.(null);
+      else if (onMainPathChange) addMainVertex(toLocal(e));
       return;
     }
     // Only the Benchwork tool draws. Under Select, background means "nothing" —
@@ -960,22 +955,14 @@ export function BenchworkEditor({
             Click a track to place an industry there (or the main) · then set its
             name and cars in the inspector.
           </span>
-        ) : tool === "mainline" ? (
+        ) : tool === "track" ? (
           <>
             {trackMenu}
-            {mainPath.length >= 2 && onMainPathChange && (
+            {!editSpurTrack && mainPath.length >= 2 && onMainPathChange && (
               <button type="button" onClick={() => onMainPathChange([])} className={btn}>
                 Straighten
               </button>
             )}
-            <span className="text-gray-500">
-              Drag a point ○ to move it · edge ◇ to curve · click the line to add
-              a bend · Alt-click a point to remove it. Endplate A stays put.
-            </span>
-          </>
-        ) : tool === "track" ? (
-          <>
-            {trackMenu}
             {editSpurTrack?.path && editSpurTrack.path.length >= 2 && onTrackPathChange && (
               <button
                 type="button"
@@ -986,8 +973,9 @@ export function BenchworkEditor({
               </button>
             )}
             <span className="text-gray-500">
-              Click a siding/spur, then drag its points ○ to bend/rotate (◇ to
-              curve, Alt-click to remove). The throat stays on its turnout.
+              {editSpurTrack
+                ? "Drag the spur's points ○ to bend/rotate (◇ to curve · Alt-click to remove). The throat stays on its turnout."
+                : "Drag the mainline's points ○ · edge ◇ to curve · click the line to add a bend · Alt-click to remove. Click a siding or spur to edit it."}
             </span>
           </>
         ) : (
@@ -1024,7 +1012,7 @@ export function BenchworkEditor({
         className={`min-h-0 flex-1 touch-none rounded-md border border-gray-300 bg-white ${
           spaceHeld
             ? "cursor-grab"
-            : tool === "benchwork" || tool === "industry" || tool === "mainline" || tool === "track"
+            : tool === "benchwork" || tool === "industry" || tool === "track"
               ? "cursor-crosshair"
               : ""
         }`}
@@ -1346,8 +1334,8 @@ export function BenchworkEditor({
           />
         ))}
 
-        {/* --- Mainline edit handles (Mainline tool) — bend/drag the drawn main --- */}
-        {tool === "mainline" && editMain.length >= 2 && (
+        {/* --- Mainline edit handles (Track tool, no spur selected) — bend/drag the main --- */}
+        {tool === "track" && !editSpurTrack && editMain.length >= 2 && (
           <>
             {editMain.slice(0, -1).map((_, i) => {
               const h = mainEdgeHandle(i);

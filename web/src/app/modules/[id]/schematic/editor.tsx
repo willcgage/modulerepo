@@ -570,9 +570,9 @@ export function SchematicEditor({
       if (!mod && !e.altKey) {
         if (e.key === "v" || e.key === "V") setTool("select");
         else if (e.key === "b" || e.key === "B") setTool("benchwork");
-        else if (e.key === "m" || e.key === "M") setTool("mainline");
         else if (e.key === "t" || e.key === "T") setTool("track");
         else if (e.key === "i" || e.key === "I") setTool("industry");
+        else if (e.key === "Escape") setSelection(null);
       }
     };
     window.addEventListener("keydown", onKey);
@@ -816,8 +816,7 @@ const TOOL_GROUPS: RailTool[][] = [
   [{ id: "select", key: "V", label: "Select", glyph: "▶", hint: "Select & move (V)" }],
   [
     { id: "benchwork", key: "B", label: "Benchwork", glyph: "▱", hint: "Draw the board outline (B)" },
-    { id: "mainline", key: "M", label: "Mainline", glyph: "〜", hint: "Draw / bend the mainline (M)" },
-    { id: "track", key: "T", label: "Track", glyph: "═", hint: "Bend / rotate a siding or spur (T)" },
+    { id: "track", key: "T", label: "Track", glyph: "═", hint: "Draw the mainline · bend a siding or spur (T)" },
     { key: "W", label: "Turnout", glyph: "⋋", hint: "Turnout — coming soon", soon: true },
     { key: "S", label: "Signal", glyph: "⚑", hint: "Signal — coming soon", soon: true },
   ],
