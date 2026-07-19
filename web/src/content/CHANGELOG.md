@@ -5,6 +5,11 @@ Headings are `version — date` (YYYY-MM-DD).
 
 ---
 
+## v0.15.30 — 2026-07-19
+
+### Added
+- **Track ends snap together.** Dragging a track's ○ end near another track's end on the same lane snaps to it exactly — so the parallel tracks of two crossovers (or a siding and a yard track) join into one continuous run without fiddling. The readout shows which track it meets.
+
 ## v0.15.29 — 2026-07-19
 
 ### Fixed

@@ -1441,11 +1441,28 @@ export function BenchworkEditor({
     }
     if (d.kind === "trackEnd") {
       if (centerline.length >= 2) {
-        const pos = posFrom(p);
-        onTrackEndMove?.(d.id, d.end, pos);
         const t = tracks.find((x) => x.id === d.id);
+        let pos = posFrom(p);
+        // Joining tracks: snap the dragged end onto a same-lane track's end so
+        // two stubs (e.g. the parallels of two crossovers) meet EXACTLY and
+        // read as one continuous track — like corners snap to endplates.
+        let joined: string | null = null;
+        if (t) {
+          for (const o of tracks) {
+            if (o.id === t.id || o.lane !== t.lane || !o.editable) continue;
+            if (o.path && o.path.length >= 2) continue;
+            for (const end of [o.fromPos, o.toPos]) {
+              if (Math.abs(pos - end) <= 2) {
+                pos = end;
+                joined = o.id;
+              }
+            }
+          }
+        }
+        onTrackEndMove?.(d.id, d.end, pos);
         const other = t ? (d.end === "from" ? t.toPos : t.fromPos) : pos;
-        setReadout(lengthLabel(Math.abs(pos - other)));
+        const len = lengthLabel(Math.abs(pos - other));
+        setReadout(joined ? `${len} · meets ${joined}` : len);
       }
       return;
     }
