@@ -4,6 +4,7 @@ import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import {
   sampleBenchworkOutline,
   samplePath,
+  MAIN_TRACK_ID,
   type BenchworkPoint,
   type EndplatePose,
 } from "@willcgage/module-schematic";
@@ -48,12 +49,10 @@ export interface CanvasTurnout {
   pos: number;
   /** Frog number ("size") — governs the diverging angle (atan(1/size)). */
   size?: number;
+  /** The track this turnout sits on (main or a spur). Defaults to the main. */
+  onTrack?: string;
   /** The track id it diverges to (so the spur can start at the frog), if any. */
   divergeTrack?: string;
-  /** Lane of the track it diverges to (side of the main), if any yet. */
-  divergeLane?: number;
-  /** +1/-1 along the main toward the diverging body. */
-  divergeToward?: number;
 }
 export interface CanvasSignal {
   id: string;
@@ -178,7 +177,7 @@ export function BenchworkEditor({
   ) => void;
   onCancelPlace?: () => void;
   /** Turnout tool (W): a click on the main drops a turnout there (#52). */
-  onDropTurnout?: (pos: number) => void;
+  onDropTurnout?: (onTrack: string, pos: number) => void;
   /** The frog number the Turnout tool drops (governs the diverging angle). */
   turnoutSize?: number;
   onTurnoutSizeChange?: (size: number) => void;
@@ -230,20 +229,44 @@ export function BenchworkEditor({
 
   // Track context. A track with an authored 2-D path draws along it; otherwise
   // it's laid onto the main centre-line, offset to its lane (#2d-track).
+  // The polyline a turnout/track sits on: the main centre-line, or a spur's own
+  // authored/lane path — so a turnout can sit on a spur (a house track, #63).
+  const hostPointsOf = (onTrack: string | undefined | null): Pt[] => {
+    if (!onTrack || onTrack === MAIN_TRACK_ID) return centerline;
+    const host = tracks.find((x) => x.id === onTrack);
+    if (!host) return centerline;
+    return host.path && host.path.length >= 2
+      ? samplePath(host.path)
+      : lanePath(centerline, host.fromPos, host.toPos, host.lane);
+  };
   /** A turnout's frog point — where its diverging route clears one track over,
-   * at the frog angle atan(1/size). Null for a bare (nothing-diverging) turnout. */
+   * at the frog angle atan(1/size), on its host track. Null if nothing diverges. */
   const frogOf = (t: CanvasTurnout): Pt | null => {
-    if (t.divergeLane == null || centerline.length < 2) return null;
-    const m = sampleAt(centerline, t.pos);
-    const size = t.size && t.size > 0 ? t.size : 6;
+    const dt = tracks.find((x) => x.id === t.divergeTrack);
+    if (!dt) return null;
+    const host = hostPointsOf(t.onTrack);
+    if (host.length < 2) return null;
+    const m = sampleAt(host, t.pos);
     const eps = 0.5;
-    const a = sampleAt(centerline, Math.max(0, t.pos - eps));
-    const b = sampleAt(centerline, Math.min(lengthInches, t.pos + eps));
+    const a = sampleAt(host, Math.max(0, t.pos - eps));
+    const b = sampleAt(host, t.pos + eps);
     const tl = Math.hypot(b.x - a.x, b.y - a.y) || 1;
     const tx = (b.x - a.x) / tl;
     const ty = (b.y - a.y) / tl;
-    const side = Math.sign(laneOffset(t.divergeLane)) || 1;
-    const toward = t.divergeToward ?? 1;
+    // The diverging track's far end (relative to the throat) fixes the frog's
+    // longitudinal (toward) and lateral (side) sense — host-agnostic.
+    const far =
+      dt.path && dt.path.length >= 2
+        ? dt.path[dt.path.length - 1]
+        : {
+            x: m.x + tx * LANE_SPACING_INCHES + m.nx * (laneOffset(dt.lane) || LANE_SPACING_INCHES),
+            y: m.y + ty * LANE_SPACING_INCHES + m.ny * (laneOffset(dt.lane) || LANE_SPACING_INCHES),
+          };
+    const vx = far.x - m.x;
+    const vy = far.y - m.y;
+    const toward = Math.sign(vx * tx + vy * ty) || 1;
+    const side = Math.sign(vx * m.nx + vy * m.ny) || 1;
+    const size = t.size && t.size > 0 ? t.size : 6;
     const L = size * LANE_SPACING_INCHES; // points → frog
     return {
       x: m.x + toward * L * tx + side * LANE_SPACING_INCHES * m.nx,
@@ -259,13 +282,13 @@ export function BenchworkEditor({
         if (!t.divergeTrack) continue;
         const frog = frogOf(t);
         if (!frog) continue;
-        const m = sampleAt(centerline, t.pos);
+        const m = sampleAt(hostPointsOf(t.onTrack), t.pos);
         map.set(t.divergeTrack, { throat: { x: m.x, y: m.y }, frog });
       }
     }
     return map;
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [turnouts, centerline, lengthInches]);
+  }, [turnouts, tracks, centerline, lengthInches]);
   /** A drawn spur's path with its authored point 0 pinned to the frog. Used for
    * editing (the throat→frog leg belongs to the turnout, not the spur body). */
   const frogPinnedPath = (t: CanvasTrack): BenchworkPoint[] => {
@@ -302,14 +325,14 @@ export function BenchworkEditor({
     () =>
       centerline.length >= 2
         ? turnouts.map((t) => {
-            const m = sampleAt(centerline, t.pos);
-            // The frog rail (points → frog) is the turnout's diverging leg; the
-            // drawn spur continues from the same frog point, so they read as one.
+            // The turnout sits on its host track (main or a spur); its frog is
+            // where the diverging route clears one track over.
+            const m = sampleAt(hostPointsOf(t.onTrack), t.pos);
             return { id: t.id, x: m.x, y: m.y, frog: frogOf(t) };
           })
         : [],
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [centerline, turnouts, lengthInches],
+    [centerline, turnouts, tracks, lengthInches],
   );
   /** Draggable end handles for sidings/spurs (not the derived Main 2). */
   const trackEnds = useMemo(() => {
@@ -723,7 +746,10 @@ export function BenchworkEditor({
     }
     // Turnout tool: a click on the main drops a turnout there (#52).
     if (tool === "turnout") {
-      if (onDropTurnout && centerline.length >= 2) onDropTurnout(posFrom(toLocal(e)));
+      if (onDropTurnout && centerline.length >= 2) {
+        const hit = nearestTrackPos(toLocal(e));
+        if (hit) onDropTurnout(hit.onTrack, hit.pos);
+      }
       return;
     }
     // Track tool: a background click bends the selected spur, or the mainline
@@ -764,22 +790,41 @@ export function BenchworkEditor({
       Math.max(0, Math.min(lengthInches, projectToCenterline(centerline, p).pos)) * 10,
     ) / 10;
 
-  /** The turnout nearest a canvas point, by position along the main. */
+  /** The turnout nearest a canvas point, by straight-line distance to its point
+   * on its host track — so it works whether the turnout is on the main or a spur. */
   const nearestTurnout = (p: Pt): { id: string; pos: number; pt: Pt } | null => {
-    if (centerline.length < 2 || turnouts.length === 0) return null;
-    const at = posFrom(p);
-    let best: CanvasTurnout | null = null;
+    if (turnouts.length === 0) return null;
+    let best: { id: string; pos: number; pt: Pt } | null = null;
     let bestD = Infinity;
     for (const tn of turnouts) {
-      const d = Math.abs(tn.pos - at);
+      const host = hostPointsOf(tn.onTrack);
+      if (host.length < 2) continue;
+      const m = sampleAt(host, tn.pos);
+      const d = Math.hypot(p.x - m.x, p.y - m.y);
       if (d < bestD) {
         bestD = d;
-        best = tn;
+        best = { id: tn.id, pos: tn.pos, pt: { x: m.x, y: m.y } };
       }
     }
-    if (!best) return null;
-    const m = sampleAt(centerline, best.pos);
-    return { id: best.id, pos: best.pos, pt: { x: m.x, y: m.y } };
+    return best;
+  };
+  /** The track (main or a spur) nearest a canvas point, plus the position along
+   * it — so the Turnout tool can drop onto a spur, not just the main (#63). */
+  const nearestTrackPos = (p: Pt): { onTrack: string; pos: number } | null => {
+    if (centerline.length < 2) return null;
+    const cands: { onTrack: string; pts: Pt[] }[] = [
+      { onTrack: MAIN_TRACK_ID, pts: centerline },
+      ...tracks.map((t) => ({ onTrack: t.id, pts: hostPointsOf(t.id) })),
+    ];
+    let best: { onTrack: string; pos: number; dist: number } | null = null;
+    for (const c of cands) {
+      if (c.pts.length < 2) continue;
+      const proj = projectToCenterline(c.pts, p);
+      if (best === null || proj.dist < best.dist) {
+        best = { onTrack: c.onTrack, pos: proj.pos, dist: proj.dist };
+      }
+    }
+    return best === null ? null : { onTrack: best.onTrack, pos: Math.round(best.pos * 10) / 10 };
   };
 
   /** Finish a draw-to-create: turn the drawn line into track geometry, anchored

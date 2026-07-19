@@ -276,20 +276,16 @@ export function SchematicEditor({
   }, [doc, state.lengthInches, state.extraTracks, state.turnouts]);
   const canvasTurnouts = useMemo(
     () =>
-      state.turnouts.map((t) => {
-        // The spur/siding this turnout diverges to — gives the side (lane) and
-        // the direction along the main the switch trails (toward the body).
-        const dt = state.extraTracks.find((x) => x.id === t.divergeTrack);
-        return {
-          id: t.id,
-          pos: t.pos,
-          size: t.size,
-          divergeTrack: t.divergeTrack || undefined,
-          divergeLane: dt?.lane,
-          divergeToward: dt ? Math.sign(dt.toPos - t.pos) || 1 : 1,
-        };
-      }),
-    [state.turnouts, state.extraTracks],
+      state.turnouts.map((t) => ({
+        id: t.id,
+        pos: t.pos,
+        size: t.size,
+        // The host track (main or a spur) + what it diverges to; the canvas
+        // derives the frog geometry from these.
+        onTrack: t.onTrack,
+        divergeTrack: t.divergeTrack || undefined,
+      })),
+    [state.turnouts],
   );
   const canvasSignals = useMemo(
     () =>
@@ -488,14 +484,14 @@ export function SchematicEditor({
   }
   /** Turnout (W) tool: drop a turnout at `pos` on the main, sized by the tool,
    * with nothing diverging yet — a spur/siding drawn from it links later (#52). */
-  const onDropTurnout = (pos: number) => {
+  const onDropTurnout = (onTrack: string, pos: number) => {
     const id = nextId("sw", state.turnouts.map((t) => t.id));
     patch((s) => {
       s.turnouts.push({
         id,
         name: "",
-        pos: Math.round(pos),
-        onTrack: MAIN_TRACK_ID,
+        pos: Math.round(pos * 10) / 10,
+        onTrack,
         divergeTrack: "",
         kind: "right",
         size: turnoutSize,

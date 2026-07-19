@@ -5,6 +5,11 @@ Headings are `version — date` (YYYY-MM-DD).
 
 ---
 
+## v0.15.11 — 2026-07-19
+
+### Added
+- **Turnouts on a spur (house tracks)** — the **W** tool now drops a turnout onto the nearest track, so you can put one **on a spur**, not just the main. Then draw another spur from it — the switch's frog geometry follows the track it sits on. This is how an industry's **house track** branches to multiple spot tracks.
+
 ## v0.15.10 — 2026-07-18
 
 ### Changed
