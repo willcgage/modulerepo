@@ -604,6 +604,30 @@ export function SchematicEditor({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  // Shared "+ Track" wiring — used both on the Track drawing tool (canvas
+  // context bar) and in the Objects list.
+  const trackAdd = {
+    passingSiding: addPassingSiding,
+    spur: addSpur,
+    crossover: addCrossover,
+    mainline: (config: "single" | "double") =>
+      patch((s) => {
+        s.configA = config;
+        if (s.configB !== "none") s.configB = config;
+      }),
+  };
+  const canCrossover =
+    !state.loop && (state.configA === "double" || state.configB === "double");
+  const trackMenu = (
+    <AddTrackMenu
+      add={trackAdd}
+      mainlineDouble={isDouble}
+      mainlineLocked={lockedConfigs.a || lockedConfigs.b}
+      canCrossover={canCrossover}
+      align="left"
+    />
+  );
+
   return (
     <div className="flex h-full min-h-0 flex-col bg-gray-100">
       {/* Top bar — identity, readiness, save. */}
@@ -706,6 +730,7 @@ export function SchematicEditor({
                   })
                 }
                 onAddIndustry={addIndustryAt}
+                trackMenu={trackMenu}
                 onTrackPathChange={(id, path) =>
                   patch((s) => {
                     const t = s.extraTracks.find((x) => x.id === id);
@@ -756,18 +781,11 @@ export function SchematicEditor({
             select={setSelection}
             setTool={setTool}
             add={{
-              passingSiding: addPassingSiding,
-              spur: addSpur,
-              crossover: addCrossover,
+              ...trackAdd,
               turnout: addTurnout,
               crossing: addCrossing,
               controlPoint: addControlPoint,
               industry: addIndustry,
-              mainline: (config) =>
-                patch((s) => {
-                  s.configA = config;
-                  if (s.configB !== "none") s.configB = config;
-                }),
             }}
             mainlineDouble={isDouble}
             mainlineLocked={lockedConfigs.a || lockedConfigs.b}
@@ -2059,6 +2077,7 @@ function AddTrackMenu({
   mainlineDouble,
   mainlineLocked,
   canCrossover,
+  align = "right",
 }: {
   add: {
     passingSiding: () => void;
@@ -2069,6 +2088,7 @@ function AddTrackMenu({
   mainlineDouble: boolean;
   mainlineLocked: boolean;
   canCrossover: boolean;
+  align?: "left" | "right";
 }) {
   const [open, setOpen] = useState(false);
   const item =
@@ -2085,7 +2105,7 @@ function AddTrackMenu({
       {open && (
         <>
           <div className="fixed inset-0 z-10" onClick={() => setOpen(false)} />
-          <div className="absolute right-0 z-20 mt-1 w-48 rounded-lg border border-gray-200 bg-white p-1 shadow-lg">
+          <div className={`absolute z-20 mt-1 w-48 rounded-lg border border-gray-200 bg-white p-1 shadow-lg ${align === "left" ? "left-0" : "right-0"}`}>
             <div className="px-2 pt-1 text-[10px] font-semibold uppercase tracking-wide text-gray-400">
               Mainline
             </div>

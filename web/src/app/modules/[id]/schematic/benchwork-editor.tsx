@@ -106,6 +106,7 @@ export function BenchworkEditor({
   mainPath = [],
   onMainPathChange,
   onTrackPathChange,
+  trackMenu,
   selection = null,
   onSelect,
   tool = "select",
@@ -138,6 +139,8 @@ export function BenchworkEditor({
   /** Author a spur/siding's 2-D path (module-local inches) — bend/rotate it in
    * the Track tool; its throat stays snapped to its turnout (#2d-track). */
   onTrackPathChange?: (id: string, next: BenchworkPoint[]) => void;
+  /** The "+ Track" add menu (owned by the editor) — shown on the Track tool. */
+  trackMenu?: React.ReactNode;
   /** Selection is owned by the editor, which renders the inspector for it. */
   selection?: CanvasSelection | null;
   onSelect?: (s: CanvasSelection | null) => void;
@@ -959,6 +962,7 @@ export function BenchworkEditor({
           </span>
         ) : tool === "mainline" ? (
           <>
+            {trackMenu}
             {mainPath.length >= 2 && onMainPathChange && (
               <button type="button" onClick={() => onMainPathChange([])} className={btn}>
                 Straighten
@@ -971,6 +975,7 @@ export function BenchworkEditor({
           </>
         ) : tool === "track" ? (
           <>
+            {trackMenu}
             {editSpurTrack?.path && editSpurTrack.path.length >= 2 && onTrackPathChange && (
               <button
                 type="button"
