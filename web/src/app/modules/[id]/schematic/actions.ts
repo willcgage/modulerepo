@@ -5,6 +5,7 @@ import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import {
   inchesToScaleFeet,
+  endplateWidthInches,
   type ModuleSchematicDoc,
 } from "@/lib/module-schematic";
 
@@ -243,6 +244,52 @@ export async function saveModuleSchematic(
       ? await del.not("id", "in", `(${keptIds.join(",")})`)
       : await del;
     if (delErr) return { error: delErr.message };
+
+    // Sync freemon_endplates from the doc's endplate configs — downstream
+    // (Free-Dispatcher) snaps modules together by these rows, so a track drawn
+    // onto a plate ("a track on an endplate = a double-track endplate") must be
+    // reflected here. A → endplate_number 1, B → 2. Existing rows keep their
+    // hand-authored width/label/notes; only track_config follows the doc (and
+    // width when the doc carries an authored width). Rows are never deleted
+    // here — quick-create modules gain their rows on first save.
+    const { data: epRows, error: epReadErr } = await supabase
+      .from("freemon_endplates")
+      .select("id, endplate_number, track_config, width_inches")
+      .eq("module_id", moduleId);
+    if (epReadErr) return { error: epReadErr.message };
+    for (const [n, epId] of [
+      [1, "A"],
+      [2, "B"],
+    ] as const) {
+      const ep = doc.endplates.find((e) => e.id === epId && !e.at);
+      if (!ep) continue; // e.g. a pure turnback loop has no B
+      const cfg = ep.tracks?.[0]?.config === "double" ? "double" : "single";
+      const authoredWidth =
+        typeof ep.widthInches === "number" && ep.widthInches > 0 ? ep.widthInches : null;
+      const row = epRows?.find((r) => r.endplate_number === n);
+      if (row) {
+        const patch: { track_config?: string; width_inches?: number } = {};
+        if (row.track_config !== cfg) patch.track_config = cfg;
+        if (authoredWidth != null && Number(row.width_inches) !== authoredWidth)
+          patch.width_inches = authoredWidth;
+        if (Object.keys(patch).length) {
+          const { error } = await supabase
+            .from("freemon_endplates")
+            .update(patch)
+            .eq("id", row.id);
+          if (error) return { error: error.message };
+        }
+      } else {
+        const { error } = await supabase.from("freemon_endplates").insert({
+          module_id: moduleId,
+          endplate_number: n,
+          label: `EP-${n}`,
+          track_config: cfg,
+          width_inches: authoredWidth ?? endplateWidthInches(ep),
+        });
+        if (error) return { error: error.message };
+      }
+    }
   }
 
   const nextVersion = doc ? (module.schematic_version ?? 0) + 1 : null;

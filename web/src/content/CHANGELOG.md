@@ -5,6 +5,11 @@ Headings are `version — date` (YYYY-MM-DD).
 
 ---
 
+## v0.15.34 — 2026-07-19
+
+### Changed
+- **Endplate records follow the drawing.** Saving the schematic now syncs the module's endplate records: each plate's **track config** (single/double) matches what's drawn, quick-create modules gain their endplate rows on first save, and an authored endplate width carries over — so module joining downstream sees the real interface. Existing rows keep their hand-authored labels/notes, and they no longer lock the canvas (the drawing is the source of truth).
+
 ## v0.15.33 — 2026-07-19
 
 ### Changed
