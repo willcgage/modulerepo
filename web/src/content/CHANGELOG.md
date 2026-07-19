@@ -5,6 +5,11 @@ Headings are `version — date` (YYYY-MM-DD).
 
 ---
 
+## v0.15.9 — 2026-07-18
+
+### Changed
+- **Turnouts look like switches** — a turnout now draws its diverging leg as real **ballasted track** (rails + ties) running from the throat, with a **frog** casting and **points** symbol, instead of a plain line. The whole switch-and-spur reads as one continuous piece of track.
+
 ## v0.15.8 — 2026-07-18
 
 ### Changed
