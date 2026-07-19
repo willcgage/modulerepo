@@ -830,6 +830,7 @@ export function SchematicEditor({
                 onMainPathChange={(next) => patch((s) => (s.mainPath = next))}
                 endplateWidths={state.endplateWidths}
                 centerline={footprint.centerline}
+                sectionBreaks={state.sectionBreaks}
                 tracks={canvasTracks}
                 turnouts={canvasTurnouts}
                 signals={canvasSignals}
@@ -1268,6 +1269,27 @@ function Inspector({
               onChange={(e) => setDim({ length_total_inches: e.target.value })}
               className={`mt-0.5 ${inp}`}
               title="The physical length of the board. Draw the mainline (M) if the rail runs a different distance than the board."
+            />
+          </label>
+          <label className="block text-xs font-medium text-gray-600">
+            Sections
+            <input
+              type="number"
+              min={1}
+              max={12}
+              step={1}
+              value={state.sectionBreaks.length + 1}
+              onChange={(e) => {
+                const n = Math.max(1, Math.min(12, Math.round(Number(e.target.value) || 1)));
+                patch((s) => {
+                  const L = s.lengthInches;
+                  s.sectionBreaks = Array.from({ length: n - 1 }, (_, i) =>
+                    Math.round((L * (i + 1)) / n),
+                  );
+                });
+              }}
+              className={`mt-0.5 ${inp}`}
+              title="How many bench-work sections the module is built from. The joints are marked on the board; the module still operates as one unit."
             />
           </label>
           <label className="flex gap-2 text-xs text-gray-700">

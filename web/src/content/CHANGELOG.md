@@ -5,6 +5,11 @@ Headings are `version — date` (YYYY-MM-DD).
 
 ---
 
+## v0.15.15 — 2026-07-19
+
+### Added
+- **Benchwork sections** — set how many bench-work **sections** a module is built from (in the Module panel with nothing selected). The joints where the boards split are drawn as dashed dividers across the board, marked with their position. The module still operates as one unit — the joints are just construction/transport seams.
+
 ## v0.15.14 — 2026-07-19
 
 ### Fixed
