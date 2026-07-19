@@ -4,6 +4,7 @@ import { createClient } from "@/lib/supabase/server";
 import { embeddedOne } from "@/lib/embedded";
 import { asModuleSchematic } from "@/lib/module-schematic";
 import { SchematicPreview } from "./schematic/schematic-preview";
+import { DeleteModuleButton } from "./delete-module-button";
 import { ModuleFootprintView, footprintInput } from "@/components/module-footprint-view";
 import { StatusBadge } from "@/components/status-badge";
 import {
@@ -19,7 +20,6 @@ import {
   deleteEndplate,
   deleteImage,
   deleteIndustry,
-  deleteModule,
   deleteSchematic,
   setIndustryCarTypes,
   updateEndplate,
@@ -210,14 +210,7 @@ export default async function ModuleDetailPage({
                 Update status
               </button>
             </form>
-            <form action={deleteModule.bind(null, module.id)}>
-              <button
-                type="submit"
-                className="text-xs font-medium text-red-600 hover:underline"
-              >
-                Delete module
-              </button>
-            </form>
+            <DeleteModuleButton moduleId={module.id} moduleName={module.module_name} />
           </div>
         )}
       </div>

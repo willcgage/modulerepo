@@ -5,6 +5,11 @@ Headings are `version — date` (YYYY-MM-DD).
 
 ---
 
+## v0.15.18 — 2026-07-19
+
+### Added
+- **Confirm before deleting a module** — the Delete module button now asks you to confirm first (it permanently removes the module and its whole schematic), so a stray click can't wipe one.
+
 ## v0.15.17 — 2026-07-19
 
 ### Added
