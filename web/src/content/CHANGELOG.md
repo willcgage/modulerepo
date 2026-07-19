@@ -5,6 +5,11 @@ Headings are `version — date` (YYYY-MM-DD).
 
 ---
 
+## v0.15.2 — 2026-07-18
+
+### Changed
+- **"+ Track" menu on the drawing tools** — the add-track menu (set the main to single/double, add a siding or spur/yard, a crossover) now appears in the toolbar above the canvas whenever the **Mainline** or **Track** tool is active, so you add and draw track in the same place. It's still in the Objects list too.
+
 ## v0.15.1 — 2026-07-18
 
 ### Changed
