@@ -304,23 +304,41 @@ export function SchematicEditor({
   }, [state.extraTracks]);
   const canvasIndustries = useMemo<CanvasIndustry[]>(
     () =>
-      state.industries.map((ind) => {
-        const cars = carCapacity(ind.fromPos, ind.toPos);
-        const sub =
-          ind.labelMode === "cars"
-            ? `${cars} cars`
-            : ind.labelMode === "inches"
-              ? `${Math.round(Math.abs(ind.toPos - ind.fromPos))}″`
-              : "";
-        return {
-          id: ind.id,
-          lane: laneOfTrack.get(ind.track) ?? 0,
-          fromPos: ind.fromPos,
-          toPos: ind.toPos,
-          side: ind.side,
-          name: ind.name,
-          sub,
+      state.industries.flatMap((ind) => {
+        // One render span per spot: the primary track + any house-track spots.
+        const spot = (
+          id: string,
+          track: string,
+          fromPos: number,
+          toPos: number,
+          side: "above" | "below",
+          editable: boolean,
+        ): CanvasIndustry => {
+          const cars = carCapacity(fromPos, toPos);
+          const sub =
+            ind.labelMode === "cars"
+              ? `${cars} cars`
+              : ind.labelMode === "inches"
+                ? `${Math.round(Math.abs(toPos - fromPos))}″`
+                : "";
+          return {
+            id,
+            industryId: ind.id,
+            editable,
+            lane: laneOfTrack.get(track) ?? 0,
+            fromPos,
+            toPos,
+            side,
+            name: ind.name,
+            sub,
+          };
         };
+        return [
+          spot(ind.id, ind.track, ind.fromPos, ind.toPos, ind.side, true),
+          ...(ind.spots ?? []).map((sp, i) =>
+            spot(`${ind.id}#${i}`, sp.track, sp.fromPos, sp.toPos, sp.side ?? ind.side, false),
+          ),
+        ];
       }),
     [state.industries, laneOfTrack],
   );
@@ -536,6 +554,7 @@ export function SchematicEditor({
         track,
         fromPos: from,
         toPos: to,
+        spots: [],
         side: "below",
         labelMode: "none",
         carTypes: [],
@@ -555,6 +574,7 @@ export function SchematicEditor({
         track,
         fromPos: Math.max(0, Math.round(pos - half)),
         toPos: Math.min(s.lengthInches, Math.round(pos + half)),
+        spots: [],
         side: "below",
         labelMode: "none",
         carTypes: [],
@@ -1893,7 +1913,9 @@ function Inspector({
     const ind = state.industries[idx];
     const up = (fn: (x: EditorState["industries"][number]) => void) =>
       patch((s) => fn(s.industries[idx]));
-    const cars = carCapacity(ind.fromPos, ind.toPos);
+    const cars =
+      carCapacity(ind.fromPos, ind.toPos) +
+      ind.spots.reduce((n, sp) => n + carCapacity(sp.fromPos, sp.toPos), 0);
     return shell(
       `Industry · ${ind.name || "unnamed"}`,
       <>
@@ -1967,10 +1989,84 @@ function Inspector({
           </label>
           <label className="block text-xs font-medium text-gray-600">
             Capacity
-            <div className={`mt-0.5 ${inp} bg-gray-50 text-gray-600`} title="Derived from the drawn span.">
+            <div className={`mt-0.5 ${inp} bg-gray-50 text-gray-600`} title="Total across all this industry's tracks.">
               {cars} cars
             </div>
           </label>
+        </div>
+        <div className="border-t border-gray-100 pt-2">
+          <div className="flex items-center justify-between">
+            <span className="text-xs font-medium text-gray-600">House-track spots</span>
+            <button
+              type="button"
+              onClick={() =>
+                up((x) => {
+                  const t = state.extraTracks[0]?.id ?? ind.track;
+                  x.spots = [
+                    ...x.spots,
+                    {
+                      track: t,
+                      fromPos: Math.round(state.lengthInches * 0.4),
+                      toPos: Math.round(state.lengthInches * 0.5),
+                      side: x.side,
+                    },
+                  ];
+                })
+              }
+              className={addBtn}
+            >
+              + Add track
+            </button>
+          </div>
+          {ind.spots.length === 0 ? (
+            <p className="mt-1 text-xs font-normal text-gray-400">
+              Served by one track. Add a track to spot cars on a house track&rsquo;s
+              other tracks too.
+            </p>
+          ) : (
+            <div className="mt-1 space-y-2">
+              {ind.spots.map((sp, si) => (
+                <div key={si} className="space-y-1 rounded-md border border-gray-200 p-2">
+                  <div className="flex items-center gap-2">
+                    <select
+                      value={sp.track}
+                      onChange={(e) => up((x) => (x.spots[si].track = e.target.value))}
+                      className={`${inp} text-xs`}
+                    >
+                      {trackOptions.map((o) => (
+                        <option key={o.value} value={o.value}>{o.label}</option>
+                      ))}
+                    </select>
+                    <button
+                      type="button"
+                      onClick={() => up((x) => x.spots.splice(si, 1))}
+                      className="shrink-0 text-xs text-red-600 hover:text-red-700"
+                    >
+                      Remove
+                    </button>
+                  </div>
+                  <div className="grid grid-cols-2 gap-2">
+                    <input
+                      type="number"
+                      step={0.5}
+                      value={sp.fromPos}
+                      onChange={(e) => up((x) => (x.spots[si].fromPos = Number(e.target.value)))}
+                      className={`${inp} text-xs`}
+                      title="Starts (in from A)"
+                    />
+                    <input
+                      type="number"
+                      step={0.5}
+                      value={sp.toPos}
+                      onChange={(e) => up((x) => (x.spots[si].toPos = Number(e.target.value)))}
+                      className={`${inp} text-xs`}
+                      title="Ends (in from A)"
+                    />
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
         </div>
         <label className="block text-xs font-medium text-gray-600">
           Label on canvas

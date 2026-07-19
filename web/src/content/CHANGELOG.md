@@ -5,6 +5,11 @@ Headings are `version — date` (YYYY-MM-DD).
 
 ---
 
+## v0.15.13 — 2026-07-19
+
+### Added
+- **Multi-track industries (house tracks)** — one industry can now be served by **several tracks**. In an industry's inspector there's a **House-track spots** section: add a spot on another track (its own span), and it draws on the layout beside that track. Capacity totals across all the industry's tracks. Clicking any of its tracks selects the whole industry.
+
 ## v0.15.12 — 2026-07-19
 
 ### Changed

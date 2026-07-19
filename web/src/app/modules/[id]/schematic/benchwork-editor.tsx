@@ -61,7 +61,12 @@ export interface CanvasSignal {
 }
 /** An industry — a car-spot span beside a track (#industries). */
 export interface CanvasIndustry {
+  /** Unique render id for this spot (industry id, or `${id}#n` for extra spots). */
   id: string;
+  /** The industry this spot belongs to — what selecting it selects (#54). */
+  industryId: string;
+  /** Whether this spot's ends are draggable (the primary spot only). */
+  editable: boolean;
   /** Lane of the track it spots on (to offset it beside that track). */
   lane: number;
   fromPos: number;
@@ -399,6 +404,8 @@ export function BenchworkEditor({
       const labelOff = off + sign * 2.2;
       return {
         id: ind.id,
+        industryId: ind.industryId,
+        editable: ind.editable,
         side: ind.side,
         name: ind.name,
         sub: ind.sub,
@@ -1444,7 +1451,7 @@ export function BenchworkEditor({
         ))}
         {/* Industries — a car-spot span beside its track, name + optional readout. */}
         {industryShapes.map((ind) => {
-          const on = selection?.kind === "industry" && selection.id === ind.id;
+          const on = selection?.kind === "industry" && selection.id === ind.industryId;
           return (
             <g key={`ind${ind.id}`}>
               {ind.path.length >= 2 && (
@@ -1459,7 +1466,7 @@ export function BenchworkEditor({
                     onSelect
                       ? (e) => {
                           e.stopPropagation();
-                          onSelect({ kind: "industry", id: ind.id });
+                          onSelect({ kind: "industry", id: ind.industryId });
                         }
                       : undefined
                   }
@@ -1484,6 +1491,7 @@ export function BenchworkEditor({
                 )}
               </text>
               {onIndustryEndMove &&
+                ind.editable &&
                 ind.ends.map((h) => (
                   <rect
                     key={`ie${ind.id}${h.end}`}
@@ -1495,7 +1503,7 @@ export function BenchworkEditor({
                     stroke="#b45309"
                     strokeWidth={world(1)}
                     style={{ cursor: "ew-resize" }}
-                    onPointerDown={(e) => beginDrag(e, { kind: "industryEnd", id: ind.id, end: h.end })}
+                    onPointerDown={(e) => beginDrag(e, { kind: "industryEnd", id: ind.industryId, end: h.end })}
                   >
                     <title>{`Drag to move this industry's ${h.end === "from" ? "start" : "end"}`}</title>
                   </rect>
