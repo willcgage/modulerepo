@@ -487,6 +487,28 @@ export function BenchworkEditor({
     return sw ? [...sw.leg.map((p) => ({ x: p.x, y: p.y })), ...base.slice(1)] : base;
   };
 
+  /** A stub spur's diverging route, angled away like the prototype (Option 1):
+   * the throat→frog leg (already at the frog angle) CONTINUES straight along the
+   * frog tangent, instead of bending back to run parallel to the main. So a
+   * straight turnout throws a single clean diagonal at atan(1/N); a curved one
+   * carries the curve on. Length ≈ the stub's along-main span (the leg is the
+   * turnout body; the tail is the track beyond it). Null → not a turnout stub. */
+  const divergingStubPath = (t: CanvasTrack): Pt[] | null => {
+    const sw = switchByTrack.get(t.id);
+    if (!sw || sw.leg.length < 2) return null;
+    const leg = sw.leg;
+    const frog = leg[leg.length - 1];
+    const prev = leg[leg.length - 2];
+    const dl = Math.hypot(frog.x - prev.x, frog.y - prev.y) || 1;
+    const dx = (frog.x - prev.x) / dl;
+    const dy = (frog.y - prev.y) / dl;
+    let legLen = 0;
+    for (let i = 1; i < leg.length; i++)
+      legLen += Math.hypot(leg[i].x - leg[i - 1].x, leg[i].y - leg[i - 1].y);
+    const tailLen = Math.max(2, Math.abs(t.toPos - t.fromPos) - legLen);
+    return [...leg.map((p) => ({ x: p.x, y: p.y })), { x: frog.x + dx * tailLen, y: frog.y + dy * tailLen }];
+  };
+
   const trackPaths = useMemo(
     () =>
       centerline.length >= 2
@@ -496,7 +518,7 @@ export function BenchworkEditor({
               pts:
                 t.path && t.path.length >= 2
                   ? samplePath(spurTrackPath(t))
-                  : lanePath(centerline, t.fromPos, t.toPos, t.lane),
+                  : (divergingStubPath(t) ?? lanePath(centerline, t.fromPos, t.toPos, t.lane)),
             }))
             .filter((t) => t.pts.length > 1)
         : [],
@@ -528,13 +550,22 @@ export function BenchworkEditor({
       // A drawn spur is positioned by its path, not fromPos/toPos — no end drags.
       .filter((t) => t.editable && !(t.path && t.path.length >= 2))
       .flatMap((t) => {
+        // A turnout stub angles away — its far end sits at the end of the
+        // diverging route, and its throat is pinned to the turnout (no from
+        // handle). Drag the far end to lengthen/shorten the diverging track.
+        const dv = divergingStubPath(t);
+        if (dv && dv.length >= 2) {
+          const e = dv[dv.length - 1];
+          return [{ id: t.id, end: "to" as const, x: e.x, y: e.y }];
+        }
         const off = laneOffset(t.lane);
         return (["from", "to"] as const).map((end) => {
           const p = sampleAt(centerline, end === "from" ? t.fromPos : t.toPos);
           return { id: t.id, end, x: p.x + p.nx * off, y: p.y + p.ny * off };
         });
       });
-  }, [centerline, tracks]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [centerline, tracks, switchByTrack]);
   const signalPts = useMemo(
     () =>
       centerline.length >= 2

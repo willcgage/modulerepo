@@ -5,6 +5,11 @@ Headings are `version — date` (YYYY-MM-DD).
 
 ---
 
+## v0.15.24 — 2026-07-19
+
+### Changed
+- **Diverging routes angle away like the real turnout.** A turnout's spur now continues at the frog angle — a straight turnout throws a single clean diagonal (atan(1/#)), a curved one carries the curve on — instead of bending back to run alongside the main. Drag the far end to lengthen the diverging track. (Based on the Fast Tracks prototype geometry.)
+
 ## v0.15.23 — 2026-07-19
 
 ### Changed
