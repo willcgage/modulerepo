@@ -1740,26 +1740,30 @@ export function BenchworkEditor({
           const node = on ? "#0284c7" : "#475569";
           return (
             <g key={`to${t.id}`}>
-              {/* Frog node — where the routes cross (the band shows the geometry). */}
+              {/* Frog node — where the diverging route clears one track over. A
+                  white snap circle, like the points, so both ends of the switch
+                  read as connection nodes. */}
               {t.frog && (
                 <circle
                   cx={t.frog.x}
                   cy={sy(t.frog.y)}
-                  r={r * 0.4}
+                  r={r * 0.6}
                   fill="#fff"
                   stroke={node}
-                  strokeWidth={r * 0.3}
+                  strokeWidth={r * 0.28}
                   pointerEvents="none"
                 />
               )}
-              {/* Throat / points node — the draggable control. */}
+              {/* Points node — the white snap circle at the throat, where the
+                  diverging route leaves the main (and the draggable control). The
+                  prominent node the track plan snaps to. */}
               <circle
                 cx={t.x}
                 cy={sy(t.y)}
-                r={onTurnoutMove ? r * 0.6 : r * 0.45}
+                r={r * 0.85}
                 fill="#fff"
                 stroke={node}
-                strokeWidth={r * 0.35}
+                strokeWidth={r * 0.38}
                 style={onTurnoutMove ? { cursor: "ew-resize" } : undefined}
                 onPointerDown={
                   onTurnoutMove ? (e) => beginDrag(e, { kind: "turnout", id: t.id }) : undefined
