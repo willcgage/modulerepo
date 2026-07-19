@@ -107,6 +107,7 @@ export function BenchworkEditor({
   poses,
   endplateWidths,
   centerline = [],
+  sectionBreaks = [],
   tracks = [],
   turnouts = [],
   signals = [],
@@ -136,6 +137,8 @@ export function BenchworkEditor({
   endplateWidths?: Record<string, number>;
   /** The real mainline centre-line (module-local inches) — drawn as context. */
   centerline?: Pt[];
+  /** Internal section joints (inches from A) — drawn as dividers on the board. */
+  sectionBreaks?: number[];
   /** Sidings/spurs/main-2, positioned along the main and offset to their lane. */
   tracks?: CanvasTrack[];
   turnouts?: CanvasTurnout[];
@@ -1370,6 +1373,35 @@ export function BenchworkEditor({
             when fired — not during render; the lint rule can't see that. */}
         {/* eslint-disable-next-line react-hooks/refs */}
         {trackLines.map(renderTrack)}
+        {/* Section joints — dashed dividers where the boards split (#48). */}
+        {centerline.length >= 2 &&
+          sectionBreaks.map((pos, i) => {
+            const p = sampleAt(centerline, pos);
+            const half =
+              Math.max(endplateWidths?.["A"] ?? 24, endplateWidths?.["B"] ?? 24) / 2 + 2;
+            return (
+              <g key={`sec${i}`} pointerEvents="none">
+                <line
+                  x1={p.x + p.nx * half}
+                  y1={sy(p.y + p.ny * half)}
+                  x2={p.x - p.nx * half}
+                  y2={sy(p.y - p.ny * half)}
+                  stroke="#64748b"
+                  strokeWidth={world(1)}
+                  strokeDasharray={`${world(3)} ${world(2)}`}
+                />
+                <text
+                  x={p.x + p.nx * half}
+                  y={sy(p.y + p.ny * half) - world(2)}
+                  textAnchor="middle"
+                  fontSize={world(7)}
+                  fill="#64748b"
+                >
+                  {`${fmt(pos)}″`}
+                </text>
+              </g>
+            );
+          })}
         {/* No centre-line yet? Show the endplate-to-endplate lead dashed. */}
         {centerline.length < 2 && poses.length >= 2 && (
           <line
