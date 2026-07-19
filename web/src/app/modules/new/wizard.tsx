@@ -456,26 +456,6 @@ function BasicsStep({
         </p>
       </div>
 
-      <div className="mb-1">
-        <label className={`${labelClass} mb-1 block`}>
-          Mainline track length (inches) — optional
-          <input
-            className={inputClass}
-            type="number"
-            min="0.001"
-            step="0.001"
-            value={basics.mainline_length_inches}
-            onChange={(e) => set("mainline_length_inches", e.target.value)}
-          />
-        </label>
-        <p className="mb-4 text-xs text-gray-500">
-          The length of the mainline track running through this module. Leave blank if
-          it equals the module footprint (common for straight modules). Enter a
-          different value for curves or wyes where the rail distance differs from the
-          straight-line footprint.
-        </p>
-      </div>
-
       <label className="mb-4 flex items-center gap-2 text-sm font-medium text-gray-700">
         <input
           type="checkbox"

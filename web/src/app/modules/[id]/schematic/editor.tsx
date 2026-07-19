@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState, useTransition } from "react";
+import { Fragment, useCallback, useEffect, useMemo, useRef, useState, useTransition } from "react";
 import Link from "next/link";
 import {
   MAIN_TRACK_ID,
@@ -781,23 +781,29 @@ export function SchematicEditor({
 /** The tools that decide what a canvas click means. Select and Benchwork are
  * live; the rest are placeholders for later stages (drawn track, signals…) so
  * the rail's shape is settled. Each has a single-key shortcut. */
-const TOOLS: {
-  id: CanvasTool;
+type RailTool = {
+  id?: CanvasTool;
   key: string;
   label: string;
   glyph: string;
   hint: string;
   soon?: boolean;
-}[] = [
-  { id: "select", key: "V", label: "Select", glyph: "▶", hint: "Select & move (V)" },
-  { id: "benchwork", key: "B", label: "Benchwork", glyph: "▱", hint: "Draw the board outline (B)" },
-  { id: "mainline", key: "M", label: "Mainline", glyph: "〜", hint: "Draw / bend the mainline (M)" },
-  { id: "track", key: "T", label: "Track", glyph: "═", hint: "Bend / rotate a siding or spur (T)" },
-  { id: "industry", key: "I", label: "Industry", glyph: "▢", hint: "Place an industry on a track (I)" },
-];
-const SOON_TOOLS = [
-  { key: "W", label: "Turnout", glyph: "⋋" },
-  { key: "S", label: "Signal", glyph: "⚑" },
+};
+
+// Grouped so the rail reads in sections: the pointer, then everything you draw
+// on the board (board → main → sidings → turnouts → signals), then the
+// operations overlay. Turnouts and signals sit with the track tools, not below
+// Industry. Dividers separate the groups.
+const TOOL_GROUPS: RailTool[][] = [
+  [{ id: "select", key: "V", label: "Select", glyph: "▶", hint: "Select & move (V)" }],
+  [
+    { id: "benchwork", key: "B", label: "Benchwork", glyph: "▱", hint: "Draw the board outline (B)" },
+    { id: "mainline", key: "M", label: "Mainline", glyph: "〜", hint: "Draw / bend the mainline (M)" },
+    { id: "track", key: "T", label: "Track", glyph: "═", hint: "Bend / rotate a siding or spur (T)" },
+    { key: "W", label: "Turnout", glyph: "⋋", hint: "Turnout — coming soon", soon: true },
+    { key: "S", label: "Signal", glyph: "⚑", hint: "Signal — coming soon", soon: true },
+  ],
+  [{ id: "industry", key: "I", label: "Industry", glyph: "▢", hint: "Place an industry on a track (I)" }],
 ];
 
 function ToolRail({
@@ -809,36 +815,42 @@ function ToolRail({
 }) {
   return (
     <div className="flex w-12 shrink-0 flex-col items-center gap-1 border-r border-gray-200 bg-white py-2">
-      {TOOLS.map((t) => {
-        const on = tool === t.id;
-        return (
-          <button
-            key={t.id}
-            type="button"
-            onClick={() => setTool(t.id)}
-            title={t.hint}
-            aria-pressed={on}
-            className={`flex h-9 w-9 flex-col items-center justify-center rounded-md text-base leading-none transition ${
-              on ? "bg-blue-600 text-white" : "text-gray-600 hover:bg-gray-100"
-            }`}
-          >
-            <span>{t.glyph}</span>
-            <span className="mt-0.5 text-[9px] font-medium">{t.key}</span>
-          </button>
-        );
-      })}
-      <div className="my-1 h-px w-6 bg-gray-200" />
-      {SOON_TOOLS.map((t) => (
-        <button
-          key={t.label}
-          type="button"
-          disabled
-          title={`${t.label} — coming soon`}
-          className="flex h-9 w-9 cursor-not-allowed flex-col items-center justify-center rounded-md text-base leading-none text-gray-300"
-        >
-          <span>{t.glyph}</span>
-          <span className="mt-0.5 text-[9px] font-medium">{t.key}</span>
-        </button>
+      {TOOL_GROUPS.map((group, gi) => (
+        <Fragment key={gi}>
+          {gi > 0 && <div className="my-1 h-px w-6 bg-gray-200" />}
+          {group.map((t) => {
+            if (t.soon || !t.id) {
+              return (
+                <button
+                  key={t.key}
+                  type="button"
+                  disabled
+                  title={t.hint}
+                  className="flex h-9 w-9 cursor-not-allowed flex-col items-center justify-center rounded-md text-base leading-none text-gray-300"
+                >
+                  <span>{t.glyph}</span>
+                  <span className="mt-0.5 text-[9px] font-medium">{t.key}</span>
+                </button>
+              );
+            }
+            const on = tool === t.id;
+            return (
+              <button
+                key={t.id}
+                type="button"
+                onClick={() => setTool(t.id!)}
+                title={t.hint}
+                aria-pressed={on}
+                className={`flex h-9 w-9 flex-col items-center justify-center rounded-md text-base leading-none transition ${
+                  on ? "bg-blue-600 text-white" : "text-gray-600 hover:bg-gray-100"
+                }`}
+              >
+                <span>{t.glyph}</span>
+                <span className="mt-0.5 text-[9px] font-medium">{t.key}</span>
+              </button>
+            );
+          })}
+        </Fragment>
       ))}
     </div>
   );
@@ -1096,31 +1108,17 @@ function Inspector({
               />
             </label>
           )}
-          <div className="grid grid-cols-2 gap-2">
-            <label className="block text-xs font-medium text-gray-600">
-              Footprint length (in)
-              <input
-                type="number"
-                step={0.001}
-                value={dims.length_total_inches}
-                onChange={(e) => setDim({ length_total_inches: e.target.value })}
-                className={`mt-0.5 ${inp}`}
-                title="The physical length of the board."
-              />
-            </label>
-            <label className="block text-xs font-medium text-gray-600">
-              Mainline length (in)
-              <input
-                type="number"
-                step={0.001}
-                value={dims.mainline_length_inches}
-                onChange={(e) => setDim({ mainline_length_inches: e.target.value })}
-                className={`mt-0.5 ${inp}`}
-                placeholder={dims.length_total_inches || "same"}
-                title="Only when the rail distance through the module differs from the footprint (curves, wyes). Blank = same as the footprint length."
-              />
-            </label>
-          </div>
+          <label className="block text-xs font-medium text-gray-600">
+            Footprint length (in)
+            <input
+              type="number"
+              step={0.001}
+              value={dims.length_total_inches}
+              onChange={(e) => setDim({ length_total_inches: e.target.value })}
+              className={`mt-0.5 ${inp}`}
+              title="The physical length of the board. Draw the mainline (M) if the rail runs a different distance than the board."
+            />
+          </label>
           <label className="flex gap-2 text-xs text-gray-700">
             <input
               type="checkbox"
