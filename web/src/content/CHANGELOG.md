@@ -5,6 +5,11 @@ Headings are `version — date` (YYYY-MM-DD).
 
 ---
 
+## v0.15.20 — 2026-07-19
+
+### Fixed
+- **Creating a new module works again.** Since the blank-module change, the new-module form submitted no geometry — but the database still required one, so every create failed with a foreign-key error. Geometry is now genuinely optional (a module's mainline is drawn on the canvas, not declared up front), and creation succeeds.
+
 ## v0.15.19 — 2026-07-19
 
 ### Added

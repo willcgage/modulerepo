@@ -1,0 +1,12 @@
+-- The blank-module reframe (MR v0.15.16) lets a module start with NO declared
+-- geometry — the mainline is drawn on the canvas, not chosen up front. That
+-- makes "no geometry" a real, persistable state, so geometry_type must allow
+-- NULL. Without this, creating a module from the quick-create form (which sends
+-- an empty geometry) violated the FK to module_geometries and new-module
+-- creation failed outright.
+--
+-- The FK to module_geometries and the geometry CHECK constraints already permit
+-- NULL: a NULL foreign key is allowed, and chk_geometry_no_extra_fields only
+-- requires degrees/offset to be NULL when geometry_type is not 'curve'/'offset'
+-- (which holds for a NULL geometry_type). Existing rows are untouched.
+ALTER TABLE freemon_modules ALTER COLUMN geometry_type DROP NOT NULL;

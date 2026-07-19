@@ -82,7 +82,10 @@ export async function createModule(
       module_name: basics.module_name.trim(),
       description: basics.description.trim() || null,
       category: basics.category,
-      geometry_type: basics.geometry_type,
+      // A blank module carries no geometry — it's drawn on the canvas, not
+      // declared. Empty → NULL so the FK to module_geometries is satisfied
+      // (the column is nullable; an empty string is not a valid geometry key).
+      geometry_type: basics.geometry_type || null,
       geometry_degrees: toNullableNumber(basics.geometry_degrees),
       geometry_offset_inches: toNullableNumber(basics.geometry_offset_inches),
       length_total_inches: Number(basics.length_total_inches),
