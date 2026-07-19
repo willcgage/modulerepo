@@ -562,6 +562,39 @@ export function BenchworkEditor({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [turnouts, tracks, centerline, lengthInches]);
 
+  /** The main centre-line drawn as segments, with a GAP across each wye on the
+   * main — a true 2-way wye has no straight-through, so the two mirrored legs
+   * take over where the straight main would otherwise bisect the Y. The main
+   * stays the coordinate spine underneath; it's just not drawn across the wye. */
+  const mainSegments = useMemo(() => {
+    if (centerline.length < 2) return [];
+    const clips: [number, number][] = [];
+    for (const t of turnouts) {
+      if (t.kind !== "wye") continue;
+      if (t.onTrack && t.onTrack !== MAIN_TRACK_ID) continue;
+      const spur = tracks.find((x) => x.id === t.divergeTrack);
+      const reach = spur ? Math.abs(spur.toPos - spur.fromPos) : 6;
+      const toward = spur ? Math.sign(spur.toPos - t.pos) || 1 : 1;
+      clips.push([Math.min(t.pos, t.pos + toward * reach), Math.max(t.pos, t.pos + toward * reach)]);
+    }
+    if (clips.length === 0) return [centerline];
+    clips.sort((a, b) => a[0] - b[0]);
+    const merged: [number, number][] = [];
+    for (const c of clips) {
+      const last = merged[merged.length - 1];
+      if (last && c[0] <= last[1]) last[1] = Math.max(last[1], c[1]);
+      else merged.push([...c] as [number, number]);
+    }
+    const keeps: [number, number][] = [];
+    let cur = 0;
+    for (const [s, e] of merged) {
+      if (s > cur) keeps.push([cur, s]);
+      cur = Math.max(cur, e);
+    }
+    if (cur < lengthInches) keeps.push([cur, lengthInches]);
+    return keeps.map(([s, e]) => lanePath(centerline, s, e, 0)).filter((p) => p.length >= 2);
+  }, [turnouts, tracks, centerline, lengthInches]);
+
   const trackPaths = useMemo(
     () =>
       centerline.length >= 2
@@ -1459,9 +1492,8 @@ export function BenchworkEditor({
   const poly = (pts: Pt[]) => pts.map((p) => `${p.x},${sy(p.y)}`).join(" ");
   /** Mainline + sidings/spurs as one list, so all get the same rendering. */
   const trackLines: { id: string; pts: Pt[]; main: boolean; selectable: boolean }[] = [
-    ...(centerline.length >= 2
-      ? [{ id: "__main__", pts: centerline, main: true, selectable: false }]
-      : []),
+    // The main, drawn as segments so a wye leaves a gap (no straight-through).
+    ...mainSegments.map((pts, i) => ({ id: `__main__${i}`, pts, main: true, selectable: false })),
     ...trackPaths.map((t) => ({ id: t.id, pts: t.pts, main: false, selectable: true })),
     // A wye's mirrored second route draws as a (non-selectable) band.
     ...wyeMirrorLegs.map((w) => ({ id: w.id, pts: w.pts, main: false, selectable: false })),
