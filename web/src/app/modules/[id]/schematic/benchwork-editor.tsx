@@ -456,6 +456,26 @@ export function BenchworkEditor({
       ? samplePath(host.path)
       : lanePath(centerline, host.fromPos, host.toPos, host.lane);
   };
+  /** Turnout positions are ABSOLUTE (inches from A — what the inspector and the
+   * operations view read). Sampling along a non-main host's polyline needs them
+   * host-relative: the polyline starts at the host's fromPos end. A drawn-path
+   * host keeps its own parameterisation (the ops view is approximate there). */
+  const hostSpanOf = (onTrack: string | undefined | null): { start: number; dir: 1 | -1 } => {
+    if (!onTrack || onTrack === MAIN_TRACK_ID) return { start: 0, dir: 1 };
+    const host = tracks.find((x) => x.id === onTrack);
+    if (!host || (host.path && host.path.length >= 2)) return { start: 0, dir: 1 };
+    return { start: host.fromPos, dir: (Math.sign(host.toPos - host.fromPos) || 1) as 1 | -1 };
+  };
+  /** Absolute inches-from-A → arc position along the host's polyline. */
+  const toHostRel = (onTrack: string | undefined | null, abs: number): number => {
+    const s = hostSpanOf(onTrack);
+    return s.dir * (abs - s.start);
+  };
+  /** Arc position along the host's polyline → absolute inches from A. */
+  const toHostAbs = (onTrack: string | undefined | null, rel: number): number => {
+    const s = hostSpanOf(onTrack);
+    return s.start + s.dir * rel;
+  };
   /** A turnout's diverging leg — the throat→frog route, sampled *along the host*
    * so it follows the mainline's curvature (a curved turnout), easing out to one
    * track over at the frog. Null if nothing diverges. */
@@ -464,10 +484,11 @@ export function BenchworkEditor({
     if (!dt) return null;
     const host = hostPointsOf(t.onTrack);
     if (host.length < 2) return null;
-    const m = sampleAt(host, t.pos);
+    const relPos = toHostRel(t.onTrack, t.pos);
+    const m = sampleAt(host, relPos);
     const eps = 0.5;
-    const a = sampleAt(host, Math.max(0, t.pos - eps));
-    const b = sampleAt(host, t.pos + eps);
+    const a = sampleAt(host, Math.max(0, relPos - eps));
+    const b = sampleAt(host, relPos + eps);
     const tl = Math.hypot(b.x - a.x, b.y - a.y) || 1;
     const tx = (b.x - a.x) / tl;
     const ty = (b.y - a.y) / tl;
@@ -503,7 +524,7 @@ export function BenchworkEditor({
     for (let i = 0; i <= steps; i++) {
       const frac = i / steps;
       const ease = t.curved ? frac * frac : frac;
-      const p = sampleAt(host, Math.max(0, t.pos + toward * L * frac));
+      const p = sampleAt(host, Math.max(0, relPos + toward * L * frac));
       const off = side * lateral * ease;
       leg.push({ x: p.x + off * p.nx, y: p.y + off * p.ny });
     }
@@ -515,7 +536,7 @@ export function BenchworkEditor({
     const dt = tracks.find((x) => x.id === t.divergeTrack);
     const host = hostPointsOf(t.onTrack);
     if (!dt || host.length < 2) return 1;
-    const m = sampleAt(host, t.pos);
+    const m = sampleAt(host, toHostRel(t.onTrack, t.pos));
     const far =
       dt.path && dt.path.length >= 2
         ? dt.path[dt.path.length - 1]
@@ -670,7 +691,7 @@ export function BenchworkEditor({
         ? turnouts.map((t) => {
             // The turnout sits on its host track (main or a spur); its frog node
             // marks where the diverging leg has cleared one track over.
-            const m = sampleAt(hostPointsOf(t.onTrack), t.pos);
+            const m = sampleAt(hostPointsOf(t.onTrack), toHostRel(t.onTrack, t.pos));
             // The frog marker belongs to the turnout whose leg draws the route —
             // a crossover connector has a turnout on BOTH ends, and drawing the
             // shared frog from both doubled the circles at the far end.
@@ -1216,7 +1237,7 @@ export function BenchworkEditor({
     onTrack: string,
     pos: number,
   ) => {
-    if (spec.curved && !isCurvedAt(hostPointsOf(onTrack), pos)) {
+    if (spec.curved && !isCurvedAt(hostPointsOf(onTrack), toHostRel(onTrack, pos))) {
       setDropWarn(
         "Curved turnouts go on curved track — bend the track there first, or use a straight turnout.",
       );
@@ -1272,7 +1293,7 @@ export function BenchworkEditor({
     for (const tn of turnouts) {
       const host = hostPointsOf(tn.onTrack);
       if (host.length < 2) continue;
-      const m = sampleAt(host, tn.pos);
+      const m = sampleAt(host, toHostRel(tn.onTrack, tn.pos));
       const d = Math.hypot(p.x - m.x, p.y - m.y);
       if (d < bestD) {
         bestD = d;
@@ -1294,7 +1315,8 @@ export function BenchworkEditor({
       if (c.pts.length < 2) continue;
       const proj = projectToCenterline(c.pts, p);
       if (best === null || proj.dist < best.dist) {
-        best = { onTrack: c.onTrack, pos: proj.pos, dist: proj.dist };
+        // Report ABSOLUTE inches from A (the projection is host-relative).
+        best = { onTrack: c.onTrack, pos: toHostAbs(c.onTrack, proj.pos), dist: proj.dist };
       }
     }
     return best === null ? null : { onTrack: best.onTrack, pos: Math.round(best.pos * 10) / 10 };

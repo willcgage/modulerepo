@@ -5,6 +5,11 @@ Headings are `version — date` (YYYY-MM-DD).
 
 ---
 
+## v0.15.29 — 2026-07-19
+
+### Fixed
+- **Crossover diagonals sit where the crossover is** in the operations preview. Turnout positions are now always absolute (inches from A) — the crossover was storing its far-side turnouts relative to the parallel track, so the dispatcher drew its diagonals stretched across half the module.
+
 ## v0.15.28 — 2026-07-19
 
 ### Fixed
