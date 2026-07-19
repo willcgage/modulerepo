@@ -295,6 +295,7 @@ export function BenchworkEditor({
   onDropTurnout,
   onDropCrossover,
   onDropSignal,
+  onTrackEndDrop,
   turnoutSize = 6,
   onTurnoutSizeChange,
   selection = null,
@@ -384,6 +385,9 @@ export function BenchworkEditor({
   /** Signal tool (S): a click drops a signal (a block control point) at pos on
    * the main (inches from A) (#53). */
   onDropSignal?: (pos: number) => void;
+  /** Fired when a track-end drag is released — the editor merges the track into
+   * one with any same-lane track it now abuts (the snap makes ends meet). */
+  onTrackEndDrop?: (id: string) => void;
   /** The frog number the Turnout tool drops (governs the diverging angle). */
   turnoutSize?: number;
   onTurnoutSizeChange?: (size: number) => void;
@@ -1560,6 +1564,9 @@ export function BenchworkEditor({
       svgRef.current?.releasePointerCapture?.(e.pointerId);
       panRef.current = null;
     }
+    // Releasing a track-end drag: the editor merges the track with any same-lane
+    // track it now abuts (the snap made the ends meet exactly) into ONE track.
+    if (dragRef.current?.kind === "trackEnd") onTrackEndDrop?.(dragRef.current.id);
     dragRef.current = null;
     setReadout(null);
   };

@@ -653,6 +653,56 @@ export function SchematicEditor({
     // Select the parallel track — its ends are what the owner draws out next.
     setSelection({ kind: "track", id: parId });
   };
+  /** Joined tracks become ONE track (#track-end-snap). When a track-end drag is
+   * released with its end abutting another same-lane track's end (the snap made
+   * them meet exactly), merge: the dragged track absorbs the other — union span,
+   * every reference (turnouts, industries, crossings, signals) re-pointed — and
+   * the other record is removed. Spurs (throat-directional) and crossover
+   * connectors are never merged. */
+  const mergeAbutting = (id: string) => {
+    let survivor: string | null = null;
+    patch((s) => {
+      const eps = 0.05;
+      const plain = (t: (typeof s.extraTracks)[number]) =>
+        !(t.path && t.path.length >= 2) && t.role !== "spur" && t.role !== "crossover";
+      const A = s.extraTracks.find((t) => t.id === id);
+      if (!A || !plain(A)) return;
+      const B = s.extraTracks.find(
+        (t) =>
+          t.id !== A.id &&
+          t.lane === A.lane &&
+          plain(t) &&
+          [t.fromPos, t.toPos].some(
+            (e) => Math.abs(e - A.fromPos) < eps || Math.abs(e - A.toPos) < eps,
+          ),
+      );
+      if (!B) return;
+      const lo = Math.min(A.fromPos, A.toPos, B.fromPos, B.toPos);
+      const hi = Math.max(A.fromPos, A.toPos, B.fromPos, B.toPos);
+      A.fromPos = Math.round(lo * 10) / 10;
+      A.toPos = Math.round(hi * 10) / 10;
+      if (!A.trackName && B.trackName) A.trackName = B.trackName;
+      // Keep the DB row linkage if the survivor doesn't have one yet.
+      if (A.moduleTrackId == null && B.moduleTrackId != null) A.moduleTrackId = B.moduleTrackId;
+      for (const sw of s.turnouts) {
+        if (sw.onTrack === B.id) sw.onTrack = A.id;
+        if (sw.divergeTrack === B.id) sw.divergeTrack = A.id;
+      }
+      for (const ind of s.industries) {
+        if (ind.track === B.id) ind.track = A.id;
+        for (const sp of ind.spots) if (sp.track === B.id) sp.track = A.id;
+      }
+      for (const x of s.crossings) {
+        if (x.trackA === B.id) x.trackA = A.id;
+        if (x.trackB === B.id) x.trackB = A.id;
+      }
+      for (const cp of s.controlPoints)
+        for (const sig of cp.signals) if (sig.track === B.id) sig.track = A.id;
+      s.extraTracks.splice(s.extraTracks.findIndex((t) => t.id === B.id), 1);
+      survivor = A.id;
+    });
+    if (survivor) setSelection({ kind: "track", id: survivor });
+  };
   function addCrossing() {
     patch((s) => {
       s.crossings.push({
@@ -1003,6 +1053,7 @@ export function SchematicEditor({
                 onDropTurnout={onDropTurnout}
                 onDropCrossover={onDropCrossover}
                 onDropSignal={onDropSignal}
+                onTrackEndDrop={mergeAbutting}
                 turnoutSize={turnoutSize}
                 onTurnoutSizeChange={setTurnoutSize}
                 onTrackPathChange={(id, path) =>

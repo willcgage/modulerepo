@@ -5,6 +5,11 @@ Headings are `version — date` (YYYY-MM-DD).
 
 ---
 
+## v0.15.31 — 2026-07-19
+
+### Changed
+- **Joined tracks become one track.** When you drag a track's end onto another track on the same lane (the snap makes them meet exactly), they now **merge into a single track** — one name, one capacity, spanning both — and everything attached (turnouts, industries, crossings, signals) follows onto the merged track. Spurs and crossover connectors never merge.
+
 ## v0.15.30 — 2026-07-19
 
 ### Added
