@@ -252,22 +252,34 @@ export function BenchworkEditor({
   };
   /** spur/siding id → its throat's frog point, so a drawn track starts at the
    * frog (one continuous route with its turnout) instead of on the main. */
-  const frogByTrack = useMemo(() => {
-    const map = new Map<string, Pt>();
-    for (const t of turnouts) {
-      if (!t.divergeTrack) continue;
-      const f = frogOf(t);
-      if (f) map.set(t.divergeTrack, f);
+  const switchByTrack = useMemo(() => {
+    const map = new Map<string, { throat: Pt; frog: Pt }>();
+    if (centerline.length >= 2) {
+      for (const t of turnouts) {
+        if (!t.divergeTrack) continue;
+        const frog = frogOf(t);
+        if (!frog) continue;
+        const m = sampleAt(centerline, t.pos);
+        map.set(t.divergeTrack, { throat: { x: m.x, y: m.y }, frog });
+      }
     }
     return map;
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [turnouts, centerline, lengthInches]);
-  /** A drawn spur's path with its throat (point 0) pinned to the frog. */
+  /** A drawn spur's path with its authored point 0 pinned to the frog. Used for
+   * editing (the throat→frog leg belongs to the turnout, not the spur body). */
   const frogPinnedPath = (t: CanvasTrack): BenchworkPoint[] => {
     const path = t.path;
     if (!path || path.length < 2) return path ?? [];
-    const f = frogByTrack.get(t.id);
+    const f = switchByTrack.get(t.id)?.frog;
     return f ? [{ ...path[0], x: f.x, y: f.y }, ...path.slice(1)] : path;
+  };
+  /** The path to *render as track*: the diverging leg (throat → frog) plus the
+   * spur body (frog → stub), so the whole switch reads as one ballasted track. */
+  const spurTrackPath = (t: CanvasTrack): BenchworkPoint[] => {
+    const base = frogPinnedPath(t);
+    const sw = switchByTrack.get(t.id);
+    return sw ? [{ x: sw.throat.x, y: sw.throat.y }, ...base] : base;
   };
 
   const trackPaths = useMemo(
@@ -278,13 +290,13 @@ export function BenchworkEditor({
               id: t.id,
               pts:
                 t.path && t.path.length >= 2
-                  ? samplePath(frogPinnedPath(t))
+                  ? samplePath(spurTrackPath(t))
                   : lanePath(centerline, t.fromPos, t.toPos, t.lane),
             }))
             .filter((t) => t.pts.length > 1)
         : [],
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [centerline, tracks, frogByTrack],
+    [centerline, tracks, switchByTrack],
   );
   const turnoutPts = useMemo(
     () =>
@@ -595,7 +607,7 @@ export function BenchworkEditor({
   /** The throat point — the turnout's frog (so the spur is continuous with the
    * switch), falling back to the on-main turnout point if there's no frog yet. */
   const spurThroat = (t: CanvasTrack): Pt | null => {
-    const f = frogByTrack.get(t.id);
+    const f = switchByTrack.get(t.id)?.frog;
     if (f) return f;
     if (t.throatPos == null || centerline.length < 2) return null;
     const p = sampleAt(centerline, t.throatPos);
@@ -1352,28 +1364,40 @@ export function BenchworkEditor({
         {/* Turnouts — drag along the track to set their position */}
         {turnoutPts.map((t) => {
           const on = selection?.kind === "turnout" && selection.id === t.id;
+          const hw = on ? "#0284c7" : "#334155"; // switch-hardware colour
+          // Frog casting + switch points, oriented along the diverging leg.
+          const sw = t.frog
+            ? (() => {
+                const dx = t.frog.x - t.x;
+                const dy = t.frog.y - t.y;
+                const dl = Math.hypot(dx, dy) || 1;
+                const ux = dx / dl;
+                const uy = dy / dl;
+                const nx = -uy;
+                const ny = ux;
+                const tri = (cx: number, cy: number, dir: number, len: number, wid: number) =>
+                  `${cx + dir * ux * len},${sy(cy + dir * uy * len)} ` +
+                  `${cx - dir * ux * len * 0.6 + nx * wid},${sy(cy - dir * uy * len * 0.6 + ny * wid)} ` +
+                  `${cx - dir * ux * len * 0.6 - nx * wid},${sy(cy - dir * uy * len * 0.6 - ny * wid)}`;
+                return {
+                  // Frog: point toward the throat (prototype).
+                  frog: tri(t.frog.x, t.frog.y, -1, world(2.4), world(1.3)),
+                  // Points: just past the throat, aimed at the frog.
+                  points: tri(t.x + ux * world(1.6), t.y + uy * world(1.6), 1, world(2), world(1)),
+                };
+              })()
+            : null;
           return (
             <g key={`to${t.id}`}>
-              {t.frog && (
-                <line
-                  x1={t.x}
-                  y1={sy(t.y)}
-                  x2={t.frog.x}
-                  y2={sy(t.frog.y)}
-                  stroke={on ? "#0284c7" : "#475569"}
-                  strokeWidth={world(1.4)}
-                  strokeLinecap="round"
-                  pointerEvents="none"
-                />
-              )}
+              {sw && <polygon points={sw.points} fill={hw} pointerEvents="none" />}
+              {sw && <polygon points={sw.frog} fill={hw} pointerEvents="none" />}
               <circle
                 cx={t.x}
                 cy={sy(t.y)}
-                r={onTurnoutMove ? r * 0.7 : r * 0.5}
-                fill={on ? "#0284c7" : "#475569"}
-                stroke={on ? "#0284c7" : "none"}
-                strokeWidth={r * 0.5}
-                strokeOpacity={0.3}
+                r={onTurnoutMove ? r * 0.6 : r * 0.45}
+                fill="#fff"
+                stroke={on ? "#0284c7" : "#475569"}
+                strokeWidth={r * 0.35}
                 style={onTurnoutMove ? { cursor: "ew-resize" } : undefined}
                 onPointerDown={
                   onTurnoutMove ? (e) => beginDrag(e, { kind: "turnout", id: t.id }) : undefined
