@@ -367,6 +367,9 @@ export function BenchworkEditor({
   const [paletteDrag, setPaletteDrag] = useState<{ kind: PaletteKind; x: number; y: number } | null>(
     null,
   );
+  /** A transient warning shown in the toolbar (e.g. a curved turnout dropped on
+   * straight track). Cleared on the next pointer-down. */
+  const [dropWarn, setDropWarn] = useState<string | null>(null);
   /** Space-to-pan: held-key state, so any tool can pan without switching. */
   const [spaceHeld, setSpaceHeld] = useState(false);
   /** Pointer position in world inches — drives the status-bar readout. */
@@ -431,7 +434,11 @@ export function BenchworkEditor({
     const toward = Math.sign((far.x - m.x) * tx + (far.y - m.y) * ty) || 1;
     const side = Math.sign((far.x - m.x) * m.nx + (far.y - m.y) * m.ny) || 1;
     const size = t.size && t.size > 0 ? t.size : 6;
-    const L = size * LANE_SPACING_INCHES; // points → frog
+    // A curved turnout sweeps over a LONGER leg so its diverging route reads as a
+    // pronounced arc (carrying the curve well past a bare frog, per the curved-
+    // turnout prototype) instead of a subtle bow; a straight turnout uses the
+    // nominal points→frog length.
+    const L = size * LANE_SPACING_INCHES * (t.curved ? 2.2 : 1); // points → frog
     // Walk the host from the throat, clearing to one track over at the frog, so
     // on a curved main the leg curves with it. A *curved* turnout eases the
     // lateral clearance quadratically (frac²) so the leg leaves tangent to the
@@ -723,6 +730,26 @@ export function BenchworkEditor({
     return best;
   };
 
+  /** Snap a mainline endpoint to the nearest endplate TRACK POINT (an endplate's
+   * centre-line crossing, `pose.x/y`), generously. The endplates are the board's
+   * fixed interfaces; the drawn main must begin and end on them, or the endplate
+   * faces drift off the benchwork edge and the board grows (a slightly-off click
+   * used to re-pin the endplate to the click, tilting the main and splaying the
+   * band). A big radius so "click near one end of the board" always lands on it. */
+  const snapMainEnd = (pt: Pt): Pt => {
+    const r = Math.max(snapDist, lengthInches * 0.15);
+    let best = pt;
+    let bestD = r;
+    for (const p of poses) {
+      const d = Math.hypot(pt.x - p.x, pt.y - p.y);
+      if (d < bestD) {
+        bestD = d;
+        best = { x: p.x, y: p.y };
+      }
+    }
+    return best;
+  };
+
   /** Midpoint control handle for edge i (chord mid offset by its bulge). */
   const edgeHandle = (i: number): Pt => {
     const p0 = outline[i];
@@ -904,6 +931,7 @@ export function BenchworkEditor({
 
   const onBgDown = (e: React.PointerEvent) => {
     if (dragRef.current) return;
+    if (dropWarn) setDropWarn(null); // any fresh action clears a stale warning
     // Space-drag or middle-button pans, whatever the tool.
     if (spaceHeld || e.button === 1) {
       e.preventDefault();
@@ -939,7 +967,7 @@ export function BenchworkEditor({
       const spec = specForPalette(armedPalette);
       if (onDropTurnout && spec && centerline.length >= 2) {
         const hit = nearestTrackPos(toLocal(e));
-        if (hit) onDropTurnout(spec, hit.onTrack, hit.pos);
+        if (hit) dropTurnoutGuarded(spec, hit.onTrack, hit.pos);
       }
       return;
     }
@@ -951,7 +979,9 @@ export function BenchworkEditor({
         // No main yet (a fresh module opens blank) → draw one from scratch: each
         // click extends the mainline. Otherwise add a bend to the existing main.
         if (mainPath.length < 2 && centerline.length < 2) {
-          onMainPathChange([...mainPath, snapToAnchor(toLocal(e))]);
+          // Each click extends the new main; snap the ends onto the endplates so
+          // the drawn main stays aligned with the board (benchwork + endplates).
+          onMainPathChange([...mainPath, snapMainEnd(toLocal(e))]);
         } else addMainVertex(toLocal(e));
       }
       return;
@@ -986,6 +1016,35 @@ export function BenchworkEditor({
     Math.round(
       Math.max(0, Math.min(lengthInches, projectToCenterline(centerline, p).pos)) * 10,
     ) / 10;
+
+  /** Is a track curving at `pos`? Compares the tangent a short way either side;
+   * a straight run keeps the same heading, an arc turns. Used to keep a curved
+   * turnout on curved track (a curved switch belongs on a curve, per the
+   * prototype). Window ±3″ with a ~4° threshold ignores sampling jitter. */
+  const isCurvedAt = (pts: Pt[], pos: number): boolean => {
+    if (pts.length < 2) return false;
+    const eps = 3;
+    const a = sampleAt(pts, Math.max(0, pos - eps));
+    const b = sampleAt(pts, pos + eps);
+    const dot = Math.max(-1, Math.min(1, a.nx * b.nx + a.ny * b.ny));
+    return Math.acos(dot) > 4 * DEG;
+  };
+
+  /** Place a turnout from the palette, keeping a curved turnout on curved track. */
+  const dropTurnoutGuarded = (
+    spec: { kind: TurnoutKind; curved?: boolean },
+    onTrack: string,
+    pos: number,
+  ) => {
+    if (spec.curved && !isCurvedAt(hostPointsOf(onTrack), pos)) {
+      setDropWarn(
+        "Curved turnouts go on curved track — bend the track there first, or use a straight turnout.",
+      );
+      return;
+    }
+    setDropWarn(null);
+    onDropTurnout?.(spec, onTrack, pos);
+  };
 
   /** The turnout nearest a canvas point, by straight-line distance to its point
    * on its host track — so it works whether the turnout is on the main or a spur. */
@@ -1045,7 +1104,7 @@ export function BenchworkEditor({
         ev.clientX >= r.left && ev.clientX <= r.right && ev.clientY >= r.top && ev.clientY <= r.bottom;
       if (!over) return;
       const hit = nearestTrackPos(toLocal(ev));
-      if (hit) onDropTurnout(spec, hit.onTrack, hit.pos);
+      if (hit) dropTurnoutGuarded(spec, hit.onTrack, hit.pos);
     };
     window.addEventListener("pointermove", move);
     window.addEventListener("pointerup", up);
@@ -1457,10 +1516,14 @@ export function BenchworkEditor({
                 );
               })}
             </div>
-            <span className="text-gray-500">
-              Drag a turnout onto a track — it lands with a short spur you drag to
-              size. (Or click a glyph, then click the board.)
-            </span>
+            {dropWarn ? (
+              <span className="font-medium text-amber-700">{dropWarn}</span>
+            ) : (
+              <span className="text-gray-500">
+                Drag a turnout onto a track — it lands with a short spur you drag to
+                size. (Or click a glyph, then click the board.)
+              </span>
+            )}
           </>
         ) : tool === "track" ? (
           pendingTrack ? (

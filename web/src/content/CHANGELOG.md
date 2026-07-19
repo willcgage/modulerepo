@@ -5,6 +5,14 @@ Headings are `version — date` (YYYY-MM-DD).
 
 ---
 
+## v0.15.22 — 2026-07-19
+
+### Fixed
+- **Drawing the mainline keeps the board aligned.** The main's end clicks now snap onto the endplates (the board's fixed ends), so a slightly-off click no longer tilts the main, drifts the endplate faces off the benchwork, or grows the board. Click near either end and it lands exactly on the endplate.
+
+### Changed
+- **Curved turnouts are more pronounced and stay on curved track.** A curved turnout's diverging route now sweeps over a longer arc so it reads as a real curve, not a subtle bow. And a curved turnout can only be dropped on **curved** track — drop one on a straight section and it tells you to bend the track first (or use a straight turnout).
+
 ## v0.15.21 — 2026-07-19
 
 ### Added
