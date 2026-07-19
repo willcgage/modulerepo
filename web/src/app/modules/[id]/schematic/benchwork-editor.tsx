@@ -1124,7 +1124,9 @@ export function BenchworkEditor({
             e.stopPropagation();
             onAddIndustry(line.main ? "main" : line.id, posFrom(toLocal(e)));
           }
-        : line.selectable && onSelect
+        : // Turnout tool: don't intercept — let the click fall through to the
+          // background handler, which drops a turnout on the nearest track (#63).
+          tool !== "turnout" && line.selectable && onSelect
           ? (e: React.PointerEvent) => {
               e.stopPropagation();
               onSelect({ kind: "track", id: line.id });
