@@ -56,8 +56,12 @@ export interface CanvasTurnout {
 }
 export interface CanvasSignal {
   id: string;
+  /** The control point this signal belongs to — what selecting it selects. */
+  cp: string;
   pos: number;
   side: "above" | "below";
+  /** Which way along the main it governs (AtoB = toward endplate B). */
+  facing: "AtoB" | "BtoA";
 }
 /** An industry — a car-spot span beside a track (#industries). */
 export interface CanvasIndustry {
@@ -83,14 +87,15 @@ export type CanvasSelection =
   | { kind: "turnout"; id: string }
   | { kind: "track"; id: string }
   | { kind: "endplate"; id: string }
-  | { kind: "industry"; id: string };
+  | { kind: "industry"; id: string }
+  | { kind: "cp"; id: string };
 
 /**
  * What a click on empty canvas means. Without this the canvas has to guess, and
  * it guessed "add a benchwork corner" — so there was no way to click background
  * and mean "nothing". Select is the default; Benchwork is the drawing mode.
  */
-export type CanvasTool = "select" | "benchwork" | "industry" | "track" | "turnout";
+export type CanvasTool = "select" | "benchwork" | "industry" | "track" | "turnout" | "signal";
 
 /**
  * Benchwork outline editor — draw a module's physical footprint as a polygon in
@@ -124,6 +129,7 @@ export function BenchworkEditor({
   onPlaceTrack,
   onCancelPlace,
   onDropTurnout,
+  onDropSignal,
   turnoutSize = 6,
   onTurnoutSizeChange,
   selection = null,
@@ -186,6 +192,9 @@ export function BenchworkEditor({
   onCancelPlace?: () => void;
   /** Turnout tool (W): a click on the main drops a turnout there (#52). */
   onDropTurnout?: (onTrack: string, pos: number) => void;
+  /** Signal tool (S): a click drops a signal (a block control point) at pos on
+   * the main (inches from A) (#53). */
+  onDropSignal?: (pos: number) => void;
   /** The frog number the Turnout tool drops (governs the diverging angle). */
   turnoutSize?: number;
   onTurnoutSizeChange?: (size: number) => void;
@@ -377,6 +386,8 @@ export function BenchworkEditor({
             // mast can be drawn as a stem + head instead of a bare dot.
             return {
               id: s.id,
+              cp: s.cp,
+              facing: s.facing,
               bx: p.x,
               by: p.y,
               x: p.x + p.nx * off,
@@ -765,6 +776,11 @@ export function BenchworkEditor({
       if (onAddIndustry && centerline.length >= 2) onAddIndustry("main", posFrom(toLocal(e)));
       return;
     }
+    // Signal tool: a click drops a signal (block control point) on the main (#53).
+    if (tool === "signal") {
+      if (onDropSignal && centerline.length >= 2) onDropSignal(posFrom(toLocal(e)));
+      return;
+    }
     // Turnout tool: a click on the main drops a turnout there (#52).
     if (tool === "turnout") {
       if (onDropTurnout && centerline.length >= 2) {
@@ -1133,9 +1149,9 @@ export function BenchworkEditor({
             e.stopPropagation();
             onAddIndustry(line.main ? "main" : line.id, posFrom(toLocal(e)));
           }
-        : // Turnout tool: don't intercept — let the click fall through to the
-          // background handler, which drops a turnout on the nearest track (#63).
-          tool !== "turnout" && line.selectable && onSelect
+        : // Turnout / Signal tools: don't intercept — let the click fall through
+          // to the background handler, which drops on the nearest track (#63/#53).
+          tool !== "turnout" && tool !== "signal" && line.selectable && onSelect
           ? (e: React.PointerEvent) => {
               e.stopPropagation();
               onSelect({ kind: "track", id: line.id });
@@ -1216,6 +1232,11 @@ export function BenchworkEditor({
           <span className="text-gray-500">
             Click a track to place an industry there (or the main) · then set its
             name and cars in the inspector.
+          </span>
+        ) : tool === "signal" ? (
+          <span className="text-gray-500">
+            Click the main to drop a signal (a block control point) · then set its
+            direction and side in the inspector.
           </span>
         ) : tool === "turnout" ? (
           <>
@@ -1318,7 +1339,7 @@ export function BenchworkEditor({
         className={`min-h-0 flex-1 touch-none rounded-md border border-gray-300 bg-white ${
           spaceHeld
             ? "cursor-grab"
-            : tool === "benchwork" || tool === "industry" || tool === "track" || tool === "turnout"
+            : tool === "benchwork" || tool === "industry" || tool === "track" || tool === "turnout" || tool === "signal"
               ? "cursor-crosshair"
               : ""
         }`}
@@ -1476,21 +1497,43 @@ export function BenchworkEditor({
           );
         })}
         {/* Signals — a mast (stem from the track it governs) + a head. */}
-        {signalPts.map((s) => (
-          <g key={`sig${s.id}`}>
-            <line
-              x1={s.bx}
-              y1={sy(s.by)}
-              x2={s.x}
-              y2={sy(s.y)}
-              stroke="#334155"
-              strokeWidth={world(1)}
-              strokeLinecap="round"
-            />
-            <circle cx={s.x} cy={sy(s.y)} r={world(3)} fill="#0f172a" stroke="#fff" strokeWidth={world(0.8)} />
-            <circle cx={s.x} cy={sy(s.y)} r={world(1.2)} fill="#f87171" />
-          </g>
-        ))}
+        {signalPts.map((s) => {
+          const on = selection?.kind === "cp" && selection.id === s.cp;
+          return (
+            <g
+              key={`sig${s.id}`}
+              style={onSelect ? { cursor: "pointer" } : undefined}
+              onPointerDown={
+                onSelect
+                  ? (e) => {
+                      e.stopPropagation();
+                      onSelect({ kind: "cp", id: s.cp });
+                    }
+                  : undefined
+              }
+            >
+              <line
+                x1={s.bx}
+                y1={sy(s.by)}
+                x2={s.x}
+                y2={sy(s.y)}
+                stroke={on ? "#0284c7" : "#334155"}
+                strokeWidth={world(on ? 1.4 : 1)}
+                strokeLinecap="round"
+              />
+              <circle
+                cx={s.x}
+                cy={sy(s.y)}
+                r={world(3)}
+                fill="#0f172a"
+                stroke={on ? "#0284c7" : "#fff"}
+                strokeWidth={world(on ? 1.4 : 0.8)}
+              />
+              <circle cx={s.x} cy={sy(s.y)} r={world(1.2)} fill="#f87171" />
+              <title>{`Signal (${s.facing === "AtoB" ? "→ East" : "→ West"})`}</title>
+            </g>
+          );
+        })}
         {/* Industries — a car-spot span beside its track, name + optional readout. */}
         {industryShapes.map((ind) => {
           const on = selection?.kind === "industry" && selection.id === ind.industryId;

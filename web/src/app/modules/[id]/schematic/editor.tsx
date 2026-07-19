@@ -75,7 +75,8 @@ const isCanvasSel = (s: Selection | null): s is CanvasSelection =>
     s.kind === "turnout" ||
     s.kind === "track" ||
     s.kind === "endplate" ||
-    s.kind === "industry");
+    s.kind === "industry" ||
+    s.kind === "cp");
 
 export function SchematicEditor({
   moduleId,
@@ -290,10 +291,32 @@ export function SchematicEditor({
   const canvasSignals = useMemo(
     () =>
       state.controlPoints.flatMap((cp) =>
-        cp.signals.map((s) => ({ id: s.id, pos: s.pos, side: s.side })),
+        cp.signals.map((s) => ({
+          id: s.id,
+          cp: cp.id,
+          pos: s.pos,
+          side: s.side,
+          facing: s.facing,
+        })),
       ),
     [state.controlPoints],
   );
+  /** Signal (S) tool: drop a block control point with one signal at `pos` on the
+   * main, then select it to set direction/side in the inspector (#53). */
+  const onDropSignal = (pos: number) => {
+    const id = nextId("cp", state.controlPoints.map((c) => c.id));
+    patch((s) => {
+      s.controlPoints.push({
+        id,
+        name: "",
+        turnouts: [],
+        signals: [
+          { id: `${id}-AtoB`, pos: Math.round(pos), track: MAIN_TRACK_ID, facing: "AtoB", side: "above" },
+        ],
+      });
+    });
+    setSelection({ kind: "cp", id });
+  };
   /** Lane of any track id (mains fixed; extras by their record). */
   const laneOfTrack = useMemo(() => {
     const m = new Map<string, number>();
@@ -695,6 +718,7 @@ export function SchematicEditor({
         else if (e.key === "b" || e.key === "B") setTool("benchwork");
         else if (e.key === "t" || e.key === "T") setTool("track");
         else if (e.key === "w" || e.key === "W") setTool("turnout");
+        else if (e.key === "s" || e.key === "S") setTool("signal");
         else if (e.key === "i" || e.key === "I") setTool("industry");
         else if (e.key === "Escape") {
           setSelection(null);
@@ -864,6 +888,7 @@ export function SchematicEditor({
                 onPlaceTrack={onPlaceTrack}
                 onCancelPlace={() => setPendingTrack(null)}
                 onDropTurnout={onDropTurnout}
+                onDropSignal={onDropSignal}
                 turnoutSize={turnoutSize}
                 onTurnoutSizeChange={setTurnoutSize}
                 onTrackPathChange={(id, path) =>
@@ -953,7 +978,7 @@ const TOOL_GROUPS: RailTool[][] = [
     { id: "benchwork", key: "B", label: "Benchwork", glyph: "▱", hint: "Draw the board outline (B)" },
     { id: "track", key: "T", label: "Track", glyph: "═", hint: "Draw the mainline · bend a siding or spur (T)" },
     { id: "turnout", key: "W", label: "Turnout", glyph: "⋋", hint: "Drop a turnout on the main (W)" },
-    { key: "S", label: "Signal", glyph: "⚑", hint: "Signal — coming soon", soon: true },
+    { id: "signal", key: "S", label: "Signal", glyph: "⚑", hint: "Drop a signal / control point on the main (S)" },
   ],
   [{ id: "industry", key: "I", label: "Industry", glyph: "▢", hint: "Place an industry on a track (I)" }],
 ];
