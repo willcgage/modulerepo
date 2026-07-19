@@ -523,22 +523,43 @@ export function SchematicEditor({
       });
     });
   }
-  /** Turnout (W) tool: drop a turnout at `pos` on the main, sized by the tool,
-   * with nothing diverging yet — a spur/siding drawn from it links later (#52). */
-  const onDropTurnout = (onTrack: string, pos: number) => {
-    const id = nextId("sw", state.turnouts.map((t) => t.id));
+  /** Turnout (W) tool: drop a turnout of a chosen hand at `pos` on a track, and
+   * give it a short diverging spur stub straight away (#turnout-palette). The
+   * turnout is a point placement — no drag-length — and the stub is positioned by
+   * its `toPos`, so dragging its ○ end to size it can't shift what you dropped
+   * (the old draw-to-create re-projected the drawn end and changed the length).
+   * The stub is selected so its end handle is right there to pull out. */
+  const onDropTurnout = (kind: TurnoutKind, onTrack: string, pos: number) => {
+    const swId = nextId("sw", state.turnouts.map((t) => t.id));
+    const spId = nextId("spur", state.extraTracks.map((t) => t.id));
+    const p = Math.round(pos * 10) / 10;
+    // A short default the owner extends — ~12% of the board, at least 6″, and
+    // never past the far endplate.
+    const stub =
+      Math.round(Math.max(6, Math.min(state.lengthInches - p, state.lengthInches * 0.12)) * 10) /
+      10;
     patch((s) => {
+      s.extraTracks.push({
+        id: spId,
+        role: "spur",
+        lane: nextLane(s),
+        fromPos: p,
+        toPos: Math.min(s.lengthInches, p + stub),
+        moduleTrackId: null,
+        trackName: "",
+      });
       s.turnouts.push({
-        id,
+        id: swId,
         name: "",
-        pos: Math.round(pos * 10) / 10,
+        pos: p,
         onTrack,
-        divergeTrack: "",
-        kind: "right",
+        divergeTrack: spId,
+        kind,
         size: turnoutSize,
       });
     });
-    setSelection({ kind: "turnout", id });
+    // Select the stub — its end ○ is now the thing to drag to length.
+    setSelection({ kind: "track", id: spId });
   };
   function addCrossing() {
     patch((s) => {

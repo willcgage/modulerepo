@@ -7,6 +7,7 @@ import {
   MAIN_TRACK_ID,
   type BenchworkPoint,
   type EndplatePose,
+  type TurnoutKind,
 } from "@willcgage/module-schematic";
 import {
   lanePath,
@@ -27,6 +28,117 @@ const CAR_INCHES = 3.3;
 function niceStep(raw: number): number {
   const steps = [0.25, 0.5, 1, 2, 3, 6, 12, 24, 48, 96];
   return steps.find((s) => s >= raw) ?? 192;
+}
+
+/** The turnout kinds the palette offers. left/right/wye place today; the rest
+ * need geometry the package doesn't model yet, so they show as "coming soon"
+ * placeholders — settling the palette's final shape (#turnout-palette). */
+type PaletteKind =
+  | TurnoutKind
+  | "curved-left"
+  | "curved-right"
+  | "crossover-single"
+  | "crossover-double"
+  | "slip-single"
+  | "slip-double";
+
+const TURNOUT_PALETTE: { kind: PaletteKind; label: string; soon?: boolean }[] = [
+  { kind: "right", label: "Right-hand" },
+  { kind: "left", label: "Left-hand" },
+  { kind: "wye", label: "Wye" },
+  { kind: "curved-right", label: "Curved right", soon: true },
+  { kind: "curved-left", label: "Curved left", soon: true },
+  { kind: "crossover-single", label: "Single crossover", soon: true },
+  { kind: "crossover-double", label: "Double crossover", soon: true },
+  { kind: "slip-single", label: "Single slip", soon: true },
+  { kind: "slip-double", label: "Double slip", soon: true },
+];
+
+/** A little schematic icon for each turnout kind — a straight route plus the
+ * diverging leg(s), so the palette reads like the switches it drops. */
+function TurnoutGlyph({ kind, className }: { kind: PaletteKind; className?: string }) {
+  const s = {
+    fill: "none",
+    stroke: "currentColor",
+    strokeWidth: 1.6,
+    strokeLinecap: "round" as const,
+    strokeLinejoin: "round" as const,
+  };
+  const main = <line x1={3} y1={9} x2={25} y2={9} {...s} />;
+  const body = (() => {
+    switch (kind) {
+      case "right":
+        return (
+          <>
+            {main}
+            <path d="M10 9 L25 3" {...s} />
+          </>
+        );
+      case "left":
+        return (
+          <>
+            {main}
+            <path d="M10 9 L25 15" {...s} />
+          </>
+        );
+      case "wye":
+        return (
+          <>
+            <line x1={3} y1={9} x2={11} y2={9} {...s} />
+            <path d="M11 9 L25 4 M11 9 L25 14" {...s} />
+          </>
+        );
+      case "curved-right":
+        return (
+          <>
+            <path d="M3 9 Q16 10 25 13" {...s} />
+            <path d="M10 9 Q19 6 25 3" {...s} />
+          </>
+        );
+      case "curved-left":
+        return (
+          <>
+            <path d="M3 9 Q16 8 25 5" {...s} />
+            <path d="M10 9 Q19 12 25 15" {...s} />
+          </>
+        );
+      case "crossover-single":
+        return (
+          <>
+            <line x1={3} y1={5} x2={25} y2={5} {...s} />
+            <line x1={3} y1={13} x2={25} y2={13} {...s} />
+            <path d="M10 5 L18 13" {...s} />
+          </>
+        );
+      case "crossover-double":
+        return (
+          <>
+            <line x1={3} y1={5} x2={25} y2={5} {...s} />
+            <line x1={3} y1={13} x2={25} y2={13} {...s} />
+            <path d="M10 5 L18 13 M18 5 L10 13" {...s} />
+          </>
+        );
+      case "slip-single":
+        return (
+          <>
+            <path d="M4 4 L24 14 M4 14 L24 4" {...s} />
+            <path d="M9 6.5 Q14 9 19 11.5" {...s} />
+          </>
+        );
+      case "slip-double":
+        return (
+          <>
+            <path d="M4 4 L24 14 M4 14 L24 4" {...s} />
+            <path d="M9 6.5 Q14 9 19 11.5 M9 11.5 Q14 9 19 6.5" {...s} />
+          </>
+        );
+    }
+  })();
+  return (
+    <svg viewBox="0 0 28 18" className={className} aria-hidden>
+      {body}
+    </svg>
+  );
 }
 
 /** Track/feature context drawn under the benchwork layer. */
@@ -190,8 +302,10 @@ export function BenchworkEditor({
         },
   ) => void;
   onCancelPlace?: () => void;
-  /** Turnout tool (W): a click on the main drops a turnout there (#52). */
-  onDropTurnout?: (onTrack: string, pos: number) => void;
+  /** Turnout tool (W): drop a turnout of a chosen hand onto a track — from a
+   * canvas click or a palette drag. It lands with a short diverging spur stub
+   * (#turnout-palette). */
+  onDropTurnout?: (kind: TurnoutKind, onTrack: string, pos: number) => void;
   /** Signal tool (S): a click drops a signal (a block control point) at pos on
    * the main (inches from A) (#53). */
   onDropSignal?: (pos: number) => void;
@@ -219,6 +333,14 @@ export function BenchworkEditor({
   /** Draw-to-create in progress: the throat turnout it diverges from + live end. */
   const placeRef = useRef<{ start: Pt; end: Pt; turnoutId: string } | null>(null);
   const [placePreview, setPlacePreview] = useState<{ start: Pt; end: Pt } | null>(null);
+  /** The turnout hand armed in the palette — a canvas click drops this one, and
+   * it's the hand a palette drag carries (#turnout-palette). */
+  const [armedKind, setArmedKind] = useState<TurnoutKind>("right");
+  /** A palette glyph being dragged toward the board: its hand + live client
+   * position, so a ghost can follow the pointer until it's dropped. */
+  const [paletteDrag, setPaletteDrag] = useState<{ kind: TurnoutKind; x: number; y: number } | null>(
+    null,
+  );
   /** Space-to-pan: held-key state, so any tool can pan without switching. */
   const [spaceHeld, setSpaceHeld] = useState(false);
   /** Pointer position in world inches — drives the status-bar readout. */
@@ -781,11 +903,12 @@ export function BenchworkEditor({
       if (onDropSignal && centerline.length >= 2) onDropSignal(posFrom(toLocal(e)));
       return;
     }
-    // Turnout tool: a click on the main drops a turnout there (#52).
+    // Turnout tool: a click on a track drops the armed turnout there — a palette
+    // drag can also land it (below). Either way it arrives with a spur stub.
     if (tool === "turnout") {
       if (onDropTurnout && centerline.length >= 2) {
         const hit = nearestTrackPos(toLocal(e));
-        if (hit) onDropTurnout(hit.onTrack, hit.pos);
+        if (hit) onDropTurnout(armedKind, hit.onTrack, hit.pos);
       }
       return;
     }
@@ -868,6 +991,32 @@ export function BenchworkEditor({
       }
     }
     return best === null ? null : { onTrack: best.onTrack, pos: Math.round(best.pos * 10) / 10 };
+  };
+
+  /** Drag a turnout out of the palette and onto the board. A ghost follows the
+   * pointer; releasing over a track drops the turnout there (snapped to the
+   * nearest track), with its spur stub. Releasing off-board just cancels. Uses
+   * window listeners so the drag survives leaving the little glyph button. */
+  const startPaletteDrag = (kind: TurnoutKind, e: React.PointerEvent) => {
+    e.preventDefault();
+    setArmedKind(kind);
+    setPaletteDrag({ kind, x: e.clientX, y: e.clientY });
+    const move = (ev: PointerEvent) => setPaletteDrag({ kind, x: ev.clientX, y: ev.clientY });
+    const up = (ev: PointerEvent) => {
+      window.removeEventListener("pointermove", move);
+      window.removeEventListener("pointerup", up);
+      setPaletteDrag(null);
+      const svg = svgRef.current;
+      if (!svg || !onDropTurnout || centerline.length < 2) return;
+      const r = svg.getBoundingClientRect();
+      const over =
+        ev.clientX >= r.left && ev.clientX <= r.right && ev.clientY >= r.top && ev.clientY <= r.bottom;
+      if (!over) return;
+      const hit = nearestTrackPos(toLocal(ev));
+      if (hit) onDropTurnout(kind, hit.onTrack, hit.pos);
+    };
+    window.addEventListener("pointermove", move);
+    window.addEventListener("pointerup", up);
   };
 
   /** Finish a draw-to-create: turn the drawn line into track geometry, anchored
@@ -1254,9 +1403,33 @@ export function BenchworkEditor({
                 ))}
               </select>
             </label>
+            <div className="flex items-center gap-0.5">
+              {TURNOUT_PALETTE.map((p) => {
+                const armed = !p.soon && armedKind === (p.kind as TurnoutKind);
+                return (
+                  <button
+                    key={p.kind}
+                    type="button"
+                    title={p.soon ? `${p.label} — coming soon` : `${p.label} — drag onto a track, or click it then click the board`}
+                    disabled={p.soon}
+                    onPointerDown={
+                      p.soon ? undefined : (e) => startPaletteDrag(p.kind as TurnoutKind, e)
+                    }
+                    onClick={p.soon ? undefined : () => setArmedKind(p.kind as TurnoutKind)}
+                    className={`flex h-7 w-8 items-center justify-center rounded border ${
+                      armed
+                        ? "border-blue-500 bg-blue-50 text-blue-700 ring-1 ring-blue-400"
+                        : "border-gray-300 text-gray-600 hover:bg-gray-50"
+                    } ${p.soon ? "cursor-not-allowed opacity-40" : "cursor-grab active:cursor-grabbing"}`}
+                  >
+                    <TurnoutGlyph kind={p.kind} className="h-4 w-6" />
+                  </button>
+                );
+              })}
+            </div>
             <span className="text-gray-500">
-              Click the main to drop a #{turnoutSize} turnout · then draw a
-              spur/siding from it with the Track tool.
+              Drag a turnout onto a track — it lands with a short spur you drag to
+              size. (Or click a glyph, then click the board.)
             </span>
           </>
         ) : tool === "track" ? (
@@ -1330,6 +1503,14 @@ export function BenchworkEditor({
         </div>
       </div>
 
+      {paletteDrag && (
+        <div
+          className="pointer-events-none fixed z-50 flex h-8 w-10 items-center justify-center rounded border border-blue-500 bg-white/95 text-blue-700 shadow-md"
+          style={{ left: paletteDrag.x + 12, top: paletteDrag.y + 12 }}
+        >
+          <TurnoutGlyph kind={paletteDrag.kind} className="h-4 w-6" />
+        </div>
+      )}
       <svg
         ref={svgRef}
         viewBox={vb}
