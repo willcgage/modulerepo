@@ -116,6 +116,7 @@ export default async function ModuleSchematicPage({
       track: onTrack?.id ?? MAIN_TRACK_ID,
       fromPos: onTrack ? onTrack.fromPos : Math.round(initial.lengthInches * 0.35),
       toPos: onTrack ? onTrack.toPos : Math.round(initial.lengthInches * 0.6),
+      spots: [],
       side: "below",
       labelMode: "none",
       carTypes: [],
