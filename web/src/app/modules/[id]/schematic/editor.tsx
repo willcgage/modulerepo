@@ -6,7 +6,6 @@ import {
   MAIN_TRACK_ID,
   MAIN2_TRACK_ID,
   stateToDoc,
-  buildPassingSiding,
   buildTransition,
   buildCrossover,
   isTransitionTurnout,
@@ -16,6 +15,7 @@ import {
   nextId,
   inchesToScaleFeet,
   carCapacity,
+  type BenchworkPoint,
   type EditorState,
   type TrackRole,
   type TurnoutKind,
@@ -117,6 +117,9 @@ export function SchematicEditor({
   const [selection, setSelection] = useState<Selection | null>(null);
   /** What a canvas background click means. */
   const [tool, setTool] = useState<CanvasTool>("select");
+  /** Draw-to-create: a track role armed from the + Track menu, waiting to be
+   * drawn on the canvas (#51). null = not placing. */
+  const [pendingTrack, setPendingTrack] = useState<"siding" | "spur" | null>(null);
   /** Car-type choices, seeded from the server + grown by suggestions. */
   const [carTypeOptions, setCarTypeOptions] = useState<CarTypeOption[]>(carTypes);
   const addCarTypeOption = (o: CarTypeOption) =>
@@ -357,30 +360,91 @@ export function SchematicEditor({
       else delete s.endplateWidths[id];
     });
 
-  function addPassingSiding() {
-    patch((s) => {
-      const { track, turnouts, controlPoints } = buildPassingSiding(s);
-      s.extraTracks.push(track);
-      s.turnouts.push(...turnouts);
-      s.controlPoints.push(...controlPoints);
-    });
+  // --- Draw-to-create sidings & spurs (#51) ---------------------------------
+  // Picking Siding/Spur from the + Track menu no longer drops a track at a
+  // default spot — it arms placement and the canvas captures the draw, which
+  // calls onPlaceTrack below with the drawn geometry.
+  function armSiding() {
+    setPendingTrack("siding");
+    setTool("track");
   }
-  function addSpur() {
+  function armSpur() {
+    setPendingTrack("spur");
+    setTool("track");
+  }
+  const nextLane = (s: EditorState) => {
+    // Lane 1 is Main 2 on a double module; first free lane is above it.
+    const base = s.configA === "double" || s.configB === "double" ? 2 : 1;
+    return Math.max(base, ...s.extraTracks.map((t) => t.lane + 1));
+  };
+  /** A spur / yard lead diverging from `throatTurnoutId`, drawn out to a stub. */
+  function placeSpur(
+    throatTurnoutId: string,
+    fromPos: number,
+    toPos: number,
+    path: BenchworkPoint[],
+  ) {
     patch((s) => {
-      // Lane 1 is Main 2 on a double module; first free lane is above it.
-      const base = s.configA === "double" || s.configB === "double" ? 2 : 1;
-      const lane = Math.max(base, ...s.extraTracks.map((t) => t.lane + 1));
+      const id = nextId("spur", s.extraTracks.map((t) => t.id));
       s.extraTracks.push({
-        id: nextId("spur", s.extraTracks.map((t) => t.id)),
+        id,
         role: "spur",
-        lane,
-        fromPos: Math.round(s.lengthInches * 0.4),
-        toPos: Math.round(s.lengthInches * 0.7),
+        lane: nextLane(s),
+        fromPos,
+        toPos,
+        ...(path.length >= 2 ? { path } : {}),
         moduleTrackId: null,
         trackName: "",
       });
+      // Link the throat turnout to the new spur so it reads (and snaps) as one.
+      const tn = s.turnouts.find((t) => t.id === throatTurnoutId);
+      if (tn) tn.divergeTrack = id;
     });
   }
+  /** A passing siding drawn between two already-placed turnouts. */
+  function placeSiding(
+    fromTurnoutId: string,
+    toTurnoutId: string,
+    fromPos: number,
+    toPos: number,
+  ) {
+    patch((s) => {
+      const id = nextId("sid", s.extraTracks.map((t) => t.id));
+      s.extraTracks.push({
+        id,
+        role: "siding",
+        lane: nextLane(s),
+        fromPos,
+        toPos,
+        moduleTrackId: null,
+        trackName: "Passing siding",
+      });
+      // Both turnouts now diverge to this siding.
+      for (const t of s.turnouts)
+        if (t.id === fromTurnoutId || t.id === toTurnoutId) t.divergeTrack = id;
+    });
+  }
+  const onPlaceTrack = (
+    p:
+      | {
+          role: "spur";
+          throatTurnoutId: string;
+          fromPos: number;
+          toPos: number;
+          path?: BenchworkPoint[];
+        }
+      | {
+          role: "siding";
+          fromTurnoutId: string;
+          toTurnoutId: string;
+          fromPos: number;
+          toPos: number;
+        },
+  ) => {
+    if (p.role === "siding") placeSiding(p.fromTurnoutId, p.toTurnoutId, p.fromPos, p.toPos);
+    else placeSpur(p.throatTurnoutId, p.fromPos, p.toPos, p.path ?? []);
+    setPendingTrack(null);
+  };
   function addCrossover() {
     patch((s) => {
       const built = buildCrossover(s);
@@ -579,7 +643,10 @@ export function SchematicEditor({
         else if (e.key === "b" || e.key === "B") setTool("benchwork");
         else if (e.key === "t" || e.key === "T") setTool("track");
         else if (e.key === "i" || e.key === "I") setTool("industry");
-        else if (e.key === "Escape") setSelection(null);
+        else if (e.key === "Escape") {
+          setSelection(null);
+          setPendingTrack(null);
+        }
       }
     };
     window.addEventListener("keydown", onKey);
@@ -614,8 +681,8 @@ export function SchematicEditor({
   // Shared "+ Track" wiring — used both on the Track drawing tool (canvas
   // context bar) and in the Objects list.
   const trackAdd = {
-    passingSiding: addPassingSiding,
-    spur: addSpur,
+    passingSiding: armSiding,
+    spur: armSpur,
     crossover: addCrossover,
     mainline: (config: "single" | "double") =>
       patch((s) => {
@@ -631,6 +698,7 @@ export function SchematicEditor({
       mainlineDouble={isDouble}
       mainlineLocked={lockedConfigs.a || lockedConfigs.b}
       canCrossover={canCrossover}
+      turnoutCount={state.turnouts.length}
       align="left"
     />
   );
@@ -738,6 +806,9 @@ export function SchematicEditor({
                 }
                 onAddIndustry={addIndustryAt}
                 trackMenu={trackMenu}
+                pendingTrack={pendingTrack}
+                onPlaceTrack={onPlaceTrack}
+                onCancelPlace={() => setPendingTrack(null)}
                 onTrackPathChange={(id, path) =>
                   patch((s) => {
                     const t = s.extraTracks.find((x) => x.id === id);
@@ -2083,6 +2154,7 @@ function AddTrackMenu({
   mainlineDouble,
   mainlineLocked,
   canCrossover,
+  turnoutCount,
   align = "right",
 }: {
   add: {
@@ -2094,6 +2166,7 @@ function AddTrackMenu({
   mainlineDouble: boolean;
   mainlineLocked: boolean;
   canCrossover: boolean;
+  turnoutCount: number;
   align?: "left" | "right";
 }) {
   const [open, setOpen] = useState(false);
@@ -2127,12 +2200,29 @@ function AddTrackMenu({
               </div>
             )}
             <div className="my-1 border-t border-gray-100" />
-            <button type="button" className={item} onClick={() => run(add.passingSiding)}>
+            <button
+              type="button"
+              className={item}
+              disabled={turnoutCount < 2}
+              onClick={() => run(add.passingSiding)}
+            >
               Siding
             </button>
-            <button type="button" className={item} onClick={() => run(add.spur)}>
+            <button
+              type="button"
+              className={item}
+              disabled={turnoutCount < 1}
+              onClick={() => run(add.spur)}
+            >
               Spur / Yard
             </button>
+            {turnoutCount < 2 && (
+              <div className="px-2 py-0.5 text-[10px] text-gray-400">
+                {turnoutCount < 1
+                  ? "Add a turnout first — sidings & spurs diverge from one."
+                  : "A siding needs a second turnout."}
+              </div>
+            )}
             {canCrossover && (
               <button type="button" className={item} onClick={() => run(add.crossover)}>
                 Crossover
@@ -2224,6 +2314,7 @@ function ObjectsList({
             mainlineDouble={mainlineDouble}
             mainlineLocked={mainlineLocked}
             canCrossover={canCrossover}
+            turnoutCount={state.turnouts.length}
           />
         }
       >
