@@ -284,6 +284,7 @@ export function SchematicEditor({
           id: t.id,
           pos: t.pos,
           size: t.size,
+          divergeTrack: t.divergeTrack || undefined,
           divergeLane: dt?.lane,
           divergeToward: dt ? Math.sign(dt.toPos - t.pos) || 1 : 1,
         };
