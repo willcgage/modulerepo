@@ -239,9 +239,10 @@ export function BenchworkEditor({
       ? samplePath(host.path)
       : lanePath(centerline, host.fromPos, host.toPos, host.lane);
   };
-  /** A turnout's frog point — where its diverging route clears one track over,
-   * at the frog angle atan(1/size), on its host track. Null if nothing diverges. */
-  const frogOf = (t: CanvasTurnout): Pt | null => {
+  /** A turnout's diverging leg — the throat→frog route, sampled *along the host*
+   * so it follows the mainline's curvature (a curved turnout), easing out to one
+   * track over at the frog. Null if nothing diverges. */
+  const frogLegOf = (t: CanvasTurnout): Pt[] | null => {
     const dt = tracks.find((x) => x.id === t.divergeTrack);
     if (!dt) return null;
     const host = hostPointsOf(t.onTrack);
@@ -253,7 +254,7 @@ export function BenchworkEditor({
     const tl = Math.hypot(b.x - a.x, b.y - a.y) || 1;
     const tx = (b.x - a.x) / tl;
     const ty = (b.y - a.y) / tl;
-    // The diverging track's far end (relative to the throat) fixes the frog's
+    // The diverging track's far end (relative to the throat) fixes the leg's
     // longitudinal (toward) and lateral (side) sense — host-agnostic.
     const far =
       dt.path && dt.path.length >= 2
@@ -262,28 +263,32 @@ export function BenchworkEditor({
             x: m.x + tx * LANE_SPACING_INCHES + m.nx * (laneOffset(dt.lane) || LANE_SPACING_INCHES),
             y: m.y + ty * LANE_SPACING_INCHES + m.ny * (laneOffset(dt.lane) || LANE_SPACING_INCHES),
           };
-    const vx = far.x - m.x;
-    const vy = far.y - m.y;
-    const toward = Math.sign(vx * tx + vy * ty) || 1;
-    const side = Math.sign(vx * m.nx + vy * m.ny) || 1;
+    const toward = Math.sign((far.x - m.x) * tx + (far.y - m.y) * ty) || 1;
+    const side = Math.sign((far.x - m.x) * m.nx + (far.y - m.y) * m.ny) || 1;
     const size = t.size && t.size > 0 ? t.size : 6;
     const L = size * LANE_SPACING_INCHES; // points → frog
-    return {
-      x: m.x + toward * L * tx + side * LANE_SPACING_INCHES * m.nx,
-      y: m.y + toward * L * ty + side * LANE_SPACING_INCHES * m.ny,
-    };
+    // Walk the host from the throat, clearing to one track over at the frog, so
+    // on a curved main the leg curves with it.
+    const steps = 8;
+    const leg: Pt[] = [];
+    for (let i = 0; i <= steps; i++) {
+      const frac = i / steps;
+      const p = sampleAt(host, Math.max(0, t.pos + toward * L * frac));
+      const off = side * LANE_SPACING_INCHES * frac;
+      leg.push({ x: p.x + off * p.nx, y: p.y + off * p.ny });
+    }
+    return leg;
   };
-  /** spur/siding id → its throat's frog point, so a drawn track starts at the
-   * frog (one continuous route with its turnout) instead of on the main. */
+  /** spur/siding id → its throat's curved diverging leg + endpoints, so a drawn
+   * track starts at the frog (one continuous curved route with its turnout). */
   const switchByTrack = useMemo(() => {
-    const map = new Map<string, { throat: Pt; frog: Pt }>();
+    const map = new Map<string, { throat: Pt; frog: Pt; leg: Pt[] }>();
     if (centerline.length >= 2) {
       for (const t of turnouts) {
         if (!t.divergeTrack) continue;
-        const frog = frogOf(t);
-        if (!frog) continue;
-        const m = sampleAt(hostPointsOf(t.onTrack), t.pos);
-        map.set(t.divergeTrack, { throat: { x: m.x, y: m.y }, frog });
+        const leg = frogLegOf(t);
+        if (!leg || leg.length < 2) continue;
+        map.set(t.divergeTrack, { throat: leg[0], frog: leg[leg.length - 1], leg });
       }
     }
     return map;
@@ -302,7 +307,8 @@ export function BenchworkEditor({
   const spurTrackPath = (t: CanvasTrack): BenchworkPoint[] => {
     const base = frogPinnedPath(t);
     const sw = switchByTrack.get(t.id);
-    return sw ? [{ x: sw.throat.x, y: sw.throat.y }, ...base] : base;
+    // Prepend the curved throat→frog leg; base[0] is the frog, so drop it.
+    return sw ? [...sw.leg.map((p) => ({ x: p.x, y: p.y })), ...base.slice(1)] : base;
   };
 
   const trackPaths = useMemo(
@@ -325,14 +331,19 @@ export function BenchworkEditor({
     () =>
       centerline.length >= 2
         ? turnouts.map((t) => {
-            // The turnout sits on its host track (main or a spur); its frog is
-            // where the diverging route clears one track over.
+            // The turnout sits on its host track (main or a spur); its frog node
+            // marks where the diverging leg has cleared one track over.
             const m = sampleAt(hostPointsOf(t.onTrack), t.pos);
-            return { id: t.id, x: m.x, y: m.y, frog: frogOf(t) };
+            return {
+              id: t.id,
+              x: m.x,
+              y: m.y,
+              frog: t.divergeTrack ? (switchByTrack.get(t.divergeTrack)?.frog ?? null) : null,
+            };
           })
         : [],
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [centerline, turnouts, tracks, lengthInches],
+    [centerline, turnouts, tracks, switchByTrack, lengthInches],
   );
   /** Draggable end handles for sidings/spurs (not the derived Main 2). */
   const trackEnds = useMemo(() => {
