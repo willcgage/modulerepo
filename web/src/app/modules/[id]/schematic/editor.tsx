@@ -2638,7 +2638,8 @@ function ObjectsList({
         }
       >
         {state.extraTracks.map((t) =>
-          row(t.id, t.trackName || t.id, { kind: "track", id: t.id }, `${Math.abs(t.toPos - t.fromPos)}″`),
+          // Round to 0.1″ — raw float math read as 18.800000000000004″.
+          row(t.id, t.trackName || t.id, { kind: "track", id: t.id }, `${Math.round(Math.abs(t.toPos - t.fromPos) * 10) / 10}″`),
         )}
       </Group>
 
@@ -2671,7 +2672,7 @@ function ObjectsList({
         }
       >
         {state.turnouts.map((t) =>
-          row(t.id, t.name || t.id, { kind: "turnout", id: t.id }, `${t.pos}″`),
+          row(t.id, t.name || t.id, { kind: "turnout", id: t.id }, `${Math.round(t.pos * 10) / 10}″`),
         )}
       </Group>
 
@@ -2685,7 +2686,7 @@ function ObjectsList({
         }
       >
         {state.crossings.map((x) =>
-          row(x.id, x.name || x.id, { kind: "crossing", id: x.id }, `${x.pos}″`),
+          row(x.id, x.name || x.id, { kind: "crossing", id: x.id }, `${Math.round(x.pos * 10) / 10}″`),
         )}
       </Group>
 

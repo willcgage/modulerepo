@@ -212,7 +212,14 @@ export function SchematicPreview({
           const ym = laneY(t.divergesFromLane);
           const isSpur = t.role === "spur";
           // A spur's throat is at its turnout (either end, #bug3); the stub runs
-          // to the far end. A siding dips to the main at both ends.
+          // to the far end. A siding dips to the main at both ends — UNLESS
+          // nothing switches into it (no turnout diverges to it) while turnouts
+          // sit ON it: then its connection is elsewhere (a crossover's diagonal),
+          // so it draws flat with square ends instead of spurious end-dips.
+          const flat =
+            !isSpur &&
+            !(doc.turnouts ?? []).some((sw) => sw.divergeTrack === t.id) &&
+            (doc.turnouts ?? []).some((sw) => sw.onTrack === t.id);
           const tx = px(isSpur ? t.throatFrac : t.fromFrac);
           const ex = px(isSpur ? t.stubFrac : t.toFrac);
           const dir = ex >= tx ? 1 : -1;
@@ -220,9 +227,11 @@ export function SchematicPreview({
           // siding/spur, and a long taper would push its flat part past them so
           // their dots float off the diagonal.
           const thr = Math.min(Math.abs(ex - tx) * 0.12 + 6, Math.abs(ex - tx));
-          const pts = isSpur
-            ? `${tx},${ym} ${tx + dir * thr},${yl} ${ex},${yl}`
-            : `${tx},${ym} ${tx + thr},${yl} ${ex - thr},${yl} ${ex},${ym}`;
+          const pts = flat
+            ? `${tx},${yl} ${ex},${yl}`
+            : isSpur
+              ? `${tx},${ym} ${tx + dir * thr},${yl} ${ex},${yl}`
+              : `${tx},${ym} ${tx + thr},${yl} ${ex - thr},${yl} ${ex},${ym}`;
           return (
             <polyline
               key={t.id}
