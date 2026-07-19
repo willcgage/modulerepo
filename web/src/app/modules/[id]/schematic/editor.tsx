@@ -539,14 +539,21 @@ export function SchematicEditor({
   /** Erase the drawing (kept as a deliberate, confirmed action). Autosave then
    * persists the emptied module. */
   const clearDrawing = () => {
-    if (!window.confirm("Clear the whole schematic — outline, track, signals?")) return;
+    if (
+      !window.confirm(
+        "Clear the whole schematic — outline, track, turnouts, signals, industries?",
+      )
+    )
+      return;
     patch((s) => {
       s.outline = [];
+      s.mainPath = [];
       s.extraTracks = [];
       s.turnouts = [];
       s.crossings = [];
       s.branches = [];
       s.controlPoints = [];
+      s.industries = [];
       s.poseOverrides = {};
     });
   };
