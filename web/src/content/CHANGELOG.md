@@ -5,6 +5,14 @@ Headings are `version — date` (YYYY-MM-DD).
 
 ---
 
+## v0.15.19 — 2026-07-19
+
+### Added
+- **Turnout palette** — the Turnout tool now shows draggable switch glyphs (**left-hand, right-hand, wye**). Drag one onto a track — or click a glyph, then click the board — and the turnout lands **already carrying a short diverging spur stub** you drag by its ○ end to size. Curved turnouts, crossovers, and slips appear as placeholders for what's next.
+
+### Fixed
+- **Turnout/spur length no longer changes on release.** Dropping a turnout is now a point placement, and its spur is positioned by its end (which you drag), so the track can't shift out from under what you placed — the old draw-to-create re-projected the drawn end onto the main and changed its length.
+
 ## v0.15.18 — 2026-07-19
 
 ### Added
