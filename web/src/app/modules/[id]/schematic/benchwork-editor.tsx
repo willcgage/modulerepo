@@ -278,6 +278,7 @@ export function BenchworkEditor({
   endplateTrackOffsets,
   centerline = [],
   sectionBreaks = [],
+  onSectionBreakMove,
   tracks = [],
   turnouts = [],
   signals = [],
@@ -317,6 +318,8 @@ export function BenchworkEditor({
   centerline?: Pt[];
   /** Internal section joints (inches from A) — drawn as dividers on the board. */
   sectionBreaks?: number[];
+  /** Fired while a section joint is dragged along the board (#96). */
+  onSectionBreakMove?: (i: number, pos: number) => void;
   /** Sidings/spurs/main-2, positioned along the main and offset to their lane. */
   tracks?: CanvasTrack[];
   turnouts?: CanvasTurnout[];
@@ -414,6 +417,7 @@ export function BenchworkEditor({
     | { kind: "spurVertex" | "spurEdge"; id: string; i: number }
     | { kind: "turnout"; id: string }
     | { kind: "trackEnd"; id: string; end: "from" | "to" }
+    | { kind: "sectionBreak"; i: number }
     | { kind: "industryEnd"; id: string; end: "from" | "to" }
     | null
   >(null);
@@ -1521,6 +1525,18 @@ export function BenchworkEditor({
       }
       return;
     }
+    if (d.kind === "sectionBreak") {
+      if (centerline.length >= 2) {
+        // A joint is internal bench work, so nothing constrains where it lands
+        // except its neighbours — keep an inch of board on either side.
+        const lo = (sectionBreaks[d.i - 1] ?? 0) + 1;
+        const hi = (sectionBreaks[d.i + 1] ?? lengthInches) - 1;
+        const pos = Math.max(lo, Math.min(hi, posFrom(p)));
+        onSectionBreakMove?.(d.i, pos);
+        setReadout(`${lengthLabel(pos - (sectionBreaks[d.i - 1] ?? 0))} section`);
+      }
+      return;
+    }
     if (d.kind === "industryEnd") {
       if (centerline.length >= 2) {
         const pos = posFrom(p);
@@ -2011,7 +2027,7 @@ export function BenchworkEditor({
             const half =
               Math.max(endplateWidths?.["A"] ?? 24, endplateWidths?.["B"] ?? 24) / 2 + 2;
             return (
-              <g key={`sec${i}`} pointerEvents="none">
+              <g key={`sec${i}`}>
                 <line
                   x1={p.x + p.nx * half}
                   y1={sy(p.y + p.ny * half)}
@@ -2030,6 +2046,20 @@ export function BenchworkEditor({
                 >
                   {`${fmt(pos)}″`}
                 </text>
+                {onSectionBreakMove ? (
+                  <circle
+                    cx={p.x}
+                    cy={sy(p.y)}
+                    r={world(3)}
+                    fill="#fff"
+                    stroke="#64748b"
+                    strokeWidth={world(1)}
+                    className="cursor-ew-resize"
+                    onPointerDown={(e) => beginDrag(e, { kind: "sectionBreak", i })}
+                  >
+                    <title>Drag to move this section joint</title>
+                  </circle>
+                ) : null}
               </g>
             );
           })}
