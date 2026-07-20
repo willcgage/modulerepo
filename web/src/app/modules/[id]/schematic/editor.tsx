@@ -245,6 +245,10 @@ export function SchematicEditor({
         endplateWidths: state.endplateWidths,
         endplateTrackOffsets: renderTrackOffsets,
         outline: state.outline,
+        // Shaped sections take over as the module's footprint (#96 phase 2);
+        // authoring them per-section is 2b, this just keeps the derived
+        // footprint honest for docs that already carry them.
+        sections: state.sections,
         mainPath: state.mainPath,
       }),
     [
@@ -252,6 +256,7 @@ export function SchematicEditor({
       state.endplateWidths,
       renderTrackOffsets,
       state.outline,
+      state.sections,
       state.mainPath,
       geometry,
     ],
