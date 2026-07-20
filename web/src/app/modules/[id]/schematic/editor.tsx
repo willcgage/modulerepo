@@ -1124,6 +1124,13 @@ export function SchematicEditor({
                 endplateTrackOffsets={renderTrackOffsets}
                 centerline={footprint.centerline}
                 sectionBreaks={state.sectionBreaks}
+                onSectionBreakMove={(i, pos) =>
+                  patch((s) => {
+                    const next = [...s.sectionBreaks];
+                    next[i] = Math.round(pos * 1000) / 1000;
+                    s.sectionBreaks = next;
+                  })
+                }
                 tracks={canvasTracks}
                 turnouts={canvasTurnouts}
                 signals={canvasSignals}
@@ -1255,6 +1262,42 @@ const TOOL_GROUPS: RailTool[][] = [
   ],
   [{ id: "industry", key: "I", label: "Industry", glyph: "▢", hint: "Place an industry on a track (I)" }],
 ];
+
+/** The section lengths implied by the joint positions — the gaps between end A,
+ * each joint, and end B. A module always has one more section than joints. */
+function sectionLengths(breaks: number[], lengthInches: number): number[] {
+  const edges = [0, ...breaks, lengthInches];
+  return edges.slice(1).map((e, i) => e - edges[i]);
+}
+
+/** Re-derive the joints after retyping ONE section's length (#96 phase 1).
+ * The difference is absorbed by the NEXT section, so the module's overall
+ * length never changes and nothing downstream has to move — track, turnouts,
+ * signals and industries are all positioned in absolute inches from end A.
+ * That's also why the last section is derived rather than editable. */
+function resizeSection(
+  breaks: number[],
+  lengthInches: number,
+  index: number,
+  nextLength: number,
+): number[] {
+  const lens = sectionLengths(breaks, lengthInches);
+  if (index < 0 || index >= lens.length - 1) return breaks;
+  if (!Number.isFinite(nextLength)) return breaks;
+  const MIN = 1; // a section thinner than an inch is a slip of the keyboard
+  const pair = lens[index] + lens[index + 1];
+  if (pair < 2 * MIN) return breaks;
+  const v = Math.max(MIN, Math.min(pair - MIN, nextLength));
+  lens[index] = v;
+  lens[index + 1] = pair - v;
+  const out: number[] = [];
+  let acc = 0;
+  for (let i = 0; i < lens.length - 1; i++) {
+    acc += lens[i];
+    out.push(Math.round(acc * 1000) / 1000);
+  }
+  return out;
+}
 
 function ToolRail({
   tool,
@@ -1592,6 +1635,47 @@ function Inspector({
               title="How many bench-work sections the module is built from. The joints are marked on the board; the module still operates as one unit."
             />
           </label>
+          {/* Uneven joints (#96). Picking a count seeds equal splits, but a real
+              module's boards rarely divide evenly — One Mile's end sections are
+              standard-built transitions and the rest are plain double-track. */}
+          {state.sectionBreaks.length > 0 && (
+            <div className="rounded-md border border-gray-200 p-2">
+              <p className="text-xs font-medium text-gray-600">Section lengths (in)</p>
+              <p className="mt-0.5 text-xs text-gray-500">
+                Joints can sit anywhere. A section boundary is internal to the
+                module, so unlike an endplate it has no standard to meet — track
+                may cross it at any angle. Editing a length moves that joint and
+                takes the difference from the next section, so the last one is
+                derived.
+              </p>
+              <div className="mt-2 grid grid-cols-2 gap-2">
+                {sectionLengths(state.sectionBreaks, state.lengthInches).map((len, i, all) => (
+                  <label key={i} className="block text-xs font-medium text-gray-600">
+                    {`Section ${i + 1}`}
+                    {i === all.length - 1 && <span className="text-gray-400"> (derived)</span>}
+                    <input
+                      type="number"
+                      min={1}
+                      step={0.25}
+                      value={Math.round(len * 100) / 100}
+                      disabled={i === all.length - 1}
+                      onChange={(e) =>
+                        patch((s) => {
+                          s.sectionBreaks = resizeSection(
+                            s.sectionBreaks,
+                            s.lengthInches,
+                            i,
+                            parseFloat(e.target.value),
+                          );
+                        })
+                      }
+                      className={`mt-0.5 ${inp} ${i === all.length - 1 ? "bg-gray-50 text-gray-600" : ""}`}
+                    />
+                  </label>
+                ))}
+              </div>
+            </div>
+          )}
           <label className="flex gap-2 text-xs text-gray-700">
             <input
               type="checkbox"
