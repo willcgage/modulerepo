@@ -275,6 +275,7 @@ export function BenchworkEditor({
   lengthInches,
   poses,
   endplateWidths,
+  endplateTrackOffsets,
   centerline = [],
   sectionBreaks = [],
   tracks = [],
@@ -308,6 +309,10 @@ export function BenchworkEditor({
   lengthInches: number;
   poses: EndplatePose[];
   endplateWidths?: Record<string, number>;
+  /** Where each endplate's CENTRE sits relative to its track point, inches — a
+   * double-track end is half a track spacing off so the plate centres on its
+   * pair of tracks (Free-moN §2.0). Absent = centred on the track. */
+  endplateTrackOffsets?: Record<string, number>;
   /** The real mainline centre-line (module-local inches) — drawn as context. */
   centerline?: Pt[];
   /** Internal section joints (inches from A) — drawn as dividers on the board. */
@@ -445,11 +450,16 @@ export function BenchworkEditor({
       const hw = (endplateWidths?.[p.id] ?? 24) / 2;
       const px = Math.cos((p.heading + 90) * DEG);
       const py = Math.sin((p.heading + 90) * DEG);
-      out.push({ x: p.x + px * hw, y: p.y + py * hw, id: p.id });
-      out.push({ x: p.x - px * hw, y: p.y - py * hw, id: p.id });
+      // Corners follow the drawn face, which a double end offsets off the track
+      // point so the plate centres on its pair of tracks (#93).
+      const off = endplateTrackOffsets?.[p.id] ?? 0;
+      const cx = p.x + px * off;
+      const cy = p.y + py * off;
+      out.push({ x: cx + px * hw, y: cy + py * hw, id: p.id });
+      out.push({ x: cx - px * hw, y: cy - py * hw, id: p.id });
     }
     return out;
-  }, [poses, endplateWidths]);
+  }, [poses, endplateWidths, endplateTrackOffsets]);
 
   const sampled = useMemo(() => sampleBenchworkOutline(outline, 24), [outline]);
 
@@ -2201,10 +2211,15 @@ export function BenchworkEditor({
           const hxo = Math.cos(p.heading * DEG);
           const hyo = Math.sin(p.heading * DEG);
           const on = selection?.kind === "endplate" && selection.id === p.id;
-          const ax = p.x - fx * hw;
-          const ay = p.y - fy * hw;
-          const bx = p.x + fx * hw;
-          const by = p.y + fy * hw;
+          // The plate centres on the TRACKS crossing it, which on a double end
+          // is half a spacing off the track point (Free-moN §2.0, #93).
+          const off = endplateTrackOffsets?.[p.id] ?? 0;
+          const cxp = p.x + fx * off;
+          const cyp = p.y + fy * off;
+          const ax = cxp - fx * hw;
+          const ay = cyp - fy * hw;
+          const bx = cxp + fx * hw;
+          const by = cyp + fy * hw;
           // Short hatch ticks along the face — reads as the machined interface,
           // not a wall. Angled inward from the face.
           const nTicks = Math.max(3, Math.round(hw / 3));
