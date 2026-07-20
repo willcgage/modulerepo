@@ -2120,10 +2120,9 @@ const ENDPLATE_TAB = 5; // ballast-shoulder band width, inches
             key={c.id}
             points={c.pts}
             fill="#f6f2ea"
-            fillOpacity={0.45}
+            fillOpacity={0.9}
             stroke="#cbd5e1"
             strokeWidth={world(0.8)}
-            strokeDasharray={`${world(2)} ${world(2)}`}
             pointerEvents="none"
           />
         ))}
