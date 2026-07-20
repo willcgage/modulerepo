@@ -1106,6 +1106,10 @@ export function SchematicEditor({
                 mainPath={state.mainPath}
                 onMainPathChange={(next) => patch((s) => (s.mainPath = next))}
                 endplateWidths={state.endplateWidths}
+                endplateTrackOffsets={{
+                  A: endplateTrackOffsetFor(state.configA),
+                  B: endplateTrackOffsetFor(state.configB),
+                }}
                 centerline={footprint.centerline}
                 sectionBreaks={state.sectionBreaks}
                 tracks={canvasTracks}

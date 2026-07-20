@@ -5,6 +5,11 @@ Headings are `version — date` (YYYY-MM-DD).
 
 ---
 
+## v0.15.38 — 2026-07-20
+
+### Fixed
+- **The drawing canvas centres a double-track endplate on its two tracks too** — v0.15.37 fixed the module illustration but the editor canvas still drew the plate centred on Main 1.
+
 ## v0.15.37 — 2026-07-20
 
 ### Fixed
