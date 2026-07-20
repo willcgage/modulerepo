@@ -22,7 +22,12 @@ export function ModuleFootprintView({
   className?: string;
 }) {
   const fp = moduleFootprint(input);
-  const shape = fp.outline ?? fp.band;
+  // A module built from shaped sections IS its sections, so draw every one —
+  // together they are its footprint (#96 phase 2). Otherwise the single board.
+  const boards = fp.sectionOutlines.length
+    ? fp.sectionOutlines.map((sec) => sec.outline)
+    : [fp.outline ?? fp.band];
+  const shape = boards.flat();
   if (shape.length < 2) {
     return (
       <div
@@ -52,7 +57,7 @@ export function ModuleFootprintView({
   const sy = (y: number) => -y; // module +y up → SVG y down
   const sw = Math.max(0.6, w * 0.006);
 
-  const poly = shape.map((p) => `${p.x},${sy(p.y)}`).join(" ");
+  const polys = boards.map((b) => b.map((p) => `${p.x},${sy(p.y)}`).join(" "));
   const track = fp.centerline.map((p) => `${p.x},${sy(p.y)}`).join(" ");
 
   return (
@@ -65,15 +70,18 @@ export function ModuleFootprintView({
       role="img"
       aria-label="Physical module footprint with track"
     >
-      {/* Benchwork board */}
-      <polygon
-        points={poly}
-        fill="#0ea5e9"
-        fillOpacity={0.12}
-        stroke="#0369a1"
-        strokeWidth={sw}
-        strokeLinejoin="round"
-      />
+      {/* Benchwork board(s) — one polygon per section when it has them */}
+      {polys.map((points, i) => (
+        <polygon
+          key={i}
+          points={points}
+          fill="#0ea5e9"
+          fillOpacity={0.12}
+          stroke="#0369a1"
+          strokeWidth={sw}
+          strokeLinejoin="round"
+        />
+      ))}
       {/* Endplate faces (the standardized interface at each end) */}
       {fp.endplateFaces.map((f, i) => (
         <line
@@ -129,5 +137,6 @@ export function footprintInput(
     geometryOffsetInches: module.geometry_offset_inches,
     endplateWidths,
     outline: (doc as { outline?: ModuleSchematicDoc["outline"] } | null)?.outline ?? null,
+    sections: (doc as { sections?: ModuleSchematicDoc["sections"] } | null)?.sections ?? null,
   };
 }
