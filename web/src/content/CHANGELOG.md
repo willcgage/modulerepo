@@ -5,6 +5,14 @@ Headings are `version — date` (YYYY-MM-DD).
 
 ---
 
+## v0.15.37 — 2026-07-20
+
+### Fixed
+- **Double-track endplates draw centred on their two tracks.** Free-moN puts each track 9/16″ either side of a double-track endplate’s centre, but the board and endplate face were drawn centred on Main 1 — so the pair sat half a track-spacing off. The plate now centres on the track pair; the track itself hasn’t moved, so joints are unaffected. (Reported on Ventura East Single-2-Double.)
+
+### Added
+- **Endplate width warnings.** An endplate now warns when it breaks the standard: narrower than the **12″ minimum**, or with a track closer than **4″ to a fascia** — and tells you the width that would satisfy it.
+
 ## v0.15.36 — 2026-07-20
 
 ### Added

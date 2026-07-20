@@ -12,6 +12,8 @@ import {
   deriveEndplatePoses,
   poseNeedsManual,
   moduleFootprint,
+  endplateTrackOffsetFor,
+  checkEndplateWidth,
   nextId,
   inchesToScaleFeet,
   carCapacity,
@@ -223,10 +225,24 @@ export function SchematicEditor({
         geometryDegrees: geometry.degrees,
         geometryOffsetInches: geometry.offset,
         endplateWidths: state.endplateWidths,
+        // A double-track end centres its PLATE on the pair of tracks (Free-moN
+        // §2.0: each track 9/16″ from the plate centre), not on Main 1 (#93).
+        endplateTrackOffsets: {
+          A: endplateTrackOffsetFor(state.configA),
+          B: endplateTrackOffsetFor(state.configB),
+        },
         outline: state.outline,
         mainPath: state.mainPath,
       }),
-    [state.lengthInches, state.endplateWidths, state.outline, state.mainPath, geometry],
+    [
+      state.lengthInches,
+      state.endplateWidths,
+      state.configA,
+      state.configB,
+      state.outline,
+      state.mainPath,
+      geometry,
+    ],
   );
   // When the mainline is drawn, BOTH endplates follow the track's tangent: A
   // faces back along the start tangent (outward = west for a straight), B sits
@@ -1780,7 +1796,9 @@ function Inspector({
         )}
 
         {/* Endplate FACE width — the physical size of the standard interface at
-            this end (Free-moN: 12″ minimum, 24″ recommended). */}
+            this end. Free-moN §1.1 requires a 12″ minimum (24″ is our common
+            default, not a standard), and §2.0 requires every track crossing to
+            clear either fascia by 4″ — both checked below. */}
         <label className="block text-xs font-medium text-gray-600">
           Face width (in)
           <input
@@ -1790,9 +1808,21 @@ function Inspector({
             value={state.endplateWidths[id] ?? 24}
             onChange={(e) => setEndplateWidth(id, e.target.value)}
             className={`mt-0.5 ${inp}`}
-            title="Free-moN endplate face width: 12 in minimum, 24 in recommended."
+            title="Free-moN §1.1: endplates shall be a minimum 12 in wide. Track must also clear either fascia by 4 in (§2.0)."
           />
         </label>
+        {checkEndplateWidth({
+          widthInches: state.endplateWidths[id],
+          config: id === "A" ? state.configA : id === "B" ? state.configB : "single",
+        }).map((issue) => (
+          <p
+            key={issue.code}
+            className="rounded-md bg-amber-50 px-2 py-1 text-xs text-amber-800"
+            role="status"
+          >
+            ⚠ {issue.message}
+          </p>
+        ))}
 
         {/* Pose (#175 phase 1b) — the layout map's geometry. */}
         <details open={wantsManualPose} className="rounded-md border border-gray-200 p-2">

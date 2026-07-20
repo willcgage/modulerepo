@@ -9,8 +9,13 @@ export interface Pt {
   y: number;
 }
 
-/** Free-moN double-track centre spacing (inches) — one lane step. */
-export const LANE_SPACING_INCHES = 1.125;
+import { FREEMO_TRACK_SPACING_INCHES } from "@/lib/module-schematic";
+
+/** Free-moN double-track centre spacing (inches) — one lane step. Re-exported
+ * from the shared contract so this app and Free-Dispatcher can't drift: the
+ * standard fixes it at 1.125″ ("Double track endplates must have a track
+ * spacing of 1.125 inches"). */
+export const LANE_SPACING_INCHES = FREEMO_TRACK_SPACING_INCHES;
 
 /** Cumulative arc length at each vertex of the centre-line. */
 function cumulative(center: Pt[]): number[] {
