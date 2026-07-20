@@ -272,6 +272,9 @@ export type CanvasTool = "select" | "benchwork" | "industry" | "track" | "turnou
 export function BenchworkEditor({
   outline,
   onChange,
+  contextOutlines = [],
+  seedOutline,
+  editingLabel,
   lengthInches,
   poses,
   endplateWidths,
@@ -307,6 +310,14 @@ export function BenchworkEditor({
   tool = "select",
 }: {
   outline: BenchworkPoint[];
+  /** The module's OTHER sections, drawn as faint context so you can see what
+   * the board you're editing has to meet (#96 phase 2b). Not editable. */
+  contextOutlines?: { id: string; name?: string; outline: { x: number; y: number }[] }[];
+  /** What "Start from a rectangle" should seed — a section's derived band
+   * rather than the whole module's, when editing a section. */
+  seedOutline?: { x: number; y: number }[] | null;
+  /** Whose outline is being edited, for the tool header. */
+  editingLabel?: string | null;
   onChange: (next: BenchworkPoint[]) => void;
   lengthInches: number;
   poses: EndplatePose[];
@@ -884,8 +895,9 @@ export function BenchworkEditor({
   /** Content bounds in world (module-local) inches — what "Fit" frames to. */
   const bounds = useMemo<ViewBox>(() => {
     const ctx = [...centerline, ...trackPaths.flatMap((t) => t.pts)];
-    const xs = [0, lengthInches, ...anchors.map((a) => a.x), ...sampled.map((p) => p.x), ...ctx.map((p) => p.x)];
-    const ys = [-16, 16, ...anchors.map((a) => a.y), ...sampled.map((p) => p.y), ...ctx.map((p) => p.y)];
+    const other = contextOutlines.flatMap((c) => c.outline);
+    const xs = [0, lengthInches, ...anchors.map((a) => a.x), ...sampled.map((p) => p.x), ...ctx.map((p) => p.x), ...other.map((p) => p.x)];
+    const ys = [-16, 16, ...anchors.map((a) => a.y), ...sampled.map((p) => p.y), ...ctx.map((p) => p.y), ...other.map((p) => p.y)];
     const minX = Math.min(...xs);
     const maxX = Math.max(...xs);
     const minY = Math.min(...ys);
@@ -1731,6 +1743,13 @@ export function BenchworkEditor({
     `${fmt(inches)}″ · ${Math.floor(inches / CAR_INCHES)} cars`;
 
   const seedRectangle = () => {
+    // Editing a section? Start from ITS band, not the whole module's — a
+    // section's rectangle is its own stretch of board (#96 phase 2b).
+    if (seedOutline && seedOutline.length >= 3) {
+      commit(seedOutline.map((q) => ({ x: q.x, y: q.y })));
+      setSel(null);
+      return;
+    }
     const d = 24;
     commit([
       { x: 0, y: -d / 2 },
@@ -1742,6 +1761,10 @@ export function BenchworkEditor({
   };
 
   const polyPts = sampled.map((p) => `${p.x},${sy(p.y)}`).join(" ");
+  const ctxPolys = contextOutlines.map((c) => ({
+    id: c.id,
+    pts: c.outline.map((p) => `${p.x},${sy(p.y)}`).join(" "),
+  }));
 
   // Grid / ruler ticks in world inches, spanning the current view.
   const ticks = (step: number, lo: number, hi: number) => {
@@ -1866,6 +1889,9 @@ const ENDPLATE_TAB = 5; // ballast-shoulder band width, inches
       <div className="mb-2 flex min-h-6 shrink-0 flex-wrap items-center gap-2 text-xs">
         {tool === "benchwork" ? (
           <>
+            {editingLabel ? (
+              <span className="font-medium text-gray-700">{editingLabel}</span>
+            ) : null}
             <button type="button" onClick={seedRectangle} className={btn}>
               {outline.length ? "Reset to rectangle" : "Start from a rectangle"}
             </button>
@@ -2086,6 +2112,21 @@ const ENDPLATE_TAB = 5; // ballast-shoulder band width, inches
 
         {/* --- The board itself, as a fill under the track (a real board the
             track sits on). Its edge stroke + handles are drawn on top, below. --- */}
+        {/* The module's other boards, faint — context for the one being
+            shaped. Drawn outside the condition below so they still show while
+            this section has no outline of its own yet. */}
+        {ctxPolys.map((c) => (
+          <polygon
+            key={c.id}
+            points={c.pts}
+            fill="#f6f2ea"
+            fillOpacity={0.45}
+            stroke="#cbd5e1"
+            strokeWidth={world(0.8)}
+            strokeDasharray={`${world(2)} ${world(2)}`}
+            pointerEvents="none"
+          />
+        ))}
         {sampled.length >= 2 && outline.length >= 3 && (
           <polygon points={polyPts} fill="#f6f2ea" fillOpacity={0.9} pointerEvents="none" />
         )}
