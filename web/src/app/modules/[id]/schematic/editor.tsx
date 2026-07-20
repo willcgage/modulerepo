@@ -530,6 +530,10 @@ export function SchematicEditor({
     if (!last) return;
     const len = Math.round((L - last.fromPos) * 1000) / 1000;
     if (len < 1) return;
+    // A drag that doesn't actually change the length shouldn't land an undo
+    // entry — pointermove fires constantly.
+    const cur = state.sections.find((sec) => sec.id === last.id)?.lengthInches;
+    if (cur === len) return;
     setSections(
       state.sections.map((sec) => (sec.id === last.id ? { ...sec, lengthInches: len } : sec)),
     );
