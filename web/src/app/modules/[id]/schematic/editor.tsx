@@ -26,6 +26,9 @@ import {
   moduleLengthFromSections,
   sectionBreaksFromSections,
   sectionBand,
+  sectionAdjacency,
+  sectionNeighbours,
+  sectionComponents,
   sectionSpans,
   type SchematicSection,
 } from "@/lib/module-schematic";
@@ -510,6 +513,27 @@ export function SchematicEditor({
       ),
     [footprint.sectionOutlines, activeSection],
   );
+
+  /** Which boards actually MEET, from shared edges rather than list order
+   * (#96 phase 2c) — a peninsula off the back of a band neighbours that band,
+   * not whichever section happens to sit beside it in the list. */
+  const sectionMeets = useMemo(
+    () => sectionAdjacency(footprint.sectionOutlines),
+    [footprint.sectionOutlines],
+  );
+
+  /** Boards not connected to the piece endplate A is on. A module is one piece
+   * of bench work; anything else is a board drawn somewhere it can't be. */
+  const floatingSections = useMemo(() => {
+    if (state.sections.length < 2) return new Set<string>();
+    const groups = sectionComponents(
+      state.sections.map((sec) => sec.id),
+      sectionMeets,
+    );
+    if (groups.length < 2) return new Set<string>();
+    const main = groups.find((g) => g.includes(state.sections[0].id)) ?? groups[0];
+    return new Set(groups.filter((g) => g !== main).flat());
+  }, [state.sections, sectionMeets]);
 
   /** The joints the canvas should draw. A sectioned module derives them from
    * cumulative section lengths; an unsectioned one still uses its authored
@@ -1375,6 +1399,8 @@ export function SchematicEditor({
               setActiveSectionId(id);
               setTool("benchwork");
             }}
+            sectionMeets={sectionMeets}
+            floatingSections={floatingSections}
             trackOptions={trackOptions}
             industryTypes={industryTypes}
             carTypes={carTypeOptions}
@@ -1567,6 +1593,8 @@ function SectionList({
   onChange,
   activeId,
   onShape,
+  meets,
+  floating,
   inp,
 }: {
   sections: SchematicSection[];
@@ -1579,6 +1607,8 @@ function SectionList({
   onChange: (next: SchematicSection[]) => void;
   activeId: string | null;
   onShape: (id: string) => void;
+  meets: { a: string; b: string; lengthInches: number }[];
+  floating: Set<string>;
   inp: string;
 }) {
   // Length commits on blur, for the same reason the old joint fields had to: a
@@ -1734,6 +1764,25 @@ function SectionList({
                 </label>
               )}
             </div>
+            {(() => {
+              const names = sectionNeighbours(sec.id, meets).map((id) => {
+                const k = sections.findIndex((x) => x.id === id);
+                return sections[k]?.name || `section ${k + 1}`;
+              });
+              if (floating.has(sec.id))
+                return (
+                  <p className="rounded bg-amber-50 px-1.5 py-1 text-xs text-amber-800" role="status">
+                    ⚠ Doesn&rsquo;t touch the rest of the module. A module is one
+                    piece of bench work — give this board a shape that meets a
+                    neighbour, or change its length.
+                  </p>
+                );
+              return (
+                <p className="text-xs text-gray-500">
+                  {names.length ? `Meets ${names.join(", ")}` : "Meets nothing yet"}
+                </p>
+              );
+            })()}
             <div className="flex items-center gap-2 text-xs">
               <span className={sec.outline ? "text-gray-600" : "text-gray-400"}>
                 {sec.outline ? "Shape: drawn" : "Shape: derived from length"}
@@ -1999,6 +2048,8 @@ function Inspector({
   setSections,
   activeSectionId,
   onShapeSection,
+  sectionMeets,
+  floatingSections,
   trackOptions,
   industryTypes,
   carTypes,
@@ -2020,6 +2071,8 @@ function Inspector({
   setSections: (next: SchematicSection[]) => void;
   activeSectionId: string | null;
   onShapeSection: (id: string) => void;
+  sectionMeets: { a: string; b: string; lengthInches: number }[];
+  floatingSections: Set<string>;
   trackOptions: { value: string; label: string }[];
   industryTypes: { value: string; display_label: string }[];
   carTypes: { value: string; display_label: string }[];
@@ -2111,6 +2164,8 @@ function Inspector({
               onChange={setSections}
               activeId={activeSectionId}
               onShape={onShapeSection}
+              meets={sectionMeets}
+              floating={floatingSections}
               inp={inp}
             />
           ) : (
