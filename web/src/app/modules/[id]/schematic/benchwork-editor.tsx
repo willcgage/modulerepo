@@ -1562,12 +1562,34 @@ export function BenchworkEditor({
     }
     if (d.kind === "endplateEnd") {
       if (centerline.length >= 2) {
-        // Can't drag it back past the last joint — that would invert the board
+        // posFrom projects onto the centre-line, which ENDS at this endplate —
+        // so on its own it clamps and the end could only ever be dragged
+        // inward. Past the end, measure along the closing tangent instead so
+        // the board can actually be lengthened.
+        let end = 0;
+        for (let i = 1; i < centerline.length; i++)
+          end += Math.hypot(
+            centerline[i].x - centerline[i - 1].x,
+            centerline[i].y - centerline[i - 1].y,
+          );
+        let pos = posFrom(p);
+        if (pos >= end - 0.01) {
+          const a = centerline[centerline.length - 2];
+          const b = centerline[centerline.length - 1];
+          const tx = b.x - a.x;
+          const ty = b.y - a.y;
+          const tl = Math.hypot(tx, ty) || 1;
+          const past = ((p.x - b.x) * tx + (p.y - b.y) * ty) / tl;
+          pos = end + Math.max(0, past);
+        }
+        // Can't drag it back over the last joint — that would invert the board
         // it terminates. Nothing bounds it going outward.
         const lo = (sectionBreaks[sectionBreaks.length - 1] ?? 0) + 1;
-        const pos = Math.max(lo, posFrom(p));
+        pos = Math.max(lo, pos);
         onEndplateEndMove?.(d.id, pos);
-        setReadout(`${lengthLabel(pos - (sectionBreaks[sectionBreaks.length - 1] ?? 0))} section · ${lengthLabel(pos)} module`);
+        setReadout(
+          `${lengthLabel(pos - (sectionBreaks[sectionBreaks.length - 1] ?? 0))} section · ${lengthLabel(pos)} module`,
+        );
       }
       return;
     }
