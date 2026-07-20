@@ -214,6 +214,17 @@ export function SchematicEditor({
     [state, geometry],
   );
   const wantsManualPose = poseNeedsManual(geometry.type) || state.loop;
+  // Where each plate's CENTRE sits relative to its track point, in inches —
+  // the renderer's framing, the negation of the authored offset. Unauthored
+  // ends fall back to Free-moN §2.0's recommendation: a single end centred, a
+  // double end straddling the centre at ∓ half the 1.125″ track spacing.
+  const renderTrackOffsets = useMemo(
+    () => ({
+      A: endplateTrackOffsetFor(state.configA, state.endplateTrackOffsets.A),
+      B: endplateTrackOffsetFor(state.configB, state.endplateTrackOffsets.B),
+    }),
+    [state.configA, state.configB, state.endplateTrackOffsets],
+  );
   // The real physical module — its centre-line drives where track, turnouts and
   // signals actually sit on the board (not just in the straightened view).
   const mainDrawn = state.mainPath.length >= 2;
@@ -225,20 +236,14 @@ export function SchematicEditor({
         geometryDegrees: geometry.degrees,
         geometryOffsetInches: geometry.offset,
         endplateWidths: state.endplateWidths,
-        // A double-track end centres its PLATE on the pair of tracks (Free-moN
-        // §2.0: each track 9/16″ from the plate centre), not on Main 1 (#93).
-        endplateTrackOffsets: {
-          A: endplateTrackOffsetFor(state.configA),
-          B: endplateTrackOffsetFor(state.configB),
-        },
+        endplateTrackOffsets: renderTrackOffsets,
         outline: state.outline,
         mainPath: state.mainPath,
       }),
     [
       state.lengthInches,
       state.endplateWidths,
-      state.configA,
-      state.configB,
+      renderTrackOffsets,
       state.outline,
       state.mainPath,
       geometry,
@@ -428,6 +433,16 @@ export function SchematicEditor({
       const v = parseFloat(raw);
       if (Number.isFinite(v) && v > 0) s.endplateWidths[id] = v;
       else delete s.endplateWidths[id];
+    });
+
+  /** Store where this end's Main 1 crosses, as a signed distance from the
+   * plate CENTRE (§2.0's own framing). Blank clears back to the default —
+   * 0 is NOT blank, it means "explicitly centred". */
+  const setEndplateTrackOffset = (id: string, raw: string) =>
+    patch((s) => {
+      const v = parseFloat(raw);
+      if (raw.trim() !== "" && Number.isFinite(v)) s.endplateTrackOffsets[id] = v;
+      else delete s.endplateTrackOffsets[id];
     });
 
   // --- Draw-to-create sidings & spurs (#51) ---------------------------------
@@ -1106,10 +1121,7 @@ export function SchematicEditor({
                 mainPath={state.mainPath}
                 onMainPathChange={(next) => patch((s) => (s.mainPath = next))}
                 endplateWidths={state.endplateWidths}
-                endplateTrackOffsets={{
-                  A: endplateTrackOffsetFor(state.configA),
-                  B: endplateTrackOffsetFor(state.configB),
-                }}
+                endplateTrackOffsets={renderTrackOffsets}
                 centerline={footprint.centerline}
                 sectionBreaks={state.sectionBreaks}
                 tracks={canvasTracks}
@@ -1190,6 +1202,7 @@ export function SchematicEditor({
             derivedPoses={derivedPoses}
             wantsManualPose={wantsManualPose}
             setEndplateWidth={setEndplateWidth}
+            setEndplateTrackOffset={setEndplateTrackOffset}
             trackOptions={trackOptions}
             industryTypes={industryTypes}
             carTypes={carTypeOptions}
@@ -1468,6 +1481,7 @@ function Inspector({
   derivedPoses,
   wantsManualPose,
   setEndplateWidth,
+  setEndplateTrackOffset,
   trackOptions,
   industryTypes,
   carTypes,
@@ -1485,6 +1499,7 @@ function Inspector({
   derivedPoses: { id: string; x: number; y: number; heading: number }[];
   wantsManualPose: boolean;
   setEndplateWidth: (id: string, raw: string) => void;
+  setEndplateTrackOffset: (id: string, raw: string) => void;
   trackOptions: { value: string; label: string }[];
   industryTypes: { value: string; display_label: string }[];
   carTypes: { value: string; display_label: string }[];
@@ -1815,9 +1830,35 @@ function Inspector({
             title="Free-moN §1.1: endplates shall be a minimum 12 in wide. Track must also clear either fascia by 4 in (§2.0)."
           />
         </label>
+        {/* Where MAIN 1 crosses this plate. §2.0 requires only that every track
+            clear either fascia by 4″; the 20220628 revision relaxed centring to
+            a recommendation, so an offset end is legal — a transition section
+            commonly offsets its single end so the through main lines up with
+            one of the two tracks at its double end. */}
+        <label className="block text-xs font-medium text-gray-600">
+          Main 1 offset from plate centre (in)
+          <input
+            type="number"
+            step={0.0625}
+            value={state.endplateTrackOffsets[id] ?? ""}
+            placeholder={String(
+              -endplateTrackOffsetFor(
+                id === "A" ? state.configA : id === "B" ? state.configB : "single",
+              ),
+            )}
+            onChange={(e) => setEndplateTrackOffset(id, e.target.value)}
+            className={`mt-0.5 ${inp}`}
+            title="Signed distance of Main 1 from the centre of this endplate. Leave blank for the standard's recommendation (single centred, double straddling the centre). 0 means explicitly centred."
+          />
+        </label>
+        <p className="text-xs text-gray-500">
+          Blank uses the recommended placement. Track always crosses the plate at
+          90°, and on a double end the two tracks stay 1.125″ apart.
+        </p>
         {checkEndplateWidth({
           widthInches: state.endplateWidths[id],
           config: id === "A" ? state.configA : id === "B" ? state.configB : "single",
+          trackOffsetInches: state.endplateTrackOffsets[id],
         }).map((issue) => (
           <p
             key={issue.code}
