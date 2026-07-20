@@ -5,6 +5,11 @@ Headings are `version — date` (YYYY-MM-DD).
 
 ---
 
+## v0.15.36 — 2026-07-20
+
+### Added
+- **Swap Main 1 / Main 2 positions.** On a double-track module the Module panel now has a **Swap Main 1 / Main 2 positions** checkbox — draw Main 1 above and Main 2 on the centre line, for a module whose upper track is the primary main. Names, turnouts, industries and signals stay exactly where they are; only where the two mains are drawn changes. (Requested on Ventura East Single-2-Double.)
+
 ## v0.15.35 — 2026-07-20
 
 ### Fixed
