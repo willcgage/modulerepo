@@ -447,13 +447,34 @@ export function BenchworkEditor({
   const sel = selection?.kind === "corner" ? selection.i : null;
   const setSel = (i: number | null) => onSelect?.(i === null ? null : { kind: "corner", i });
 
+  /** The axis along an endplate's FACE — perpendicular to its track — oriented
+   * to agree with the centre-line NORMAL, which is the same axis lanes (and so
+   * Main 2) are offset along. Orientation matters: a pose's heading points
+   * OUTWARD, so at end A it faces backwards down the module and `heading + 90`
+   * alone comes out opposite to end B's. Using it raw would make one authored
+   * offset jog the two plates in opposite directions, and would disagree with
+   * the footprint the package computes (it keys off the normal). Flipping to
+   * match the normal also covers branch endplates, whose headings are
+   * arbitrary. */
+  const faceAxis = (p: { x: number; y: number; heading: number }) => {
+    let px = Math.cos((p.heading + 90) * DEG);
+    let py = Math.sin((p.heading + 90) * DEG);
+    if (centerline.length >= 2) {
+      const n = sampleAt(centerline, projectToCenterline(centerline, p).pos);
+      if (px * n.nx + py * n.ny < 0) {
+        px = -px;
+        py = -py;
+      }
+    }
+    return { px, py };
+  };
+
   // Endplate face corners — the anchors a board corner should meet.
   const anchors = useMemo(() => {
     const out: { x: number; y: number; id: string }[] = [];
     for (const p of poses) {
       const hw = (endplateWidths?.[p.id] ?? 24) / 2;
-      const px = Math.cos((p.heading + 90) * DEG);
-      const py = Math.sin((p.heading + 90) * DEG);
+      const { px, py } = faceAxis(p);
       // Corners follow the drawn face, which a double end offsets off the track
       // point so the plate centres on its pair of tracks (#93).
       const off = endplateTrackOffsets?.[p.id] ?? 0;
@@ -463,7 +484,8 @@ export function BenchworkEditor({
       out.push({ x: cx - px * hw, y: cy - py * hw, id: p.id });
     }
     return out;
-  }, [poses, endplateWidths, endplateTrackOffsets]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [poses, endplateWidths, endplateTrackOffsets, centerline]);
 
   const sampled = useMemo(() => sampleBenchworkOutline(outline, 24), [outline]);
 
@@ -2234,9 +2256,9 @@ export function BenchworkEditor({
         })}
         {poses.map((p) => {
           const hw = (endplateWidths?.[p.id] ?? 24) / 2;
-          // Along the face (perpendicular to the outward heading)…
-          const fx = Math.cos((p.heading + 90) * DEG);
-          const fy = Math.sin((p.heading + 90) * DEG);
+          // Along the face (perpendicular to the track), oriented to the
+          // centre-line normal so both ends offset the same way.
+          const { px: fx, py: fy } = faceAxis(p);
           // …and the outward heading itself (for the hatch ticks).
           const hxo = Math.cos(p.heading * DEG);
           const hyo = Math.sin(p.heading * DEG);
