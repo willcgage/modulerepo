@@ -456,17 +456,24 @@ export function BenchworkEditor({
    * the footprint the package computes (it keys off the normal). Flipping to
    * match the normal also covers branch endplates, whose headings are
    * arbitrary. */
-  const faceAxis = (p: { x: number; y: number; heading: number }) => {
+  const faceAxis = (p: { x: number; y: number; heading: number; id: string }) => {
     let px = Math.cos((p.heading + 90) * DEG);
     let py = Math.sin((p.heading + 90) * DEG);
+    let flip: boolean;
     if (centerline.length >= 2) {
+      // Best source: the centre-line's own left normal, which also follows a
+      // curved module round its bend.
       const n = sampleAt(centerline, projectToCenterline(centerline, p).pos);
-      if (px * n.nx + py * n.ny < 0) {
-        px = -px;
-        py = -py;
-      }
+      flip = px * n.nx + py * n.ny < 0;
+    } else {
+      // No centre-line (a module with no geometry set yet, where the canvas
+      // draws the endplate-to-endplate lead instead). Fall back to the module
+      // frame: end A's outward heading points back down the module, so its
+      // raw axis is the reversed one. Branch endplates face across the main
+      // and are left alone — their axis genuinely runs along it.
+      flip = p.id === "A";
     }
-    return { px, py };
+    return flip ? { px: -px, py: -py } : { px, py };
   };
 
   // Endplate face corners — the anchors a board corner should meet.
