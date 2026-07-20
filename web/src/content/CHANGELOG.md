@@ -5,6 +5,13 @@ Headings are `version — date` (YYYY-MM-DD).
 
 ---
 
+## v0.15.35 — 2026-07-20
+
+### Fixed
+- **Spurs draw the way they actually run.** A spur that runs **west** from its turnout was drawn heading east to an arbitrary end point — the drawing ignored which way the track actually goes. It now follows the track's own ends. (Reported on Oxnard Auto Port.)
+- **A passing siding connects at both ends.** A siding with a turnout at each end only joined the main at one of them; both switches now draw their connection. (Reported on Oxnard Auto Port.)
+- **A transition module no longer runs both mains to the single-track end.** When the *upper* main is the one that continues endplate to endplate, the other main now correctly stops at the End of Double Track turnout. (Reported on Ventura East Single-2-Double.)
+
 ## v0.15.34 — 2026-07-19
 
 ### Changed

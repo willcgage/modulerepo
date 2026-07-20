@@ -504,13 +504,18 @@ export function BenchworkEditor({
     // The diverging track's far end (relative to the throat) fixes the leg's
     // longitudinal (toward) and lateral (side) sense — host-agnostic. A wye's
     // mirror leg forces the opposite side.
-    const far =
-      dt.path && dt.path.length >= 2
-        ? dt.path[dt.path.length - 1]
-        : {
-            x: m.x + tx * LANE_SPACING_INCHES + m.nx * (laneOffset(dt.lane) || LANE_SPACING_INCHES),
-            y: m.y + ty * LANE_SPACING_INCHES + m.ny * (laneOffset(dt.lane) || LANE_SPACING_INCHES),
-          };
+    const far = (() => {
+      if (dt.path && dt.path.length >= 2) return dt.path[dt.path.length - 1];
+      // The diverging track's OWN far end — whichever of its ends is further
+      // from this turnout — laid on the main at its lane. The old fallback
+      // stepped a fixed +tangent, so every spur diverged EAST no matter which
+      // way it actually ran (a westward spur drew backwards, #FMN-0040).
+      const farPos =
+        Math.abs(dt.toPos - t.pos) >= Math.abs(dt.fromPos - t.pos) ? dt.toPos : dt.fromPos;
+      const p = sampleAt(centerline, farPos);
+      const off = laneOffset(dt.lane) || LANE_SPACING_INCHES;
+      return { x: p.x + p.nx * off, y: p.y + p.ny * off };
+    })();
     const toward = Math.sign((far.x - m.x) * tx + (far.y - m.y) * ty) || 1;
     const side = forceSide ?? (Math.sign((far.x - m.x) * m.nx + (far.y - m.y) * m.ny) || 1);
     const size = t.size && t.size > 0 ? t.size : 6;
@@ -554,23 +559,29 @@ export function BenchworkEditor({
   };
   /** spur/siding id → its throat's curved diverging leg + endpoints, so a drawn
    * track starts at the frog (one continuous curved route with its turnout). */
-  const switchByTrack = useMemo(() => {
-    const map = new Map<string, { throat: Pt; frog: Pt; leg: Pt[]; turnoutId: string }>();
+  /** track id → EVERY switch leg reaching it. A passing siding has a turnout at
+   * BOTH ends and a crossover connector one on each lane, so a track can have
+   * several — keeping only one left the far end visually unconnected
+   * (#FMN-0040). */
+  const legsByTrack = useMemo(() => {
+    const map = new Map<string, { throat: Pt; frog: Pt; leg: Pt[]; turnoutId: string }[]>();
     if (centerline.length >= 2) {
       for (const t of turnouts) {
-        // A crossover's connector has a turnout on BOTH lanes diverging to it —
-        // keep the FIRST (the host-side one; its leg draws the diagonal).
-        if (!t.divergeTrack || map.has(t.divergeTrack)) continue;
+        if (!t.divergeTrack) continue;
         const leg = frogLegOf(t);
         if (!leg || leg.length < 2) continue;
-        map.set(t.divergeTrack, {
-          throat: leg[0],
-          frog: leg[leg.length - 1],
-          leg,
-          turnoutId: t.id,
-        });
+        const list = map.get(t.divergeTrack) ?? [];
+        list.push({ throat: leg[0], frog: leg[leg.length - 1], leg, turnoutId: t.id });
+        map.set(t.divergeTrack, list);
       }
     }
+    return map;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [turnouts, tracks, centerline, lengthInches]);
+  /** The primary (first) leg per track — what a drawn path pins its throat to. */
+  const switchByTrack = useMemo(() => {
+    const map = new Map<string, { throat: Pt; frog: Pt; leg: Pt[]; turnoutId: string }>();
+    for (const [id, legs] of legsByTrack) map.set(id, legs[0]);
     return map;
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [turnouts, tracks, centerline, lengthInches]);
@@ -598,8 +609,13 @@ export function BenchworkEditor({
    * carries the curve on. Length ≈ the stub's along-main span (the leg is the
    * turnout body; the tail is the track beyond it). Null → not a turnout stub. */
   const divergingStubPath = (t: CanvasTrack): Pt[] | null => {
-    const sw = switchByTrack.get(t.id);
-    if (!sw || sw.leg.length < 2) return null;
+    const legs = legsByTrack.get(t.id);
+    // Only a genuinely single-ended track (a spur/stub) angles away. A track
+    // reached by TWO turnouts is a passing siding — it must stay parallel and
+    // meet the main at both ends, not swing off one (#FMN-0040).
+    if (!legs || legs.length !== 1) return null;
+    const sw = legs[0];
+    if (sw.leg.length < 2) return null;
     const leg = sw.leg;
     const frog = leg[leg.length - 1];
     const prev = leg[leg.length - 2];
@@ -644,6 +660,26 @@ export function BenchworkEditor({
     return out;
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [turnouts, tracks, centerline, lengthInches]);
+
+  /** Switch legs that the track band itself doesn't already include — the far
+   * end of a passing siding, the second turnout of a crossover connector — so
+   * every turnout visibly joins what it diverges to (#FMN-0040). */
+  const connectorLegs = useMemo(() => {
+    const out: { id: string; pts: Pt[] }[] = [];
+    for (const [trackId, legs] of legsByTrack) {
+      const t = tracks.find((x) => x.id === trackId);
+      if (!t) continue;
+      // legs[0] is already drawn by the band itself when the track is an
+      // authored path (spurTrackPath prepends it) or a single-ended stub
+      // (divergingStubPath starts with it); otherwise draw them all.
+      const authored = !!(t.path && t.path.length >= 2);
+      const stub = !authored && legs.length === 1;
+      for (let i = authored || stub ? 1 : 0; i < legs.length; i++) {
+        out.push({ id: `${trackId}-leg${i}`, pts: legs[i].leg });
+      }
+    }
+    return out;
+  }, [legsByTrack, tracks]);
 
   /** The main centre-line drawn as segments, with a GAP across each wye on the
    * main — a true 2-way wye has no straight-through, so the two mirrored legs
@@ -1659,6 +1695,8 @@ export function BenchworkEditor({
     ...trackPaths.map((t) => ({ id: t.id, pts: t.pts, main: false, selectable: true })),
     // A wye's mirrored second route draws as a (non-selectable) band.
     ...wyeMirrorLegs.map((w) => ({ id: w.id, pts: w.pts, main: false, selectable: false })),
+    // Switch legs the bands don't already carry (a siding's far turnout, etc.).
+    ...connectorLegs.map((c) => ({ id: c.id, pts: c.pts, main: false, selectable: false })),
   ];
 
   const renderTrack = (line: (typeof trackLines)[number]) => {
