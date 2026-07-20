@@ -1311,6 +1311,70 @@ function resizeSection(
   return out;
 }
 
+/** Per-section length fields. Deliberately COMMITS ON BLUR, not per keystroke:
+ * resizeSection takes the difference from the next section and clamps to it, so
+ * committing mid-typing shrinks the pair under you. Typing "72" over a 24 next
+ * to a 24 used to commit "7" first (neighbour → 41), leaving only 47 of headroom
+ * for the real value — silently wrong, and you had to retype several times to
+ * creep up on it. Holding a draft until blur/Enter means what you type is what
+ * gets applied. */
+function SectionLengths({
+  breaks,
+  lengthInches,
+  onResize,
+  inp,
+}: {
+  breaks: number[];
+  lengthInches: number;
+  onResize: (i: number, v: number) => void;
+  inp: string;
+}) {
+  const lens = sectionLengths(breaks, lengthInches);
+  const [draft, setDraft] = useState<{ i: number; text: string } | null>(null);
+  const commit = () => {
+    if (!draft) return;
+    const v = parseFloat(draft.text);
+    if (Number.isFinite(v)) onResize(draft.i, v);
+    setDraft(null);
+  };
+  return (
+    <div className="rounded-md border border-gray-200 p-2">
+      <p className="text-xs font-medium text-gray-600">Section lengths (in)</p>
+      <p className="mt-0.5 text-xs text-gray-500">
+        Joints can sit anywhere. A section boundary is internal to the module, so
+        unlike an endplate it has no standard to meet — track may cross it at any
+        angle. A length is applied when you leave the field; the difference comes
+        out of the next section, so the last one is derived.
+      </p>
+      <div className="mt-2 grid grid-cols-2 gap-2">
+        {lens.map((len, i, all) => {
+          const last = i === all.length - 1;
+          return (
+            <label key={i} className="block text-xs font-medium text-gray-600">
+              {`Section ${i + 1}`}
+              {last && <span className="text-gray-400"> (derived)</span>}
+              <input
+                type="number"
+                min={1}
+                step={0.25}
+                value={draft?.i === i ? draft.text : Math.round(len * 100) / 100}
+                disabled={last}
+                onChange={(e) => setDraft({ i, text: e.target.value })}
+                onBlur={commit}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") e.currentTarget.blur();
+                  if (e.key === "Escape") setDraft(null);
+                }}
+                className={`mt-0.5 ${inp} ${last ? "bg-gray-50 text-gray-600" : ""}`}
+              />
+            </label>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
 function ToolRail({
   tool,
   setTool,
@@ -1651,42 +1715,16 @@ function Inspector({
               module's boards rarely divide evenly — One Mile's end sections are
               standard-built transitions and the rest are plain double-track. */}
           {state.sectionBreaks.length > 0 && (
-            <div className="rounded-md border border-gray-200 p-2">
-              <p className="text-xs font-medium text-gray-600">Section lengths (in)</p>
-              <p className="mt-0.5 text-xs text-gray-500">
-                Joints can sit anywhere. A section boundary is internal to the
-                module, so unlike an endplate it has no standard to meet — track
-                may cross it at any angle. Editing a length moves that joint and
-                takes the difference from the next section, so the last one is
-                derived.
-              </p>
-              <div className="mt-2 grid grid-cols-2 gap-2">
-                {sectionLengths(state.sectionBreaks, state.lengthInches).map((len, i, all) => (
-                  <label key={i} className="block text-xs font-medium text-gray-600">
-                    {`Section ${i + 1}`}
-                    {i === all.length - 1 && <span className="text-gray-400"> (derived)</span>}
-                    <input
-                      type="number"
-                      min={1}
-                      step={0.25}
-                      value={Math.round(len * 100) / 100}
-                      disabled={i === all.length - 1}
-                      onChange={(e) =>
-                        patch((s) => {
-                          s.sectionBreaks = resizeSection(
-                            s.sectionBreaks,
-                            s.lengthInches,
-                            i,
-                            parseFloat(e.target.value),
-                          );
-                        })
-                      }
-                      className={`mt-0.5 ${inp} ${i === all.length - 1 ? "bg-gray-50 text-gray-600" : ""}`}
-                    />
-                  </label>
-                ))}
-              </div>
-            </div>
+            <SectionLengths
+              breaks={state.sectionBreaks}
+              lengthInches={state.lengthInches}
+              onResize={(i, v) =>
+                patch((s) => {
+                  s.sectionBreaks = resizeSection(s.sectionBreaks, s.lengthInches, i, v);
+                })
+              }
+              inp={inp}
+            />
           )}
           <label className="flex gap-2 text-xs text-gray-700">
             <input
