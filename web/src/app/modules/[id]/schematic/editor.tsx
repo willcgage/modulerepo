@@ -501,7 +501,13 @@ export function SchematicEditor({
   /** Every OTHER section's shape, drawn as context behind the one being
    * edited so you can see what the board has to meet. */
   const otherSectionOutlines = useMemo(
-    () => footprint.sectionOutlines.filter((sec) => sec.id !== activeSection?.id),
+    () =>
+      footprint.sectionOutlines.filter(
+        // Drop only the active section's AUTHORED shape — that one is drawn as
+        // the editable polygon. A derived active section still has to be drawn
+        // here, or the board you're standing on disappears while you shape it.
+        (sec) => !(sec.id === activeSection?.id && !sec.derived),
+      ),
     [footprint.sectionOutlines, activeSection],
   );
 
