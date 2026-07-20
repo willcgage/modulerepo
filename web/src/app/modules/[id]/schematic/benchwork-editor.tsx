@@ -1572,14 +1572,18 @@ export function BenchworkEditor({
             centerline[i].x - centerline[i - 1].x,
             centerline[i].y - centerline[i - 1].y,
           );
-        let pos = posFrom(p);
+        const a = centerline[centerline.length - 2];
+        const b = centerline[centerline.length - 1];
+        const tx = b.x - a.x;
+        const ty = b.y - a.y;
+        const tl = Math.hypot(tx, ty) || 1;
+        // The grip is drawn a tab's length OUTBOARD of the endplate (see the
+        // render), so pull the pointer back by the same amount before measuring
+        // — otherwise grabbing it would jump the board a tab longer.
+        const q = { x: p.x - (tx / tl) * ENDPLATE_TAB, y: p.y - (ty / tl) * ENDPLATE_TAB };
+        let pos = posFrom(q);
         if (pos >= end - 0.01) {
-          const a = centerline[centerline.length - 2];
-          const b = centerline[centerline.length - 1];
-          const tx = b.x - a.x;
-          const ty = b.y - a.y;
-          const tl = Math.hypot(tx, ty) || 1;
-          const past = ((p.x - b.x) * tx + (p.y - b.y) * ty) / tl;
+          const past = ((q.x - b.x) * tx + (q.y - b.y) * ty) / tl;
           pos = end + Math.max(0, past);
         }
         // Can't drag it back over the last joint — that would invert the board
@@ -1780,7 +1784,10 @@ export function BenchworkEditor({
   // --- Track rendering -------------------------------------------------------
   // Track reads as a clean outlined band (roadbed fill + edge lines), no ties —
   // the switch points/frog emerge from where the bands converge and cross.
-  const ROADBED = 1.3; // ballast-shoulder band width, inches
+  const ROADBED = 1.3;
+/** How far outboard of an endplate its drag tab sits, inches. Far enough to
+ * clear the benchwork corner handles that share the endplate's track point. */
+const ENDPLATE_TAB = 5; // ballast-shoulder band width, inches
   const poly = (pts: Pt[]) => pts.map((p) => `${p.x},${sy(p.y)}`).join(" ");
   /** Mainline + sidings/spurs as one list, so all get the same rendering. */
   const trackLines: { id: string; pts: Pt[]; main: boolean; selectable: boolean }[] = [
@@ -2372,21 +2379,37 @@ export function BenchworkEditor({
                   dragging it would move every position on the board rather
                   than resize anything (#108). */}
               {onEndplateEndMove && p.id !== "A" ? (
-                <circle
-                  cx={p.x}
-                  cy={sy(p.y)}
-                  r={world(3.2)}
-                  fill="#fff"
-                  stroke="#2563eb"
-                  strokeWidth={world(1)}
-                  className="cursor-ew-resize"
-                  onPointerDown={(e) => {
-                    e.stopPropagation();
-                    beginDrag(e, { kind: "endplateEnd", id: p.id });
-                  }}
-                >
-                  <title>Drag to lengthen or shorten the last section</title>
-                </circle>
+                <g>
+                  {/* Sits a tab's length OUTBOARD of the plate rather than on
+                      its track point. Benchwork corners land exactly there on
+                      any board whose outline meets the endplate, and their
+                      handles would swallow every grab — you'd drag the outline
+                      thinking you were moving the end. */}
+                  <line
+                    x1={p.x}
+                    y1={sy(p.y)}
+                    x2={p.x + hxo * ENDPLATE_TAB}
+                    y2={sy(p.y + hyo * ENDPLATE_TAB)}
+                    stroke="#2563eb"
+                    strokeWidth={world(0.8)}
+                    pointerEvents="none"
+                  />
+                  <circle
+                    cx={p.x + hxo * ENDPLATE_TAB}
+                    cy={sy(p.y + hyo * ENDPLATE_TAB)}
+                    r={world(3.2)}
+                    fill="#fff"
+                    stroke="#2563eb"
+                    strokeWidth={world(1)}
+                    className="cursor-ew-resize"
+                    onPointerDown={(e) => {
+                      e.stopPropagation();
+                      beginDrag(e, { kind: "endplateEnd", id: p.id });
+                    }}
+                  >
+                    <title>Drag to lengthen or shorten the last section</title>
+                  </circle>
+                </g>
               ) : null}
               <text x={p.x} y={sy(p.y) - r * 1.6} textAnchor="middle" fontSize={r * 2.4} fill="#2563eb">
                 {p.id}
