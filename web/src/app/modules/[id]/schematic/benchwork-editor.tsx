@@ -279,6 +279,7 @@ export function BenchworkEditor({
   centerline = [],
   sectionBreaks = [],
   onSectionBreakMove,
+  onEndplateEndMove,
   tracks = [],
   turnouts = [],
   signals = [],
@@ -320,6 +321,10 @@ export function BenchworkEditor({
   sectionBreaks?: number[];
   /** Fired while a section joint is dragged along the board (#96). */
   onSectionBreakMove?: (i: number, pos: number) => void;
+  /** Fired while the far endplate is dragged along the main — it's the outer
+   * end of the LAST board, so moving it lengthens or shortens that board and
+   * with it the module (#108). */
+  onEndplateEndMove?: (id: string, pos: number) => void;
   /** Sidings/spurs/main-2, positioned along the main and offset to their lane. */
   tracks?: CanvasTrack[];
   turnouts?: CanvasTurnout[];
@@ -418,6 +423,7 @@ export function BenchworkEditor({
     | { kind: "turnout"; id: string }
     | { kind: "trackEnd"; id: string; end: "from" | "to" }
     | { kind: "sectionBreak"; i: number }
+    | { kind: "endplateEnd"; id: string }
     | { kind: "industryEnd"; id: string; end: "from" | "to" }
     | null
   >(null);
@@ -1554,6 +1560,17 @@ export function BenchworkEditor({
       }
       return;
     }
+    if (d.kind === "endplateEnd") {
+      if (centerline.length >= 2) {
+        // Can't drag it back past the last joint — that would invert the board
+        // it terminates. Nothing bounds it going outward.
+        const lo = (sectionBreaks[sectionBreaks.length - 1] ?? 0) + 1;
+        const pos = Math.max(lo, posFrom(p));
+        onEndplateEndMove?.(d.id, pos);
+        setReadout(`${lengthLabel(pos - (sectionBreaks[sectionBreaks.length - 1] ?? 0))} section · ${lengthLabel(pos)} module`);
+      }
+      return;
+    }
     if (d.kind === "sectionBreak") {
       if (centerline.length >= 2) {
         // A joint is internal bench work, so nothing constrains where it lands
@@ -2328,6 +2345,27 @@ export function BenchworkEditor({
               >
                 <title>{`Endplate ${p.id} — the standard interface`}</title>
               </line>
+              {/* Grip to slide this end along the main. Only the FAR end gets
+                  one: endplate A is the origin everything is measured from, so
+                  dragging it would move every position on the board rather
+                  than resize anything (#108). */}
+              {onEndplateEndMove && p.id !== "A" ? (
+                <circle
+                  cx={p.x}
+                  cy={sy(p.y)}
+                  r={world(3.2)}
+                  fill="#fff"
+                  stroke="#2563eb"
+                  strokeWidth={world(1)}
+                  className="cursor-ew-resize"
+                  onPointerDown={(e) => {
+                    e.stopPropagation();
+                    beginDrag(e, { kind: "endplateEnd", id: p.id });
+                  }}
+                >
+                  <title>Drag to lengthen or shorten the last section</title>
+                </circle>
+              ) : null}
               <text x={p.x} y={sy(p.y) - r * 1.6} textAnchor="middle" fontSize={r * 2.4} fill="#2563eb">
                 {p.id}
               </text>

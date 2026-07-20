@@ -513,6 +513,28 @@ export function SchematicEditor({
     );
   };
 
+  /** Dragging the far endplate resizes the LAST board — it is that board's
+   * outer end — and so the module's overall length with it. On a module with
+   * no sections it just sets the authored length, which is the same gesture
+   * meaning the same thing (#108). */
+  const moveEndplateEnd = (_id: string, pos: number) => {
+    const L = Math.round(pos * 1000) / 1000;
+    if (L <= 0) return;
+    if (!state.sections.length) {
+      patch((s) => (s.lengthInches = L));
+      setDims((d) => ({ ...d, length_total_inches: String(L) }));
+      return;
+    }
+    const spans = sectionSpans({ sections: state.sections });
+    const last = spans[spans.length - 1];
+    if (!last) return;
+    const len = Math.round((L - last.fromPos) * 1000) / 1000;
+    if (len < 1) return;
+    setSections(
+      state.sections.map((sec) => (sec.id === last.id ? { ...sec, lengthInches: len } : sec)),
+    );
+  };
+
   /** Store where this end's Main 1 crosses, as a signed distance from the
    * plate CENTRE (§2.0's own framing). Blank clears back to the default —
    * 0 is NOT blank, it means "explicitly centred". */
@@ -1203,6 +1225,7 @@ export function SchematicEditor({
                 centerline={footprint.centerline}
                 sectionBreaks={canvasSectionBreaks}
                 onSectionBreakMove={moveSectionJoint}
+                onEndplateEndMove={moveEndplateEnd}
                 tracks={canvasTracks}
                 turnouts={canvasTurnouts}
                 signals={canvasSignals}
