@@ -1583,6 +1583,25 @@ function Inspector({
               interchange.
             </span>
           </label>
+          {/* Which main draws above. MR puts Main 1 on the centre line by
+              default, but on some modules the UPPER track is the through/
+              primary main (#FMN-0043) — swap the drawn positions. */}
+          {(state.configA === "double" || state.configB === "double") && (
+            <label className="flex items-start gap-2 text-xs text-gray-700">
+              <input
+                type="checkbox"
+                className="mt-0.5"
+                checked={state.mainsSwapped ?? false}
+                onChange={(e) => patch((s) => (s.mainsSwapped = e.target.checked))}
+              />
+              <span>
+                <span className="font-medium">Swap Main 1 / Main 2 positions</span> —
+                draw Main 1 above and Main 2 on the centre line, for a module whose
+                upper track is the primary main. Names and everything attached stay
+                put; only where they&rsquo;re drawn changes.
+              </span>
+            </label>
+          )}
           {state.loop && state.configA === "double" && (
             <label className="block text-xs font-medium text-gray-600">
               Loop returns onto
