@@ -23,6 +23,10 @@ import {
   type TurnoutKind,
   type SignalFacing,
   type IndustryLabelMode,
+  moduleLengthFromSections,
+  sectionBreaksFromSections,
+  sectionSpans,
+  type SchematicSection,
 } from "@/lib/module-schematic";
 import { SchematicPreview } from "./schematic-preview";
 import {
@@ -446,6 +450,68 @@ export function SchematicEditor({
       if (Number.isFinite(v) && v > 0) s.endplateWidths[id] = v;
       else delete s.endplateWidths[id];
     });
+
+  /** Replace the module's section list (#108). The module's length is the SUM
+   * of its sections, so it's written straight back here rather than authored —
+   * that's what keeps `lengthInches` (which the whole canvas is measured in)
+   * honest, and what removes the old "sections divide into a fixed total"
+   * fight where every edit stole from its neighbour. */
+  const setSections = (next: SchematicSection[]) => {
+    const total = moduleLengthFromSections({ sections: next });
+    patch((s) => {
+      s.sections = next;
+      if (total && total > 0) s.lengthInches = total;
+      // Joints are derived from the sections now; a stale authored copy would
+      // draw dividers that no longer match any board.
+      if (next.length) s.sectionBreaks = [];
+    });
+    if (total && total > 0) setDims((d) => ({ ...d, length_total_inches: String(total) }));
+  };
+
+  /** The joints the canvas should draw. A sectioned module derives them from
+   * cumulative section lengths; an unsectioned one still uses its authored
+   * ones (#108). */
+  const canvasSectionBreaks = useMemo(
+    () =>
+      state.sections.length
+        ? sectionBreaksFromSections({ sections: state.sections })
+        : state.sectionBreaks,
+    [state.sections, state.sectionBreaks],
+  );
+
+  /** Dragging a joint on a sectioned module resizes the two boards it divides,
+   * leaving every other board — and the module's overall length — alone. Same
+   * feel as dragging a joint always had, just expressed as section lengths. */
+  const moveSectionJoint = (i: number, pos: number) => {
+    if (!state.sections.length) {
+      patch((s) => {
+        const next = [...s.sectionBreaks];
+        next[i] = Math.round(pos * 1000) / 1000;
+        s.sectionBreaks = next;
+      });
+      return;
+    }
+    const spans = sectionSpans({ sections: state.sections });
+    const a = spans[i];
+    const b = spans[i + 1];
+    if (!a || !b) return;
+    const MIN = 1;
+    const lo = a.fromPos + MIN;
+    const hi = b.toPos - MIN;
+    if (hi <= lo) return;
+    const at = Math.max(lo, Math.min(hi, pos));
+    const lenA = Math.round((at - a.fromPos) * 1000) / 1000;
+    const lenB = Math.round((b.toPos - at) * 1000) / 1000;
+    setSections(
+      state.sections.map((sec) =>
+        sec.id === a.id
+          ? { ...sec, lengthInches: lenA }
+          : sec.id === b.id
+            ? { ...sec, lengthInches: lenB }
+            : sec,
+      ),
+    );
+  };
 
   /** Store where this end's Main 1 crosses, as a signed distance from the
    * plate CENTRE (§2.0's own framing). Blank clears back to the default —
@@ -1135,14 +1201,8 @@ export function SchematicEditor({
                 endplateWidths={state.endplateWidths}
                 endplateTrackOffsets={renderTrackOffsets}
                 centerline={footprint.centerline}
-                sectionBreaks={state.sectionBreaks}
-                onSectionBreakMove={(i, pos) =>
-                  patch((s) => {
-                    const next = [...s.sectionBreaks];
-                    next[i] = Math.round(pos * 1000) / 1000;
-                    s.sectionBreaks = next;
-                  })
-                }
+                sectionBreaks={canvasSectionBreaks}
+                onSectionBreakMove={moveSectionJoint}
                 tracks={canvasTracks}
                 turnouts={canvasTurnouts}
                 signals={canvasSignals}
@@ -1222,6 +1282,7 @@ export function SchematicEditor({
             wantsManualPose={wantsManualPose}
             setEndplateWidth={setEndplateWidth}
             setEndplateTrackOffset={setEndplateTrackOffset}
+            setSections={setSections}
             trackOptions={trackOptions}
             industryTypes={industryTypes}
             carTypes={carTypeOptions}
@@ -1371,6 +1432,217 @@ function SectionLengths({
           );
         })}
       </div>
+    </div>
+  );
+}
+
+/** Turn a module's existing joints into real sections (#108). Each gap becomes
+ * a board, seeded from the module's own geometry — which is exactly right,
+ * because until now that geometry WAS every board's geometry. From there the
+ * owner can make individual boards curve. */
+function sectionsFromBreaks(
+  breaks: number[],
+  lengthInches: number,
+  geometryType: string,
+  geometryDegrees: string,
+  geometryOffsetInches: string,
+): SchematicSection[] {
+  const edges = [0, ...breaks, lengthInches];
+  const lens = edges.slice(1).map((e, i) => e - edges[i]).filter((L) => L > 0);
+  return lens.map((L, i) => ({
+    id: `sec${i + 1}`,
+    lengthInches: Math.round(L * 1000) / 1000,
+    // Only the FIRST board inherits a turn: a 90° module is one 90° corner, not
+    // N of them. The rest carry on straight from where it leaves off.
+    ...(i === 0 && geometryType && geometryType !== "straight"
+      ? {
+          geometryType,
+          ...(geometryDegrees ? { geometryDegrees: Number(geometryDegrees) } : {}),
+          ...(geometryOffsetInches ? { geometryOffsetInches: Number(geometryOffsetInches) } : {}),
+        }
+      : {}),
+  }));
+}
+
+/** The module's sections — what you author FIRST (#108). Each board carries its
+ * own length and shape; the module's length and centre-line are derived by
+ * chaining them. That's the only way to describe a module like One Mile, which
+ * runs straight for most of its length with a couple of curved boards in the
+ * middle — no single module-level geometry can say that. */
+function SectionList({
+  sections,
+  geometries,
+  onChange,
+  inp,
+}: {
+  sections: SchematicSection[];
+  geometries: {
+    value: string;
+    display_label: string;
+    requires_degrees: boolean;
+    requires_offset_inches: boolean;
+  }[];
+  onChange: (next: SchematicSection[]) => void;
+  inp: string;
+}) {
+  // Length commits on blur, for the same reason the old joint fields had to: a
+  // half-typed number shouldn't reshape the board under you.
+  const [draft, setDraft] = useState<{ i: number; text: string } | null>(null);
+  const set = (i: number, next: Partial<SchematicSection>) =>
+    onChange(sections.map((sec, j) => (j === i ? { ...sec, ...next } : sec)));
+  const move = (i: number, d: number) => {
+    const j = i + d;
+    if (j < 0 || j >= sections.length) return;
+    const next = [...sections];
+    [next[i], next[j]] = [next[j], next[i]];
+    onChange(next);
+  };
+  const add = () => {
+    const n = sections.reduce((m, sec) => {
+      const k = /^sec(\d+)$/.exec(sec.id);
+      return k ? Math.max(m, Number(k[1])) : m;
+    }, sections.length);
+    onChange([...sections, { id: `sec${n + 1}`, lengthInches: 24 }]);
+  };
+  const total = sections.reduce((a, sec) => a + (sec.lengthInches ?? 0), 0);
+
+  return (
+    <div className="space-y-2 rounded-md border border-gray-200 p-2">
+      <div className="flex items-baseline gap-2">
+        <p className="text-xs font-medium text-gray-600">Sections</p>
+        <p className="ml-auto text-xs text-gray-500">
+          {sections.length} &middot; {Math.round(total * 100) / 100}&Prime; total
+        </p>
+      </div>
+      <p className="text-xs text-gray-500">
+        The boards this module is built from, west to east. Each carries its own
+        length and shape &mdash; the module&rsquo;s length and centre-line are
+        derived by chaining them, so a mostly-straight module can still have a
+        couple of curved boards in the middle.
+      </p>
+      {sections.map((sec, i) => {
+        const spec = geometries.find((g) => g.value === (sec.geometryType || "straight"));
+        return (
+          <div key={sec.id} className="space-y-1.5 rounded border border-gray-200 p-1.5">
+            <div className="flex items-center gap-1">
+              <span className="text-xs font-medium text-gray-500">{i + 1}</span>
+              <input
+                type="text"
+                value={sec.name ?? ""}
+                placeholder={`Section ${i + 1}`}
+                onChange={(e) => set(i, { name: e.target.value })}
+                className={`${inp} flex-1`}
+              />
+              <button
+                type="button"
+                onClick={() => move(i, -1)}
+                disabled={i === 0}
+                title="Move west"
+                className="rounded px-1 text-xs text-gray-500 hover:bg-gray-100 disabled:opacity-30"
+              >
+                &uarr;
+              </button>
+              <button
+                type="button"
+                onClick={() => move(i, 1)}
+                disabled={i === sections.length - 1}
+                title="Move east"
+                className="rounded px-1 text-xs text-gray-500 hover:bg-gray-100 disabled:opacity-30"
+              >
+                &darr;
+              </button>
+              <button
+                type="button"
+                onClick={() => onChange(sections.filter((_, j) => j !== i))}
+                title="Remove this section"
+                className="rounded px-1 text-xs text-red-600 hover:bg-red-50"
+              >
+                &times;
+              </button>
+            </div>
+            <div className="grid grid-cols-2 gap-1.5">
+              <label className="block text-xs font-medium text-gray-600">
+                Length (in)
+                <input
+                  type="number"
+                  min={1}
+                  step={0.25}
+                  value={draft?.i === i ? draft.text : (sec.lengthInches ?? "")}
+                  onChange={(e) => setDraft({ i, text: e.target.value })}
+                  onBlur={() => {
+                    if (draft?.i !== i) return;
+                    const v = parseFloat(draft.text);
+                    if (Number.isFinite(v) && v > 0) set(i, { lengthInches: v });
+                    setDraft(null);
+                  }}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") e.currentTarget.blur();
+                    if (e.key === "Escape") setDraft(null);
+                  }}
+                  className={`mt-0.5 ${inp}`}
+                />
+              </label>
+              <label className="block text-xs font-medium text-gray-600">
+                Shape
+                <select
+                  value={sec.geometryType || "straight"}
+                  onChange={(e) =>
+                    set(i, {
+                      geometryType: e.target.value,
+                      geometryDegrees: null,
+                      geometryOffsetInches: null,
+                    })
+                  }
+                  className={`mt-0.5 ${inp}`}
+                >
+                  {geometries.map((g) => (
+                    <option key={g.value} value={g.value}>
+                      {g.display_label}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              {spec?.requires_degrees && (
+                <label className="block text-xs font-medium text-gray-600">
+                  Degrees
+                  <input
+                    type="number"
+                    step={0.001}
+                    value={sec.geometryDegrees ?? ""}
+                    onChange={(e) =>
+                      set(i, { geometryDegrees: e.target.value ? Number(e.target.value) : null })
+                    }
+                    className={`mt-0.5 ${inp}`}
+                  />
+                </label>
+              )}
+              {spec?.requires_offset_inches && (
+                <label className="block text-xs font-medium text-gray-600">
+                  Offset (in)
+                  <input
+                    type="number"
+                    step={0.001}
+                    value={sec.geometryOffsetInches ?? ""}
+                    onChange={(e) =>
+                      set(i, {
+                        geometryOffsetInches: e.target.value ? Number(e.target.value) : null,
+                      })
+                    }
+                    className={`mt-0.5 ${inp}`}
+                  />
+                </label>
+              )}
+            </div>
+          </div>
+        );
+      })}
+      <button
+        type="button"
+        onClick={add}
+        className="w-full rounded border border-dashed border-gray-300 py-1 text-xs font-medium text-gray-600 hover:bg-gray-50"
+      >
+        + Add section
+      </button>
     </div>
   );
 }
@@ -1601,6 +1873,7 @@ function Inspector({
   wantsManualPose,
   setEndplateWidth,
   setEndplateTrackOffset,
+  setSections,
   trackOptions,
   industryTypes,
   carTypes,
@@ -1619,6 +1892,7 @@ function Inspector({
   wantsManualPose: boolean;
   setEndplateWidth: (id: string, raw: string) => void;
   setEndplateTrackOffset: (id: string, raw: string) => void;
+  setSections: (next: SchematicSection[]) => void;
   trackOptions: { value: string; label: string }[];
   industryTypes: { value: string; display_label: string }[];
   carTypes: { value: string; display_label: string }[];
@@ -1633,29 +1907,36 @@ function Inspector({
   const box = "shrink-0 p-3";
 
   // ---- Nothing selected → the module itself ----
+  const hasSections = state.sections.length > 0;
   if (!selection) {
     return (
       <div className={box}>
         {head("Module", "Nothing selected — these size the board everything else is drawn on.")}
         <div className="space-y-3">
-          <label className="block text-xs font-medium text-gray-600">
-            Geometry
-            <select
-              value={dims.geometry_type}
-              onChange={(e) =>
-                setDim({ geometry_type: e.target.value, geometry_degrees: "", geometry_offset_inches: "" })
-              }
-              className={`mt-0.5 ${inp}`}
-            >
-              <option value="">—</option>
-              {geometries.map((g) => (
-                <option key={g.value} value={g.value}>
-                  {g.display_label}
-                </option>
-              ))}
-            </select>
-          </label>
-          {geoSpec?.requires_degrees && (
+          {/* Shape and length belong to the SECTIONS once a module has any
+              (#108) — the module-level fields can't describe a board that
+              curves partway along, so they step aside rather than sit there
+              contradicting the section list. */}
+          {!hasSections && (
+            <label className="block text-xs font-medium text-gray-600">
+              Geometry
+              <select
+                value={dims.geometry_type}
+                onChange={(e) =>
+                  setDim({ geometry_type: e.target.value, geometry_degrees: "", geometry_offset_inches: "" })
+                }
+                className={`mt-0.5 ${inp}`}
+              >
+                <option value="">—</option>
+                {geometries.map((g) => (
+                  <option key={g.value} value={g.value}>
+                    {g.display_label}
+                  </option>
+                ))}
+              </select>
+            </label>
+          )}
+          {!hasSections && geoSpec?.requires_degrees && (
             <label className="block text-xs font-medium text-gray-600">
               Degrees
               <input
@@ -1667,7 +1948,7 @@ function Inspector({
               />
             </label>
           )}
-          {geoSpec?.requires_offset_inches && (
+          {!hasSections && geoSpec?.requires_offset_inches && (
             <label className="block text-xs font-medium text-gray-600">
               Offset (in)
               <input
@@ -1681,50 +1962,88 @@ function Inspector({
           )}
           <label className="block text-xs font-medium text-gray-600">
             Footprint length (in)
+            {hasSections && <span className="text-gray-400"> (derived)</span>}
             <input
               type="number"
               step={0.001}
               value={dims.length_total_inches}
+              disabled={hasSections}
               onChange={(e) => setDim({ length_total_inches: e.target.value })}
-              className={`mt-0.5 ${inp}`}
-              title="The physical length of the board. Draw the mainline (M) if the rail runs a different distance than the board."
-            />
-          </label>
-          <label className="block text-xs font-medium text-gray-600">
-            Sections
-            <input
-              type="number"
-              min={1}
-              max={12}
-              step={1}
-              value={state.sectionBreaks.length + 1}
-              onChange={(e) => {
-                const n = Math.max(1, Math.min(12, Math.round(Number(e.target.value) || 1)));
-                patch((s) => {
-                  const L = s.lengthInches;
-                  s.sectionBreaks = Array.from({ length: n - 1 }, (_, i) =>
-                    Math.round((L * (i + 1)) / n),
-                  );
-                });
-              }}
-              className={`mt-0.5 ${inp}`}
-              title="How many bench-work sections the module is built from. The joints are marked on the board; the module still operates as one unit."
-            />
-          </label>
-          {/* Uneven joints (#96). Picking a count seeds equal splits, but a real
-              module's boards rarely divide evenly — One Mile's end sections are
-              standard-built transitions and the rest are plain double-track. */}
-          {state.sectionBreaks.length > 0 && (
-            <SectionLengths
-              breaks={state.sectionBreaks}
-              lengthInches={state.lengthInches}
-              onResize={(i, v) =>
-                patch((s) => {
-                  s.sectionBreaks = resizeSection(s.sectionBreaks, s.lengthInches, i, v);
-                })
+              className={`mt-0.5 ${inp} ${hasSections ? "bg-gray-50 text-gray-600" : ""}`}
+              title={
+                hasSections
+                  ? "The sum of this module's section lengths — edit the sections to change it."
+                  : "The physical length of the board. Draw the mainline (M) if the rail runs a different distance than the board."
               }
+            />
+          </label>
+          {hasSections ? (
+            <SectionList
+              sections={state.sections}
+              geometries={geometries}
+              onChange={setSections}
               inp={inp}
             />
+          ) : (
+            <>
+              <label className="block text-xs font-medium text-gray-600">
+                Sections
+                <input
+                  type="number"
+                  min={1}
+                  max={12}
+                  step={1}
+                  value={state.sectionBreaks.length + 1}
+                  onChange={(e) => {
+                    const n = Math.max(1, Math.min(12, Math.round(Number(e.target.value) || 1)));
+                    patch((s) => {
+                      const L = s.lengthInches;
+                      s.sectionBreaks = Array.from({ length: n - 1 }, (_, i) =>
+                        Math.round((L * (i + 1)) / n),
+                      );
+                    });
+                  }}
+                  className={`mt-0.5 ${inp}`}
+                  title="How many bench-work sections the module is built from. The joints are marked on the board; the module still operates as one unit."
+                />
+              </label>
+              {state.sectionBreaks.length > 0 && (
+                <SectionLengths
+                  breaks={state.sectionBreaks}
+                  lengthInches={state.lengthInches}
+                  onResize={(i, v) =>
+                    patch((s) => {
+                      s.sectionBreaks = resizeSection(s.sectionBreaks, s.lengthInches, i, v);
+                    })
+                  }
+                  inp={inp}
+                />
+              )}
+              {/* The way out of module-level geometry. Seeds each board from the
+                  joints already drawn — from here individual boards can curve,
+                  which is what a module like One Mile needs (#108). */}
+              <button
+                type="button"
+                onClick={() =>
+                  setSections(
+                    sectionsFromBreaks(
+                      state.sectionBreaks,
+                      state.lengthInches,
+                      dims.geometry_type,
+                      dims.geometry_degrees,
+                      dims.geometry_offset_inches,
+                    ),
+                  )
+                }
+                className="w-full rounded border border-dashed border-gray-300 py-1 text-xs font-medium text-gray-600 hover:bg-gray-50"
+              >
+                Build this module from sections &rarr;
+              </button>
+              <p className="text-xs text-gray-500">
+                Gives every board its own length and shape, so the module can be
+                straight for most of its run and still curve partway along.
+              </p>
+            </>
           )}
           <label className="flex gap-2 text-xs text-gray-700">
             <input
