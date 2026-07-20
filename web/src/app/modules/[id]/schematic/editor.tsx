@@ -133,7 +133,14 @@ export function SchematicEditor({
   const [dims, setDims] = useState<ModuleDimensions>(initialDimensions);
   const geometry = useMemo(
     () => ({
-      type: dims.geometry_type || null,
+      // Fall back to straight for DERIVATION only (#103). A null geometry gives
+      // moduleCenterline nothing to work with, and everything keyed off the
+      // centre-line — section joints, lane offsets, endplate normals — then
+      // silently stops drawing on a board that otherwise looks complete. New
+      // modules are created straight now, but plenty already exist with it
+      // unset. The Geometry select still binds to the raw value, so the field
+      // keeps reading "—" and the owner can see it's theirs to set.
+      type: dims.geometry_type || "straight",
       degrees: dims.geometry_degrees ? Number(dims.geometry_degrees) : null,
       offset: dims.geometry_offset_inches ? Number(dims.geometry_offset_inches) : null,
     }),

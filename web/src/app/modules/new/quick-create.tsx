@@ -48,7 +48,13 @@ export function QuickCreate({
       module_name: name,
       description: "",
       category,
-      geometry_type: "",
+      // Straight, not blank (#103). Without a geometry the module has no
+      // centre-line at all, and everything derived from one — section joints,
+      // lane offsets, endplate normals — silently stops drawing on a board
+      // that otherwise looks finished. A straight board of the length just
+      // entered is the right reading for the large majority; the canvas's
+      // Geometry field changes it.
+      geometry_type: "straight",
       geometry_degrees: "",
       geometry_offset_inches: "",
       length_total_inches: length,
