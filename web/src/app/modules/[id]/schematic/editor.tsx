@@ -25,6 +25,7 @@ import {
   type IndustryLabelMode,
   moduleLengthFromSections,
   sectionBreaksFromSections,
+  sectionBand,
   sectionSpans,
   type SchematicSection,
 } from "@/lib/module-schematic";
@@ -451,6 +452,11 @@ export function SchematicEditor({
       else delete s.endplateWidths[id];
     });
 
+  /** Which board the bench-work tool is shaping. An outline belongs to a
+   * SECTION now, so "the outline" is only meaningful once you say whose (#96
+   * phase 2b). Defaults to the first section below. */
+  const [activeSectionId, setActiveSectionId] = useState<string | null>(null);
+
   /** Replace the module's section list (#108). The module's length is the SUM
    * of its sections, so it's written straight back here rather than authored —
    * that's what keeps `lengthInches` (which the whole canvas is measured in)
@@ -467,6 +473,37 @@ export function SchematicEditor({
     });
     if (total && total > 0) setDims((d) => ({ ...d, length_total_inches: String(total) }));
   };
+
+  /** The section the bench-work tool is editing — the chosen one, else the
+   * first. Null when this module doesn't use sections, in which case the
+   * module's own outline is still what gets edited. */
+  const activeSection =
+    state.sections.find((sec) => sec.id === activeSectionId) ?? state.sections[0] ?? null;
+
+  /** The band this section would occupy if it had no authored shape — what
+   * "Start from a rectangle" seeds, so a section's rectangle is its own
+   * stretch of board rather than the whole module's. */
+  const activeSectionBand = useMemo(() => {
+    if (!activeSection) return null;
+    const sp = sectionSpans({ sections: state.sections }).find((x) => x.id === activeSection.id);
+    if (!sp) return null;
+    return sectionBand(
+      footprint.centerline,
+      sp.fromPos,
+      sp.toPos,
+      state.endplateWidths.A ?? 24,
+      state.endplateWidths.B ?? 24,
+      renderTrackOffsets.A,
+      renderTrackOffsets.B,
+    );
+  }, [activeSection, state.sections, state.endplateWidths, footprint.centerline, renderTrackOffsets]);
+
+  /** Every OTHER section's shape, drawn as context behind the one being
+   * edited so you can see what the board has to meet. */
+  const otherSectionOutlines = useMemo(
+    () => footprint.sectionOutlines.filter((sec) => sec.id !== activeSection?.id),
+    [footprint.sectionOutlines, activeSection],
+  );
 
   /** The joints the canvas should draw. A sectioned module derives them from
    * cumulative section lengths; an unsectioned one still uses its authored
@@ -1218,8 +1255,25 @@ export function SchematicEditor({
           <div className="flex min-h-0 flex-1 flex-col p-3">
             <div className="min-h-0 flex-1 rounded-lg border border-gray-200 bg-white p-2">
               <BenchworkEditor
-                outline={state.outline}
-                onChange={(next) => patch((s) => (s.outline = next))}
+                outline={activeSection ? (activeSection.outline ?? []) : state.outline}
+                onChange={(next) =>
+                  activeSection
+                    ? setSections(
+                        state.sections.map((sec) =>
+                          sec.id === activeSection.id
+                            ? { ...sec, outline: next.length >= 3 ? next : null }
+                            : sec,
+                        ),
+                      )
+                    : patch((s) => (s.outline = next))
+                }
+                contextOutlines={activeSection ? otherSectionOutlines : []}
+                seedOutline={activeSectionBand}
+                editingLabel={
+                  activeSection
+                    ? `Shaping ${activeSection.name || `section ${state.sections.indexOf(activeSection) + 1}`}`
+                    : null
+                }
                 lengthInches={state.lengthInches}
                 poses={poses}
                 mainPath={state.mainPath}
@@ -1310,6 +1364,11 @@ export function SchematicEditor({
             setEndplateWidth={setEndplateWidth}
             setEndplateTrackOffset={setEndplateTrackOffset}
             setSections={setSections}
+            activeSectionId={activeSectionId ?? state.sections[0]?.id ?? null}
+            onShapeSection={(id) => {
+              setActiveSectionId(id);
+              setTool("benchwork");
+            }}
             trackOptions={trackOptions}
             industryTypes={industryTypes}
             carTypes={carTypeOptions}
@@ -1500,6 +1559,8 @@ function SectionList({
   sections,
   geometries,
   onChange,
+  activeId,
+  onShape,
   inp,
 }: {
   sections: SchematicSection[];
@@ -1510,6 +1571,8 @@ function SectionList({
     requires_offset_inches: boolean;
   }[];
   onChange: (next: SchematicSection[]) => void;
+  activeId: string | null;
+  onShape: (id: string) => void;
   inp: string;
 }) {
   // Length commits on blur, for the same reason the old joint fields had to: a
@@ -1550,7 +1613,12 @@ function SectionList({
       {sections.map((sec, i) => {
         const spec = geometries.find((g) => g.value === (sec.geometryType || "straight"));
         return (
-          <div key={sec.id} className="space-y-1.5 rounded border border-gray-200 p-1.5">
+          <div
+            key={sec.id}
+            className={`space-y-1.5 rounded border p-1.5 ${
+              sec.id === activeId ? "border-blue-400 bg-blue-50/40" : "border-gray-200"
+            }`}
+          >
             <div className="flex items-center gap-1">
               <span className="text-xs font-medium text-gray-500">{i + 1}</span>
               <input
@@ -1658,6 +1726,28 @@ function SectionList({
                     className={`mt-0.5 ${inp}`}
                   />
                 </label>
+              )}
+            </div>
+            <div className="flex items-center gap-2 text-xs">
+              <span className={sec.outline ? "text-gray-600" : "text-gray-400"}>
+                {sec.outline ? "Shape: drawn" : "Shape: derived from length"}
+              </span>
+              <button
+                type="button"
+                onClick={() => onShape(sec.id)}
+                className="ml-auto font-medium text-blue-600 hover:underline"
+              >
+                Shape this board
+              </button>
+              {sec.outline && (
+                <button
+                  type="button"
+                  onClick={() => set(i, { outline: null })}
+                  title="Go back to the band derived from this section's length"
+                  className="text-gray-500 hover:underline"
+                >
+                  Reset
+                </button>
               )}
             </div>
           </div>
@@ -1901,6 +1991,8 @@ function Inspector({
   setEndplateWidth,
   setEndplateTrackOffset,
   setSections,
+  activeSectionId,
+  onShapeSection,
   trackOptions,
   industryTypes,
   carTypes,
@@ -1920,6 +2012,8 @@ function Inspector({
   setEndplateWidth: (id: string, raw: string) => void;
   setEndplateTrackOffset: (id: string, raw: string) => void;
   setSections: (next: SchematicSection[]) => void;
+  activeSectionId: string | null;
+  onShapeSection: (id: string) => void;
   trackOptions: { value: string; label: string }[];
   industryTypes: { value: string; display_label: string }[];
   carTypes: { value: string; display_label: string }[];
@@ -2009,6 +2103,8 @@ function Inspector({
               sections={state.sections}
               geometries={geometries}
               onChange={setSections}
+              activeId={activeSectionId}
+              onShape={onShapeSection}
               inp={inp}
             />
           ) : (
