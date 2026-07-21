@@ -4,6 +4,7 @@ import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import {
   sampleBenchworkOutline,
   samplePath,
+  divergeSideForHand,
   MAIN_TRACK_ID,
   type BenchworkPoint,
   type EndplatePose,
@@ -584,7 +585,16 @@ export function BenchworkEditor({
     // pinned at a module end — the flip is the owner's override.
     const toward =
       (Math.sign((far.x - m.x) * tx + (far.y - m.y) * ty) || 1) * (t.flipped ? -1 : 1);
-    const side = forceSide ?? (Math.sign((far.x - m.x) * m.nx + (far.y - m.y) * m.ny) || 1);
+    // HAND decides the side, not the lane the diverging track happens to sit
+    // on. A right-hand turnout throws right whichever lane its siding was
+    // assigned — deriving the side from the track's position made hand a no-op
+    // on the board (it already drives the dispatcher view). Geometry is only
+    // the fallback for a wye or an unset hand, which have no side to state.
+    const handSide = divergeSideForHand(t.kind, toward, t.flipped);
+    const side =
+      forceSide ??
+      (handSide || undefined) ??
+      (Math.sign((far.x - m.x) * m.nx + (far.y - m.y) * m.ny) || 1);
     const size = t.size && t.size > 0 ? t.size : 6;
     // A curved turnout sweeps over a LONGER leg so its diverging route reads as a
     // pronounced arc (carrying the curve well past a bare frog, per the curved-
