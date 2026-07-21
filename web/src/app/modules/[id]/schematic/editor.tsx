@@ -224,6 +224,10 @@ export function SchematicEditor({
           side: b.side,
           config: b.config,
         })),
+        // The module's real end is where its boards finish (#108) — without
+        // this, endplate B sits where a straight module of this length would
+        // have ended, not at the end of the chain.
+        sections: state.sections,
         poseOverrides: state.poseOverrides,
       }),
     [state, geometry],
@@ -415,9 +419,9 @@ export function SchematicEditor({
     () => [
       { value: MAIN_TRACK_ID, label: isDouble ? "Main 1" : "Main" },
       ...(isDouble ? [{ value: MAIN2_TRACK_ID, label: "Main 2" }] : []),
-      ...state.extraTracks.map((t) => ({
+      ...state.extraTracks.map((t, i) => ({
         value: t.id,
-        label: t.trackName || t.id,
+        label: trackLabel(t, i),
       })),
     ],
     [state.extraTracks, isDouble],
@@ -1497,6 +1501,32 @@ function resizeSection(
  * for the real value — silently wrong, and you had to retype several times to
  * creep up on it. Holding a draft until blur/Enter means what you type is what
  * gets applied. */
+/** What to call a track in the UI. IDs are minted from whatever tool made the
+ * track and then never change — they're references (a turnout's divergeTrack
+ * points at one), so renaming them would break those links. But a stub dropped
+ * with a turnout and later set to "Passing siding" would still read "spur2",
+ * which is just confusing. So the label follows the track's KIND, and the id
+ * stays put underneath. An owner-typed name always wins. */
+function trackLabel(
+  t: { id: string; role?: string | null; trackName?: string | null },
+  index: number,
+): string {
+  if (t.trackName) return t.trackName;
+  const n = index + 1;
+  switch (t.role) {
+    case "siding":
+      return `Siding ${n}`;
+    case "spur":
+      return `Spur ${n}`;
+    case "crossover":
+      return `Crossover ${n}`;
+    case "main":
+      return `Main ${n}`;
+    default:
+      return t.id;
+  }
+}
+
 function SectionLengths({
   breaks,
   lengthInches,
@@ -3158,7 +3188,7 @@ function Inspector({
   if (i < 0) return null;
   const t = state.extraTracks[i];
   return shell(
-    `Track · ${t.trackName || t.id}`,
+    `Track · ${trackLabel(t, i)}`,
     <>
       <label className="block text-xs font-medium text-gray-600">
         Name
@@ -3537,9 +3567,9 @@ function ObjectsList({
           />
         }
       >
-        {state.extraTracks.map((t) =>
+        {state.extraTracks.map((t, i) =>
           // Round to 0.1″ — raw float math read as 18.800000000000004″.
-          row(t.id, t.trackName || t.id, { kind: "track", id: t.id }, `${Math.round(Math.abs(t.toPos - t.fromPos) * 10) / 10}″`),
+          row(t.id, trackLabel(t, i), { kind: "track", id: t.id }, `${Math.round(Math.abs(t.toPos - t.fromPos) * 10) / 10}″`),
         )}
       </Group>
 
