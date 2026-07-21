@@ -188,18 +188,37 @@ export function SchematicPreview({
               strokeWidth={2.4}
               strokeLinecap="round"
             />
-            {/* diverge from Main 1 at the transition end */}
-            <line
-              x1={px(f.main2Extent.fromFrac > 0 ? f.main2Extent.fromFrac : f.main2Extent.toFrac) + (f.main2Extent.fromFrac > 0 ? -10 : 10)}
-              y1={laneY(0)}
-              x2={px(f.main2Extent.fromFrac > 0 ? f.main2Extent.fromFrac : f.main2Extent.toFrac)}
-              y2={laneY(1)}
-              stroke="#2563eb"
-              strokeWidth={2}
-              strokeLinecap="round"
-            >
-              <title>Single↔double transition</title>
-            </line>
+            {/* A diverge at EACH bounded end. A module that's single at both
+                ends and double in the middle — the ordinary passing siding —
+                transitions twice, and drawing only one left the other end of
+                Main 2 hanging in mid-air (#118). An end that runs to its
+                endplate is not a transition and gets nothing. */}
+            {f.main2Extent.fromFrac > 0 && (
+              <line
+                x1={px(f.main2Extent.fromFrac) - 10}
+                y1={laneY(0)}
+                x2={px(f.main2Extent.fromFrac)}
+                y2={laneY(1)}
+                stroke="#2563eb"
+                strokeWidth={2}
+                strokeLinecap="round"
+              >
+                <title>Single↔double transition (west)</title>
+              </line>
+            )}
+            {f.main2Extent.toFrac < 1 && (
+              <line
+                x1={px(f.main2Extent.toFrac)}
+                y1={laneY(1)}
+                x2={px(f.main2Extent.toFrac) + 10}
+                y2={laneY(0)}
+                stroke="#2563eb"
+                strokeWidth={2}
+                strokeLinecap="round"
+              >
+                <title>Single↔double transition (east)</title>
+              </line>
+            )}
           </>
         )}
 
