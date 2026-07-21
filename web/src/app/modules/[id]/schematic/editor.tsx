@@ -2690,12 +2690,23 @@ function Inspector({
               onChange={(e) => patch((s) => (s.turnouts[i].divergeTrack = e.target.value))}
               className={`mt-0.5 ${inp}`}
             >
-              {trackOptions.map((o) => (
-                <option key={o.value} value={o.value}>{o.label}</option>
-              ))}
+              {/* A turnout can't diverge into the track it sits on — there'd be
+                  no second route, so nothing renders and the turnout silently
+                  does nothing. The list used to offer it. */}
+              {trackOptions
+                .filter((o) => o.value !== t.onTrack)
+                .map((o) => (
+                  <option key={o.value} value={o.value}>{o.label}</option>
+                ))}
             </select>
           </label>
         </div>
+        {t.divergeTrack === t.onTrack && (
+          <p className="rounded-md bg-amber-50 px-2 py-1 text-xs text-amber-800" role="status">
+            ⚠ This turnout diverges into the track it sits on, so it has no
+            second route and nothing will draw. Pick a different track above.
+          </p>
+        )}
         <div className="grid grid-cols-2 gap-2">
           <label className="block text-xs font-medium text-gray-600">
             Hand
