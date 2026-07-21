@@ -28,7 +28,6 @@ import {
   sectionBand,
   sectionAdjacency,
   sectionSpansOrWhole,
-  endLabelsLong,
   remapPos,
   sectionNeighbours,
   sectionComponents,
@@ -1974,9 +1973,7 @@ function DispatcherStrip({
       >
         <span className={`text-gray-400 transition-transform ${open ? "" : "-rotate-90"}`}>▾</span>
         Dispatcher view
-        <span className="font-normal text-gray-400">
-          {`— derived, ${endLabelsLong(doc.orientation).a} → ${endLabelsLong(doc.orientation).b}`}
-        </span>
+        <span className="font-normal text-gray-400">— derived, A → B</span>
       </button>
       {open && (
         <div className="max-h-44 overflow-auto px-3 pb-3">
@@ -2286,20 +2283,6 @@ function Inspector({
               </p>
             </>
           )}
-          <label className="block text-xs font-medium text-gray-600">
-            Runs
-            <select
-              value={state.orientation}
-              onChange={(e) =>
-                patch((s) => (s.orientation = e.target.value as typeof s.orientation))
-              }
-              className={`mt-0.5 ${inp}`}
-              title="The compass axis this module runs along. The dispatcher panel always draws left to right — this only changes the labels on its ends."
-            >
-              <option value="east-west">West → East</option>
-              <option value="north-south">South → North</option>
-            </select>
-          </label>
           <label className="flex gap-2 text-xs text-gray-700">
             <input
               type="checkbox"
@@ -2495,10 +2478,10 @@ function Inspector({
             {id === "A"
               ? state.loop
                 ? "Entry (A) main track"
-                : "West end (A) main track"
+                : "End A main track"
               : state.loop
                 ? "Interchange (B) endplate on the balloon"
-                : "East end (B) main track"}
+                : "End B main track"}
             <select
               value={id === "A" ? state.configA : state.configB}
               disabled={locked}
@@ -2995,8 +2978,11 @@ function Inspector({
                     onChange={(e) => patch((st) => (st.controlPoints[ci].signals[si].facing = e.target.value as SignalFacing))}
                     className={`mt-0.5 ${inp}`}
                   >
-                    <option value="AtoB">West → East</option>
-                    <option value="BtoA">East → West</option>
+                    {/* A and B, not compass: the same board can be installed
+                        either way round, so only the layout knows which way is
+                        east. The stored values were already AtoB/BtoA. */}
+                    <option value="AtoB">A → B</option>
+                    <option value="BtoA">B → A</option>
                   </select>
                 </label>
                 <label className="block text-xs font-medium text-gray-600">
