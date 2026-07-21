@@ -241,7 +241,10 @@ export function SchematicPreview({
             (doc.turnouts ?? []).some((sw) => sw.onTrack === t.id);
           const tx = px(isSpur ? t.throatFrac : t.fromFrac);
           const ex = px(isSpur ? t.stubFrac : t.toFrac);
-          const dir = ex >= tx ? 1 : -1;
+          const throat = (doc.turnouts ?? []).find((sw) => sw.divergeTrack === t.id);
+          // A flipped turnout faces its points the other way, so its throat
+          // taper leaves in the opposite direction (#turnout-flip).
+          const dir = (ex >= tx ? 1 : -1) * (throat?.flipped ? -1 : 1);
           // Keep the throat short (orig 0.12): on a ladder, turnouts sit ON a
           // siding/spur, and a long taper would push its flat part past them so
           // their dots float off the diagonal.
