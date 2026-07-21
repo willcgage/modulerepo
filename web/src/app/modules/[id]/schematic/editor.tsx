@@ -3240,7 +3240,18 @@ function Inspector({
             type="number"
             step={0.5}
             value={t.fromPos}
-            onChange={(e) => patch((s) => (s.extraTracks[i].fromPos = Number(e.target.value)))}
+            onChange={(e) =>
+              patch((s) => {
+                s.extraTracks[i].fromPos = Number(e.target.value);
+                // A hand-drawn 2-D path WINS over from/to on the board, so
+                // retyping the extent used to move the numbers, the dispatcher
+                // view and nothing else — the drawn track stayed the old shape
+                // and length. Typing an extent is the more explicit statement,
+                // so it drops the stale path and the track re-derives on its
+                // lane.
+                s.extraTracks[i].path = [];
+              })
+            }
             className={`mt-0.5 ${inp}`}
           />
         </label>
@@ -3250,7 +3261,12 @@ function Inspector({
             type="number"
             step={0.5}
             value={t.toPos}
-            onChange={(e) => patch((s) => (s.extraTracks[i].toPos = Number(e.target.value)))}
+            onChange={(e) =>
+              patch((s) => {
+                s.extraTracks[i].toPos = Number(e.target.value);
+                s.extraTracks[i].path = []; // see Starts, above
+              })
+            }
             className={`mt-0.5 ${inp}`}
           />
         </label>
