@@ -214,6 +214,8 @@ export interface CanvasTurnout {
   /** A curved turnout — the diverging leg bows into an arc instead of leaving
    * as a straight diagonal (#turnout-palette). */
   curved?: boolean;
+  /** Rotated 180° — the points face the other way along the track. */
+  flipped?: boolean;
   /** Hand: left/right throw one route; a wye splits symmetrically (both routes
    * diverge ± half the frog angle), so it draws a mirrored second leg. */
   kind?: TurnoutKind;
@@ -576,7 +578,12 @@ export function BenchworkEditor({
       const off = laneOffset(dt.lane) || LANE_SPACING_INCHES;
       return { x: p.x + p.nx * off, y: p.y + p.ny * off };
     })();
-    const toward = Math.sign((far.x - m.x) * tx + (far.y - m.y) * ty) || 1;
+    // Rotating the turnout 180° faces its points the other way, so the leg
+    // walks the opposite direction from the throat. The geometric guess above
+    // reads where the diverging TRACK went, which can't be right for a siding
+    // pinned at a module end — the flip is the owner's override.
+    const toward =
+      (Math.sign((far.x - m.x) * tx + (far.y - m.y) * ty) || 1) * (t.flipped ? -1 : 1);
     const side = forceSide ?? (Math.sign((far.x - m.x) * m.nx + (far.y - m.y) * m.ny) || 1);
     const size = t.size && t.size > 0 ? t.size : 6;
     // A curved turnout sweeps over a LONGER leg so its diverging route reads as a

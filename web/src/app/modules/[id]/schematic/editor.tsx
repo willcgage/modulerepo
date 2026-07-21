@@ -331,6 +331,7 @@ export function SchematicEditor({
         onTrack: t.onTrack,
         divergeTrack: t.divergeTrack || undefined,
         curved: t.curved,
+        flipped: t.flipped,
         kind: t.kind,
       })),
     [state.turnouts],
@@ -2731,6 +2732,16 @@ function Inspector({
             }
           />
           Curved — the diverging leg bows into an arc
+        </label>
+        <label className="flex items-center gap-2 text-xs font-medium text-gray-600">
+          <input
+            type="checkbox"
+            checked={!!t.flipped}
+            onChange={(e) =>
+              patch((s) => (s.turnouts[i].flipped = e.target.checked || undefined))
+            }
+          />
+          Rotated 180° — the points face the other way
         </label>
       </>,
       { fn: () => patch((s) => s.turnouts.splice(i, 1)), label: "Remove turnout" },
