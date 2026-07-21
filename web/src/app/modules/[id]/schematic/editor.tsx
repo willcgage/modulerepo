@@ -27,6 +27,8 @@ import {
   sectionBreaksFromSections,
   sectionBand,
   sectionAdjacency,
+  sectionSpansOrWhole,
+  remapPos,
   sectionNeighbours,
   sectionComponents,
   sectionSpans,
@@ -472,8 +474,29 @@ export function SchematicEditor({
    * fight where every edit stole from its neighbour. */
   const setSections = (next: SchematicSection[]) => {
     const total = moduleLengthFromSections({ sections: next });
+    // Everything on the board is positioned in absolute inches from endplate
+    // A, so moving or resizing a section would leave its track, turnouts,
+    // signals and industries behind — silently pointing at whatever board now
+    // occupies those inches. Read each position against the OLD spans and
+    // write it against the new, so it travels with the board it's on (#109).
+    const before = sectionSpansOrWhole({ sections: state.sections }, state.lengthInches);
+    const after = sectionSpansOrWhole({ sections: next }, total ?? state.lengthInches);
+    const at = (pos: number) => remapPos(pos, before, after) ?? pos;
     patch((s) => {
       s.sections = next;
+      for (const t of s.extraTracks) {
+        t.fromPos = at(t.fromPos);
+        t.toPos = at(t.toPos);
+      }
+      for (const t of s.turnouts) t.pos = at(t.pos);
+      for (const c of s.crossings) c.pos = at(c.pos);
+      // A control point has no position of its own — it groups turnouts — but
+      // its signals do.
+      for (const cp of s.controlPoints) for (const sig of cp.signals) sig.pos = at(sig.pos);
+      for (const ind of s.industries) {
+        ind.fromPos = at(ind.fromPos);
+        ind.toPos = at(ind.toPos);
+      }
       if (total && total > 0) s.lengthInches = total;
       // Joints are derived from the sections now; a stale authored copy would
       // draw dividers that no longer match any board.
