@@ -292,6 +292,18 @@ export default async function ModuleDetailPage({
 
       {/* ---- Endplates ------------------------------------------------- */}
       <Section title="Endplates">
+        {/* The schematic OWNS the track config: saving the schematic rewrites
+            these rows from the doc. Editing Track here therefore looked like it
+            worked and then silently reverted. Say so, and point at the field
+            that actually decides (#120). */}
+        <p className="mb-3 rounded-md bg-amber-50 px-3 py-2 text-xs text-amber-800">
+          Whether an end is single or double track is set in the{" "}
+          <Link href={`/modules/${module.id}/schematic`} className="font-medium underline">
+            schematic builder
+          </Link>{" "}
+          — click an endplate on the board. Saving the schematic rewrites these
+          rows from it, so changing Track here won&rsquo;t stick.
+        </p>
         <ul className="space-y-3">
           {(endplates ?? []).map((ep) => (
             <li key={ep.id} className="rounded-lg border border-gray-200 bg-white p-4">
@@ -313,6 +325,7 @@ export default async function ModuleDetailPage({
                       name="track_config"
                       defaultValue={ep.track_config}
                       options={TRACK_CONFIG_OPTIONS}
+                      disabled
                     />
                     <NumberField label="Width (in)" name="width_inches" defaultValue={ep.width_inches ?? undefined} step="0.01" />
                     <NumberField label="Height (in)" name="height_inches" defaultValue={ep.height_inches ?? undefined} step="0.01" required={false} />

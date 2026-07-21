@@ -100,6 +100,7 @@ export function SelectField({
   options,
   placeholder,
   onChange,
+  disabled = false,
 }: {
   label: string;
   name: string;
@@ -108,6 +109,8 @@ export function SelectField({
   options: { value: string; label: string }[];
   placeholder?: string;
   onChange?: React.ChangeEventHandler<HTMLSelectElement>;
+  /** Read-only: the value is owned somewhere else and would be overwritten. */
+  disabled?: boolean;
 }) {
   return (
     <label className="mb-4 block text-sm font-medium text-gray-700">
@@ -117,7 +120,10 @@ export function SelectField({
         defaultValue={defaultValue ?? ""}
         required={required}
         onChange={onChange}
-        className="mt-1 block w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-gray-900 shadow-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+        disabled={disabled}
+        className={`mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 text-gray-900 shadow-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 ${
+          disabled ? "bg-gray-100 text-gray-600" : "bg-white"
+        }`}
       >
         {placeholder && (
           <option value="" disabled>
