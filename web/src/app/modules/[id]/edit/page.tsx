@@ -22,7 +22,7 @@ export default async function EditModulePage({
   const { data: module } = await supabase
     .from("freemon_modules")
     .select(
-      "id, owner_id, module_name, description, category, geometry_type, geometry_degrees, geometry_offset_inches, length_total_inches, mainline_length_inches, has_mss, mss_type",
+      "id, owner_id, module_name, description, category, geometry_type, geometry_degrees, geometry_offset_inches, length_total_inches, mainline_length_inches, has_mss, mss_type, schematic",
     )
     .eq("id", moduleId)
     .maybeSingle();
@@ -37,6 +37,12 @@ export default async function EditModulePage({
       .select("value, display_label, requires_degrees, requires_offset_inches")
       .order("display_label"),
   ]);
+
+  // Sections own the module's shape and length once it has any (#108), so the
+  // module-level geometry here would be ignored — and editing it would look
+  // like it did something. Same trap as the endplate config on the detail page.
+  const hasSections =
+    ((module.schematic as { sections?: unknown[] } | null)?.sections ?? []).length > 0;
 
   const initial: BasicsUpdate = {
     module_name: module.module_name,
@@ -69,6 +75,7 @@ export default async function EditModulePage({
         initial={initial}
         categories={categories ?? []}
         geometries={geometries ?? []}
+        hasSections={hasSections}
       />
     </div>
   );
