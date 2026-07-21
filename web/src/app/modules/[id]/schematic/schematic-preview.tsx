@@ -245,12 +245,19 @@ export function SchematicPreview({
           // Keep the throat short (orig 0.12): on a ladder, turnouts sit ON a
           // siding/spur, and a long taper would push its flat part past them so
           // their dots float off the diagonal.
-          const thr = Math.min(Math.abs(ex - tx) * 0.12 + 6, Math.abs(ex - tx));
+          // A spur has ONE dip so it may use the whole span; a siding has one at
+          // EACH end, so its taper can be at most half — otherwise the two dips
+          // overshoot each other, the flat run between them reverses, and the
+          // track draws as a crossed tepee instead of a siding. A 17″ siding on
+          // a 384″ module hit exactly that.
+          const span = Math.abs(ex - tx);
+          const thr = Math.min(span * 0.12 + 6, isSpur ? span : span / 2);
           const pts = flat
             ? `${tx},${yl} ${ex},${yl}`
             : isSpur
               ? `${tx},${ym} ${tx + dir * thr},${yl} ${ex},${yl}`
-              : `${tx},${ym} ${tx + thr},${yl} ${ex - thr},${yl} ${ex},${ym}`;
+              : // `dir` here too, so a siding stored east-to-west doesn't invert.
+                `${tx},${ym} ${tx + dir * thr},${yl} ${ex - dir * thr},${yl} ${ex},${ym}`;
           return (
             <polyline
               key={t.id}
