@@ -5,12 +5,7 @@
  * Free-Dispatcher renders (Main 1 continuous; a second main / sidings / spurs as
  * lanes; turnouts diverge; signal masts). Pure render from the doc.
  */
-import {
-  moduleFeatures,
-  endLabels,
-  endLabelsLong,
-  type ModuleSchematicDoc,
-} from "@/lib/module-schematic";
+import { moduleFeatures, type ModuleSchematicDoc } from "@/lib/module-schematic";
 
 const LANE_GAP = 12;
 const PAD = 10;
@@ -42,14 +37,14 @@ export function SchematicPreview({
   const HEIGHT = Y0 - laneBot * LANE_GAP + 14;
   const laneY = (lane: number) => Y0 - lane * LANE_GAP;
 
-  // The strip always runs left→right so a layout of modules reads as one line;
-  // a north/south module just gets the right letters on its ends.
-  const ends = endLabels(doc.orientation);
-  const endsLong = endLabelsLong(doc.orientation);
+  // Ends are labelled A and B, not W and E. A module has no compass direction
+  // of its own — the same board can be installed either way round, or on
+  // either axis, so a compass letter here could only contradict the layout
+  // that placed it. Free-Dispatcher owns direction.
   return (
     <div className="rounded-md border border-gray-200 bg-gray-50 p-2">
       <div className="mb-1 flex items-center justify-between text-xs text-gray-500">
-        <span>{`Operations preview (${endsLong.a} → ${endsLong.b})`}</span>
+        <span>Operations preview (A → B)</span>
         <span>
           {lengthInches}&Prime; · {feet} ft
         </span>
@@ -62,11 +57,11 @@ export function SchematicPreview({
         className="rounded bg-white"
       >
         <text x={2} y={laneY(0) - LANE_GAP / 2} fontSize="7" fill="#94a3b8" dominantBaseline="middle">
-          {f.loop ? "Entry" : ends.a}
+          {f.loop ? "Entry" : "A"}
         </text>
         {!f.loop && (
           <text x={W - 2} y={laneY(0) - LANE_GAP / 2} fontSize="7" fill="#94a3b8" textAnchor="end" dominantBaseline="middle">
-            {ends.b}
+            B
           </text>
         )}
 
