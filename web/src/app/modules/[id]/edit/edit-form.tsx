@@ -21,11 +21,14 @@ export function EditModuleForm({
   initial,
   categories,
   geometries,
+  hasSections = false,
 }: {
   moduleId: number;
   initial: BasicsUpdate;
   categories: Category[];
   geometries: Geometry[];
+  /** The module is built from sections, which own its shape and length. */
+  hasSections?: boolean;
 }) {
   const router = useRouter();
   const [values, setValues] = useState<BasicsUpdate>(initial);
@@ -94,9 +97,16 @@ export function EditModuleForm({
         </label>
         <label className={labelClass}>
           Geometry
+          {hasSections && <span className="text-gray-400"> (set per section)</span>}
           <select
-            className={inputClass}
+            className={`${inputClass} ${hasSections ? "bg-gray-100 text-gray-600" : ""}`}
             value={values.geometry_type}
+            disabled={hasSections}
+            title={
+              hasSections
+                ? "This module is built from sections, and each one carries its own shape — change them in the schematic builder."
+                : undefined
+            }
             onChange={(e) => {
               set("geometry_type", e.target.value);
               set("geometry_degrees", "");
@@ -113,7 +123,15 @@ export function EditModuleForm({
         </label>
       </div>
 
-      {selectedGeometry?.requires_degrees && (
+      {hasSections && (
+        <p className="mb-4 rounded-md bg-amber-50 px-3 py-2 text-xs text-amber-800">
+          This module is built from sections. Each one carries its own length
+          and shape, and the module&rsquo;s overall geometry and length are
+          derived from them — so these fields are set in the schematic builder,
+          not here. Editing them would be ignored.
+        </p>
+      )}
+      {!hasSections && selectedGeometry?.requires_degrees && (
         <label className={`${labelClass} mb-4 block`}>
           Curve degrees
           <input
@@ -128,7 +146,7 @@ export function EditModuleForm({
           />
         </label>
       )}
-      {selectedGeometry?.requires_offset_inches && (
+      {!hasSections && selectedGeometry?.requires_offset_inches && (
         <label className={`${labelClass} mb-4 block`}>
           Offset (inches)
           <input
