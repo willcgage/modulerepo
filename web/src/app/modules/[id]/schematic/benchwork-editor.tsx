@@ -284,6 +284,7 @@ export function BenchworkEditor({
   endplateTrackOffsets,
   centerline = [],
   sectionBreaks = [],
+  mainLane = 0,
   onSectionBreakMove,
   onEndplateEndMove,
   tracks = [],
@@ -333,6 +334,9 @@ export function BenchworkEditor({
   centerline?: Pt[];
   /** Internal section joints (inches from A) — drawn as dividers on the board. */
   sectionBreaks?: number[];
+  /** Which lane Main 1 draws on — 0 (centre) normally, 1 when the module's
+   * mains are swapped so Main 1 is the upper track (#92 / #131). */
+  mainLane?: number;
   /** Fired while a section joint is dragged along the board (#96). */
   onSectionBreakMove?: (i: number, pos: number) => void;
   /** Fired while the far endplate is dragged along the main — it's the outer
@@ -846,7 +850,12 @@ export function BenchworkEditor({
       const toward = spur ? Math.sign(spur.toPos - t.pos) || 1 : 1;
       clips.push([Math.min(t.pos, t.pos + toward * reach), Math.max(t.pos, t.pos + toward * reach)]);
     }
-    if (clips.length === 0) return [centerline];
+    // Main 1 rides mainLane — 0 normally, 1 when swapped so it's the upper
+    // track. The swap already flips Main 2 (its doc lane); this makes the
+    // realistic view honour it for Main 1 too, instead of stacking both on
+    // lane 0 (#131).
+    const mainAt = (s: number, e: number) => lanePath(centerline, s, e, mainLane);
+    if (clips.length === 0) return [mainAt(0, lengthInches)];
     clips.sort((a, b) => a[0] - b[0]);
     const merged: [number, number][] = [];
     for (const c of clips) {
@@ -861,8 +870,8 @@ export function BenchworkEditor({
       cur = Math.max(cur, e);
     }
     if (cur < lengthInches) keeps.push([cur, lengthInches]);
-    return keeps.map(([s, e]) => lanePath(centerline, s, e, 0)).filter((p) => p.length >= 2);
-  }, [turnouts, tracks, centerline, lengthInches]);
+    return keeps.map(([s, e]) => mainAt(s, e)).filter((p) => p.length >= 2);
+  }, [turnouts, tracks, centerline, lengthInches, mainLane]);
 
   const trackPaths = useMemo(
     () =>
