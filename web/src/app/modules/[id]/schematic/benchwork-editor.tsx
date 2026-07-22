@@ -2610,6 +2610,27 @@ const ENDPLATE_TAB = 5; // ballast-shoulder band width, inches
                   pointerEvents="none"
                 />
               ))}
+              {/* Wide, invisible hit line over the face so the thin visible
+                  stroke is easy to click. The benchwork corners still sit on
+                  the face's ENDS, but its middle (the track point) is now a
+                  fat target — and it's also selectable from the Objects list
+                  (#145). */}
+              {onSelect && (
+                <line
+                  x1={ax}
+                  y1={sy(ay)}
+                  x2={bx}
+                  y2={sy(by)}
+                  stroke="transparent"
+                  strokeWidth={r * 3}
+                  strokeLinecap="round"
+                  style={{ cursor: "pointer" }}
+                  onPointerDown={(e) => {
+                    e.stopPropagation();
+                    onSelect({ kind: "endplate", id: p.id });
+                  }}
+                />
+              )}
               <line
                 x1={ax}
                 y1={sy(ay)}
@@ -2618,15 +2639,7 @@ const ENDPLATE_TAB = 5; // ballast-shoulder band width, inches
                 stroke={on ? "#1d4ed8" : "#3b82f6"}
                 strokeWidth={on ? r * 1.2 : r * 0.7}
                 strokeLinecap="round"
-                style={onSelect ? { cursor: "pointer" } : undefined}
-                onPointerDown={
-                  onSelect
-                    ? (e) => {
-                        e.stopPropagation(); // don't draw through the endplate
-                        onSelect({ kind: "endplate", id: p.id });
-                      }
-                    : undefined
-                }
+                pointerEvents="none"
               >
                 <title>{`Endplate ${p.id} — the standard interface`}</title>
               </line>

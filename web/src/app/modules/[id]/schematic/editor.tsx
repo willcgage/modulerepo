@@ -1480,6 +1480,7 @@ export function SchematicEditor({
             }}
             mainlineDouble={isDouble}
             mainlineLocked={lockedConfigs.a || lockedConfigs.b}
+            endplates={poses.map((p) => ({ id: p.id, config: p.trackConfig }))}
           />
         </aside>
       </div>
@@ -3659,6 +3660,7 @@ function ObjectsList({
   add,
   mainlineDouble,
   mainlineLocked,
+  endplates,
 }: {
   state: EditorState;
   selection: Selection | null;
@@ -3676,6 +3678,7 @@ function ObjectsList({
   };
   mainlineDouble: boolean;
   mainlineLocked: boolean;
+  endplates: { id: string; config?: string }[];
 }) {
   /** Corners are keyed by index, everything else by id — compare accordingly. */
   const on = (s: Selection) => {
@@ -3706,6 +3709,19 @@ function ObjectsList({
       <h2 className="mb-2 text-xs font-semibold uppercase tracking-wide text-gray-400">
         Objects
       </h2>
+
+      {endplates.length > 0 && (
+        <Group title="Endplates" count={endplates.length}>
+          {endplates.map((e) =>
+            row(
+              `ep${e.id}`,
+              e.id === "A" ? "Endplate A (west)" : e.id === "B" ? "Endplate B (east)" : `Endplate ${e.id}`,
+              { kind: "endplate", id: e.id },
+              e.config === "double" ? "double" : "single",
+            ),
+          )}
+        </Group>
+      )}
 
       <Group title="Benchwork" count={state.outline.length}>
         {state.outline.length === 0 ? (
