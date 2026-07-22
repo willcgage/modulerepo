@@ -6,6 +6,7 @@ import {
   samplePath,
   divergeSideForHand,
   MAIN_TRACK_ID,
+  MAIN2_TRACK_ID,
   type BenchworkPoint,
   type EndplatePose,
   type TurnoutKind,
@@ -297,6 +298,8 @@ export function BenchworkEditor({
   onAddIndustry,
   mainPath = [],
   onMainPathChange,
+  main2Path = [],
+  onMain2PathChange,
   onTrackPathChange,
   trackMenu,
   pendingTrack = null,
@@ -361,6 +364,9 @@ export function BenchworkEditor({
    * Track tool seeds it from the centre-line, then edits it (#2d-track). */
   mainPath?: BenchworkPoint[];
   onMainPathChange?: (next: BenchworkPoint[]) => void;
+  /** Authored Main 2 centre-line + its setter, for the curvable second main (#131). */
+  main2Path?: BenchworkPoint[];
+  onMain2PathChange?: (next: BenchworkPoint[]) => void;
   /** Author a spur/siding's 2-D path (module-local inches) — bend/rotate it in
    * the Track tool; its throat stays snapped to its turnout (#2d-track). */
   onTrackPathChange?: (id: string, next: BenchworkPoint[]) => void;
@@ -437,6 +443,7 @@ export function BenchworkEditor({
   const dragRef = useRef<
     | { kind: "vertex" | "edge"; i: number }
     | { kind: "mainVertex" | "mainEdge"; i: number }
+    | { kind: "main2Vertex" | "main2Edge"; i: number }
     | { kind: "spurVertex" | "spurEdge"; id: string; i: number }
     | { kind: "turnout"; id: string }
     | { kind: "trackEnd"; id: string; end: "from" | "to" }
@@ -880,11 +887,15 @@ export function BenchworkEditor({
             .map((t) => ({
               id: t.id,
               pts:
-                t.path && t.path.length >= 2
-                  ? samplePath(spurTrackPath(t))
-                  : (divergingStubPath(t) ??
-                    passingSidingBody(t) ??
-                    lanePath(centerline, t.fromPos, t.toPos, t.lane)),
+                // Main 2 is a main, not a spur — its authored path draws as-is,
+                // with no throat→frog leg prepended (#131).
+                t.id === MAIN2_TRACK_ID && t.path && t.path.length >= 2
+                  ? samplePath(t.path)
+                  : t.path && t.path.length >= 2
+                    ? samplePath(spurTrackPath(t))
+                    : (divergingStubPath(t) ??
+                      passingSidingBody(t) ??
+                      lanePath(centerline, t.fromPos, t.toPos, t.lane)),
             }))
             .filter((t) => t.pts.length > 1)
         : [],
@@ -1232,6 +1243,70 @@ export function BenchworkEditor({
     const next = [...editMain];
     next.splice(best + 1, 0, { x: pt.x, y: pt.y });
     commitMain(next);
+  };
+
+  // --- Main 2 path editing (#131) — mirrors Main 1, endplate-pinned, no throat ---
+  const main2Track_ = tracks.find((t) => t.id === MAIN2_TRACK_ID);
+  const isDoubleMain = !!main2Track_;
+  /** Edit Main 2 when it's selected under the Track (or Select) tool. */
+  const editingMain2 =
+    isDoubleMain &&
+    (tool === "track" || tool === "select") &&
+    selection?.kind === "track" &&
+    selection.id === MAIN2_TRACK_ID;
+  const commitMain2 = (next: BenchworkPoint[]) =>
+    onMain2PathChange?.(
+      next.map((pt) => ({
+        x: round(pt.x),
+        y: round(pt.y),
+        ...(pt.bulge ? { bulge: round(pt.bulge) } : {}),
+      })),
+    );
+  /** Seed Main 2's control points from where it runs today — its lane offset
+   * from Main 1 across its own extent — so bending starts from the current
+   * shape. */
+  const seedMain2 = (): BenchworkPoint[] => {
+    if (centerline.length < 2 || !main2Track_) return [];
+    const off = laneOffset(main2Track_.lane ?? 1);
+    const from = main2Track_.fromPos ?? 0;
+    const to = main2Track_.toPos ?? lengthInches;
+    const a = sampleAt(centerline, from);
+    const b = sampleAt(centerline, to);
+    return [
+      { x: a.x + a.nx * off, y: a.y + a.ny * off },
+      { x: b.x + b.nx * off, y: b.y + b.ny * off },
+    ];
+  };
+  const editMain2 = main2Path.length >= 1 ? main2Path : seedMain2();
+  const main2EdgeHandle = (i: number): Pt => {
+    const p0 = editMain2[i];
+    const p1 = editMain2[i + 1];
+    const dx = p1.x - p0.x;
+    const dy = p1.y - p0.y;
+    const c = Math.hypot(dx, dy) || 1;
+    return {
+      x: (p0.x + p1.x) / 2 + (-dy / c) * (p0.bulge ?? 0),
+      y: (p0.y + p1.y) / 2 + (dx / c) * (p0.bulge ?? 0),
+    };
+  };
+  const addMain2Vertex = (pt: Pt) => {
+    if (editMain2.length < 2) return;
+    let best = 0;
+    let bestD = Infinity;
+    for (let i = 0; i < editMain2.length - 1; i++) {
+      const d = distToSegment(pt, editMain2[i], editMain2[i + 1]);
+      if (d < bestD) {
+        bestD = d;
+        best = i;
+      }
+    }
+    const next = [...editMain2];
+    next.splice(best + 1, 0, { x: pt.x, y: pt.y });
+    commitMain2(next);
+  };
+  const removeMain2Vertex = (i: number) => {
+    if (i <= 0 || i >= editMain2.length - 1) return;
+    commitMain2(editMain2.filter((_, j) => j !== i));
   };
 
   // --- Spur path editing (Track tool) — the selected editable spur ------------
@@ -1780,6 +1855,26 @@ export function BenchworkEditor({
         setReadout(`bow ${fmt(Math.abs(bulge))}″`);
       }
       commitMain(next);
+      return;
+    }
+    if (d.kind === "main2Vertex" || d.kind === "main2Edge") {
+      const next = editMain2.map((pt) => ({ ...pt }));
+      if (d.kind === "main2Vertex") {
+        next[d.i] = { ...next[d.i], x: p.x, y: p.y };
+        setReadout(`${fmt(p.x)}, ${fmt(p.y)}″`);
+      } else {
+        const p0 = editMain2[d.i];
+        const p1 = editMain2[d.i + 1];
+        const dx = p1.x - p0.x;
+        const dy = p1.y - p0.y;
+        const c = Math.hypot(dx, dy) || 1;
+        const mx = (p0.x + p1.x) / 2;
+        const my = (p0.y + p1.y) / 2;
+        const bulge = (p.x - mx) * (-dy / c) + (p.y - my) * (dx / c);
+        next[d.i] = { ...next[d.i], bulge: Math.abs(bulge) < 0.5 ? 0 : bulge };
+        setReadout(`bow ${fmt(Math.abs(bulge))}″`);
+      }
+      commitMain2(next);
       return;
     }
 
@@ -2642,7 +2737,7 @@ const ENDPLATE_TAB = 5; // ballast-shoulder band width, inches
         ))}
 
         {/* Drawing a new main from scratch — the first placed point (#layers). */}
-        {tool === "track" && !editSpurTrack && !pendingTrack && editMain.length === 1 && (
+        {tool === "track" && !editSpurTrack && !editingMain2 && !pendingTrack && editMain.length === 1 && (
           <circle
             cx={editMain[0].x}
             cy={sy(editMain[0].y)}
@@ -2656,7 +2751,7 @@ const ENDPLATE_TAB = 5; // ballast-shoulder band width, inches
           </circle>
         )}
         {/* --- Mainline edit handles (Track tool, no spur selected) — bend/drag the main --- */}
-        {tool === "track" && !editSpurTrack && !pendingTrack && editMain.length >= 2 && (
+        {tool === "track" && !editSpurTrack && !editingMain2 && !pendingTrack && editMain.length >= 2 && (
           <>
             {editMain.slice(0, -1).map((_, i) => {
               const h = mainEdgeHandle(i);
@@ -2696,6 +2791,52 @@ const ENDPLATE_TAB = 5; // ballast-shoulder band width, inches
                 }}
               >
                 <title>{i === 0 ? "Endplate A (fixed origin)" : "Drag to move · Alt-click to remove"}</title>
+              </circle>
+            ))}
+          </>
+        )}
+
+        {/* --- Main 2 edit handles — bend the second main (#131) --- */}
+        {editingMain2 && !pendingTrack && editMain2.length >= 2 && (
+          <>
+            {editMain2.slice(0, -1).map((_, i) => {
+              const h = main2EdgeHandle(i);
+              return (
+                <rect
+                  key={`m2e${i}`}
+                  x={h.x - r * 0.9}
+                  y={sy(h.y) - r * 0.9}
+                  width={r * 1.8}
+                  height={r * 1.8}
+                  fill={editMain2[i].bulge ? "#7c3aed" : "#fff"}
+                  stroke="#7c3aed"
+                  strokeWidth={r * 0.35}
+                  transform={`rotate(45 ${h.x} ${sy(h.y)})`}
+                  style={{ cursor: "grab" }}
+                  onPointerDown={(e) => beginDrag(e, { kind: "main2Edge", i })}
+                >
+                  <title>Drag to bow this stretch of Main 2 into a curve</title>
+                </rect>
+              );
+            })}
+            {editMain2.map((p, i) => (
+              <circle
+                key={`m2v${i}`}
+                cx={p.x}
+                cy={sy(p.y)}
+                r={r}
+                fill="#fff"
+                stroke="#7c3aed"
+                strokeWidth={r * 0.4}
+                style={{ cursor: "grab" }}
+                onPointerDown={(e) => {
+                  if (e.altKey) {
+                    e.stopPropagation();
+                    removeMain2Vertex(i);
+                  } else beginDrag(e, { kind: "main2Vertex", i });
+                }}
+              >
+                <title>Drag to move · Alt-click to remove</title>
               </circle>
             ))}
           </>
