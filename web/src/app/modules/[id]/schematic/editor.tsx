@@ -239,13 +239,21 @@ export function SchematicEditor({
   // the renderer's framing, the negation of the authored offset. Unauthored
   // ends fall back to Free-moN §2.0's recommendation: a single end centred, a
   // double end straddling the centre at ∓ half the 1.125″ track spacing.
-  const renderTrackOffsets = useMemo(
-    () => ({
-      A: endplateTrackOffsetFor(state.configA, state.endplateTrackOffsets.A),
-      B: endplateTrackOffsetFor(state.configB, state.endplateTrackOffsets.B),
-    }),
-    [state.configA, state.configB, state.endplateTrackOffsets],
-  );
+  const renderTrackOffsets = useMemo(() => {
+    // Main 2 sits above Main 1 by default, below when swapped (#131). A double
+    // end's plate centre is the midpoint of the two mains, so its default
+    // offset follows Main 2's side. An OWNER-authored offset always wins.
+    const m2Below = state.mainsSwapped === true;
+    const off = (config: "single" | "double" | "none", authored?: number) => {
+      const base = endplateTrackOffsetFor(config, authored);
+      const authoredSet = typeof authored === "number" && Number.isFinite(authored);
+      return config === "double" && !authoredSet && m2Below ? -base : base;
+    };
+    return {
+      A: off(state.configA, state.endplateTrackOffsets.A),
+      B: off(state.configB, state.endplateTrackOffsets.B),
+    };
+  }, [state.configA, state.configB, state.endplateTrackOffsets, state.mainsSwapped]);
   // The real physical module — its centre-line drives where track, turnouts and
   // signals actually sit on the board (not just in the straightened view).
   const mainDrawn = state.mainPath.length >= 2;
@@ -992,8 +1000,9 @@ export function SchematicEditor({
           id: swId,
           name: "End of Double Track",
           pos: p,
-          onTrack: MAIN2_TRACK_ID,
-          divergeTrack: MAIN_TRACK_ID,
+          // On the mainline (Main 1), diverging to the second main (#131).
+          onTrack: MAIN_TRACK_ID,
+          divergeTrack: MAIN2_TRACK_ID,
           kind: touchesA ? "left" : "right",
           size: turnoutSize,
         });
@@ -2393,10 +2402,9 @@ function Inspector({
                 onChange={(e) => patch((s) => (s.mainsSwapped = e.target.checked))}
               />
               <span>
-                <span className="font-medium">Swap Main 1 / Main 2 positions</span> —
-                draw Main 1 above and Main 2 on the centre line, for a module whose
-                upper track is the primary main. Names and everything attached stay
-                put; only where they&rsquo;re drawn changes.
+                <span className="font-medium">Draw Main 2 below Main 1</span> — put
+                the second main on the lower side of the mainline (the default is
+                above). Main 1 stays on the centre line; only Main 2 moves.
               </span>
             </label>
           )}
