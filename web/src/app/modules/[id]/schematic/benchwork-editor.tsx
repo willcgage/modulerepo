@@ -446,6 +446,7 @@ export function BenchworkEditor({
   /** Draw-to-create in progress: the throat turnout it diverges from + live end. */
   const placeRef = useRef<{ start: Pt; end: Pt; turnoutId: string } | null>(null);
   const [placePreview, setPlacePreview] = useState<{ start: Pt; end: Pt } | null>(null);
+  const [showLegend, setShowLegend] = useState(false);
   /** The turnout armed in the palette — a canvas click drops this one, and it's
    * what a palette drag carries (#turnout-palette). */
   const [armedPalette, setArmedPalette] = useState<PaletteKind>("right");
@@ -1981,7 +1982,7 @@ const ENDPLATE_TAB = 5; // ballast-shoulder band width, inches
   };
 
   return (
-    <div className="flex h-full min-h-0 flex-col">
+    <div className="relative flex h-full min-h-0 flex-col">
       {/* Tool options (left) + view controls (right). Only the active tool's
           controls show — not a global toolbar. */}
       <div className="mb-2 flex min-h-6 shrink-0 flex-wrap items-center gap-2 text-xs">
@@ -2126,6 +2127,14 @@ const ENDPLATE_TAB = 5; // ballast-shoulder band width, inches
           </button>
           <button type="button" onClick={() => zoomButtons(1.25)} className={iconBtn} title="Zoom out">
             −
+          </button>
+          <button
+            type="button"
+            onClick={() => setShowLegend((v) => !v)}
+            className={`${btn} ${showLegend ? "bg-blue-50 text-blue-700" : ""}`}
+            title="What the handles and markers mean"
+          >
+            Legend
           </button>
           <button
             type="button"
@@ -2311,9 +2320,9 @@ const ENDPLATE_TAB = 5; // ballast-shoulder band width, inches
           const node = on ? "#0284c7" : "#475569";
           return (
             <g key={`to${t.id}`}>
-              {/* Frog node — where the diverging route clears one track over. A
-                  white snap circle, like the points, so both ends of the switch
-                  read as connection nodes. */}
+              {/* Frog node — where the diverging rails cross, one track over.
+                  The turnout's position IS its frog (#132), so this marker is
+                  set by the position field, not dragged. A small snap circle. */}
               {t.frog && (
                 <circle
                   cx={t.frog.x}
@@ -2323,11 +2332,12 @@ const ENDPLATE_TAB = 5; // ballast-shoulder band width, inches
                   stroke={node}
                   strokeWidth={r * 0.28}
                   pointerEvents="none"
-                />
+                >
+                  <title>Frog (where the diverging rails cross). Set by the turnout&rsquo;s position — not dragged here.</title>
+                </circle>
               )}
-              {/* Points node — the white snap circle at the throat, where the
-                  diverging route leaves the main (and the draggable control). The
-                  prominent node the track plan snaps to. */}
+              {/* Turnout node — the draggable control, on the track beside its
+                  frog. Dragging it sets the turnout's position (its frog, #132). */}
               <circle
                 cx={t.x}
                 cy={sy(t.y)}
@@ -2340,7 +2350,11 @@ const ENDPLATE_TAB = 5; // ballast-shoulder band width, inches
                   onTurnoutMove ? (e) => beginDrag(e, { kind: "turnout", id: t.id }) : undefined
                 }
               >
-                {onTurnoutMove && <title>Drag along the track to move this turnout</title>}
+                <title>
+                  {onTurnoutMove
+                    ? "Turnout — drag along the track to move it (its position is measured to its frog)"
+                    : "Turnout"}
+                </title>
               </circle>
             </g>
           );
@@ -2810,6 +2824,38 @@ const ENDPLATE_TAB = 5; // ballast-shoulder band width, inches
           </span>
         )}
       </div>
+      {showLegend && (
+        <div className="absolute bottom-3 left-3 z-30 w-64 rounded-md border border-gray-200 bg-white/95 p-2 text-xs shadow-lg">
+          <div className="mb-1 flex items-center justify-between">
+            <span className="font-medium text-gray-700">Handles &amp; markers</span>
+            <button
+              type="button"
+              onClick={() => setShowLegend(false)}
+              className="text-gray-400 hover:text-gray-700"
+              title="Hide"
+            >
+              &times;
+            </button>
+          </div>
+          <ul className="space-y-1.5 text-gray-600">
+            {[
+              { sw: <circle cx={8} cy={8} r={5} fill="#fff" stroke="#475569" strokeWidth={2} />, label: "Turnout — drag to move (its position is its frog)" },
+              { sw: <circle cx={8} cy={8} r={3.5} fill="#fff" stroke="#475569" strokeWidth={1.6} />, label: "Frog — where the diverging rails cross. Set by the turnout's position." },
+              { sw: <circle cx={8} cy={8} r={4.5} fill="#fff" stroke="#0f766e" strokeWidth={2} />, label: "Track end — drag to lengthen or shorten a spur / siding" },
+              { sw: <rect x={3} y={3} width={10} height={10} transform="rotate(45 8 8)" fill="#fff" stroke="#2563eb" strokeWidth={2} />, label: "Benchwork corner / endplate — drag to reshape" },
+              { sw: <circle cx={8} cy={8} r={4.5} fill="#fff" stroke="#2563eb" strokeWidth={2} />, label: "Endplate tab (outboard) — drag to resize the last section" },
+              { sw: <rect x={3} y={5} width={10} height={6} fill="#fff" stroke="#b45309" strokeWidth={2} />, label: "Industry — its car-spot extent" },
+            ].map((row, i) => (
+              <li key={i} className="flex items-start gap-2">
+                <svg width={16} height={16} viewBox="0 0 16 16" className="mt-0.5 shrink-0">
+                  {row.sw}
+                </svg>
+                <span>{row.label}</span>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
     </div>
   );
 }
