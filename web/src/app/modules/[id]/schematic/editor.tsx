@@ -1364,6 +1364,8 @@ export function SchematicEditor({
                 poses={poses}
                 mainPath={state.mainPath}
                 onMainPathChange={(next) => patch((s) => (s.mainPath = next))}
+                main2Path={state.main2Path}
+                onMain2PathChange={(next) => patch((s) => (s.main2Path = next))}
                 endplateWidths={state.endplateWidths}
                 endplateTrackOffsets={renderTrackOffsets}
                 centerline={footprint.centerline}
@@ -3308,6 +3310,35 @@ function Inspector({
         </div>
       </>,
       { fn: () => patch((s) => s.industries.splice(idx, 1)), label: "Remove industry" },
+    );
+  }
+
+  // ---- Main 2 (the second main is curvable, #131) ----
+  if (selection.id === MAIN2_TRACK_ID) {
+    const bent = state.main2Path.length >= 2;
+    return shell(
+      "Main 2",
+      <>
+        <p className="text-xs text-gray-500">
+          The second main. With the{" "}
+          <span className="font-medium">Track (T)</span> tool active, drag the
+          purple points to bend it — round a stretch with the ◆ handles — so it
+          runs where you need at the endplates. Leave it alone and it follows
+          Main 1 at standard spacing.
+        </p>
+        <p className="text-xs text-gray-500">
+          Shape: {bent ? "bent by hand" : "parallel to Main 1 (derived)"}
+        </p>
+        {bent && (
+          <button
+            type="button"
+            onClick={() => patch((s) => (s.main2Path = []))}
+            className={`${addBtn} w-full`}
+          >
+            Straighten (back to parallel)
+          </button>
+        )}
+      </>,
     );
   }
 
