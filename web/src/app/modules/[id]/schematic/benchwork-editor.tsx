@@ -715,16 +715,38 @@ export function BenchworkEditor({
   const passingSidingBody = (t: CanvasTrack): Pt[] | null => {
     const legs = legsByTrack.get(t.id);
     if (!legs || legs.length < 2) return null;
-    // Sort the bounding legs by where their frogs fall along the main, then run
-    // the lane between those two positions so the body follows a curved main.
+    // Each bounding leg's frog, with its position along the main AND its signed
+    // lateral offset from the centre-line. The body must ride the side the
+    // FROGS are on, not the track's stored lane — those two can disagree (a
+    // spur auto-lands on a positive lane while its leg diverges below), which
+    // made the body zig-zag across the main between frogs pinned on the far
+    // side (#133).
     const at = legs
-      .map((l) => ({ pos: projectToCenterline(centerline, l.frog).pos, frog: l.frog }))
+      .map((l) => {
+        const c = sampleAt(centerline, projectToCenterline(centerline, l.frog).pos);
+        return {
+          pos: projectToCenterline(centerline, l.frog).pos,
+          off: (l.frog.x - c.x) * c.nx + (l.frog.y - c.y) * c.ny,
+          frog: l.frog,
+        };
+      })
       .sort((a, b) => a.pos - b.pos);
-    const body = lanePath(centerline, at[0].pos, at[at.length - 1].pos, t.lane);
+    // A genuine passing siding has both frogs on the SAME side; if they aren't,
+    // it isn't a valid siding — leave it to the lane fallback rather than draw
+    // a track that crosses its own main.
+    if (Math.sign(at[0].off) !== Math.sign(at[at.length - 1].off)) return null;
+    const off = (at[0].off + at[at.length - 1].off) / 2;
+    const steps = 24;
+    const body: Pt[] = [];
+    for (let i = 0; i <= steps; i++) {
+      const pos = at[0].pos + ((at[at.length - 1].pos - at[0].pos) * i) / steps;
+      const c = sampleAt(centerline, pos);
+      body.push({ x: c.x + c.nx * off, y: c.y + c.ny * off });
+    }
     if (body.length < 2) return null;
     // Pin the exact ends to the frogs so leg and body share a vertex.
-    body[0] = { ...body[0], x: at[0].frog.x, y: at[0].frog.y };
-    body[body.length - 1] = { ...body[body.length - 1], x: at[at.length - 1].frog.x, y: at[at.length - 1].frog.y };
+    body[0] = { x: at[0].frog.x, y: at[0].frog.y };
+    body[body.length - 1] = { x: at[at.length - 1].frog.x, y: at[at.length - 1].frog.y };
     return body;
   };
 
