@@ -532,21 +532,41 @@ export function BenchworkEditor({
    * operations view read). Sampling along a non-main host's polyline needs them
    * host-relative: the polyline starts at the host's fromPos end. A drawn-path
    * host keeps its own parameterisation (the ops view is approximate there). */
-  const hostSpanOf = (onTrack: string | undefined | null): { start: number; dir: 1 | -1 } => {
-    if (!onTrack || onTrack === MAIN_TRACK_ID) return { start: 0, dir: 1 };
-    const host = tracks.find((x) => x.id === onTrack);
-    if (!host || (host.path && host.path.length >= 2)) return { start: 0, dir: 1 };
-    return { start: host.fromPos, dir: (Math.sign(host.toPos - host.fromPos) || 1) as 1 | -1 };
-  };
-  /** Absolute inches-from-A → arc position along the host's polyline. */
+  /** A turnout's position is ALWAYS absolute inches from endplate A, measured
+   * along the module (owner decision, #132) — even for a turnout on a spur, so
+   * a value typed off an XTrkCAD drawing lands where the owner expects. These
+   * two convert between that absolute figure and an arc length along whatever
+   * polyline the turnout sits on, by PROJECTING each host point back onto the
+   * main. The old version assumed the host ran the same direction as the main
+   * and just did `dir*(abs-start)`, which flipped a spur that ran east→west so
+   * a value read from the wrong end (#132). */
   const toHostRel = (onTrack: string | undefined | null, abs: number): number => {
-    const s = hostSpanOf(onTrack);
-    return s.dir * (abs - s.start);
+    if (!onTrack || onTrack === MAIN_TRACK_ID) return abs;
+    const host = hostPointsOf(onTrack);
+    if (host.length < 2) return abs;
+    let acc = 0;
+    let prevLong = projectToCenterline(centerline, host[0]).pos;
+    if (abs <= prevLong) return 0;
+    for (let i = 1; i < host.length; i++) {
+      const seg = Math.hypot(host[i].x - host[i - 1].x, host[i].y - host[i - 1].y);
+      const long = projectToCenterline(centerline, host[i]).pos;
+      const lo = Math.min(prevLong, long);
+      const hi = Math.max(prevLong, long);
+      if (abs >= lo && abs <= hi) {
+        const f = long === prevLong ? 0 : (abs - prevLong) / (long - prevLong);
+        return acc + seg * Math.max(0, Math.min(1, f));
+      }
+      acc += seg;
+      prevLong = long;
+    }
+    return acc;
   };
-  /** Arc position along the host's polyline → absolute inches from A. */
+  /** Arc length along the host → absolute inches from A (its main-projection). */
   const toHostAbs = (onTrack: string | undefined | null, rel: number): number => {
-    const s = hostSpanOf(onTrack);
-    return s.start + s.dir * rel;
+    if (!onTrack || onTrack === MAIN_TRACK_ID) return rel;
+    const host = hostPointsOf(onTrack);
+    if (host.length < 2) return rel;
+    return projectToCenterline(centerline, sampleAt(host, rel)).pos;
   };
   /** A turnout's diverging leg — the throat→frog route, sampled *along the host*
    * so it follows the mainline's curvature (a curved turnout), easing out to one
@@ -556,11 +576,14 @@ export function BenchworkEditor({
     if (!dt) return null;
     const host = hostPointsOf(t.onTrack);
     if (host.length < 2) return null;
-    const relPos = toHostRel(t.onTrack, t.pos);
-    const m = sampleAt(host, relPos);
+    // `pos` marks the FROG (#132). Find its arc on the host, size the leg, then
+    // put the throat a leg-length back so the walk lands the frog exactly at
+    // pos. `m` (the turnout node) sits at the frog.
+    const relFrog = toHostRel(t.onTrack, t.pos);
+    const m = sampleAt(host, relFrog);
     const eps = 0.5;
-    const a = sampleAt(host, Math.max(0, relPos - eps));
-    const b = sampleAt(host, relPos + eps);
+    const a = sampleAt(host, Math.max(0, relFrog - eps));
+    const b = sampleAt(host, relFrog + eps);
     const tl = Math.hypot(b.x - a.x, b.y - a.y) || 1;
     const tx = (b.x - a.x) / tl;
     const ty = (b.y - a.y) / tl;
@@ -611,11 +634,12 @@ export function BenchworkEditor({
     // host and bows into an arc; a straight turnout ramps over linearly (a
     // straight diagonal).
     const steps = 8;
+    const relThroat = relFrog - toward * L; // a leg-length back from the frog
     const leg: Pt[] = [];
     for (let i = 0; i <= steps; i++) {
       const frac = i / steps;
       const ease = t.curved ? frac * frac : frac;
-      const p = sampleAt(host, Math.max(0, relPos + toward * L * frac));
+      const p = sampleAt(host, Math.max(0, relThroat + toward * L * frac));
       const off = side * lateral * ease;
       leg.push({ x: p.x + off * p.nx, y: p.y + off * p.ny });
     }

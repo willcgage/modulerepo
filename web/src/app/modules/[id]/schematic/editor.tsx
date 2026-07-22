@@ -2721,11 +2721,12 @@ function Inspector({
           />
         </label>
         <label className="block text-xs font-medium text-gray-600">
-          Position (in from A)
+          Frog position (in from A)
           <input
             type="number"
             step={0.5}
             value={t.pos}
+            title="Inches from endplate A to the turnout's FROG (where the diverging rails cross), measured along the module — the same whether the turnout sits on the main or a spur."
             onChange={(e) => patch((s) => (s.turnouts[i].pos = Number(e.target.value)))}
             className={`mt-0.5 ${inp}`}
           />
