@@ -706,6 +706,28 @@ export function BenchworkEditor({
     return [...leg.map((p) => ({ x: p.x, y: p.y })), { x: frog.x + dx * tailLen, y: frog.y + dy * tailLen }];
   };
 
+  /** A passing siding's BODY — the parallel run between its two turnouts,
+   * clipped to their FROGS so it meets each diverging leg end-to-end. Without
+   * this the body drew the full fromPos→toPos on the lane while the legs ended
+   * at the frogs, so the siding read as two disjoint lines and dragging the
+   * straight one pulled it out from under the legs (#133). Null unless the
+   * track is genuinely reached by two turnouts. */
+  const passingSidingBody = (t: CanvasTrack): Pt[] | null => {
+    const legs = legsByTrack.get(t.id);
+    if (!legs || legs.length < 2) return null;
+    // Sort the bounding legs by where their frogs fall along the main, then run
+    // the lane between those two positions so the body follows a curved main.
+    const at = legs
+      .map((l) => ({ pos: projectToCenterline(centerline, l.frog).pos, frog: l.frog }))
+      .sort((a, b) => a.pos - b.pos);
+    const body = lanePath(centerline, at[0].pos, at[at.length - 1].pos, t.lane);
+    if (body.length < 2) return null;
+    // Pin the exact ends to the frogs so leg and body share a vertex.
+    body[0] = { ...body[0], x: at[0].frog.x, y: at[0].frog.y };
+    body[body.length - 1] = { ...body[body.length - 1], x: at[at.length - 1].frog.x, y: at[at.length - 1].frog.y };
+    return body;
+  };
+
   /** A wye's mirrored second route — the leg forced to the opposite side, then
    * continued along its frog tangent to the same length as the (real) spur, so
    * the switch reads as a symmetric Y. Rendered as a band; it isn't a separately
@@ -751,6 +773,10 @@ export function BenchworkEditor({
       // (divergingStubPath starts with it); otherwise draw them all.
       const authored = !!(t.path && t.path.length >= 2);
       const stub = !authored && legs.length === 1;
+      // legs[0] is already carried by the band for an authored path
+      // (spurTrackPath prepends it) or a single-ended stub (divergingStubPath
+      // starts with it). A passing siding's body now runs frog→frog, so its
+      // legs are NOT in the band — draw them all (#133).
       for (let i = authored || stub ? 1 : 0; i < legs.length; i++) {
         out.push({ id: `${trackId}-leg${i}`, pts: legs[i].leg });
       }
@@ -800,7 +826,9 @@ export function BenchworkEditor({
               pts:
                 t.path && t.path.length >= 2
                   ? samplePath(spurTrackPath(t))
-                  : (divergingStubPath(t) ?? lanePath(centerline, t.fromPos, t.toPos, t.lane)),
+                  : (divergingStubPath(t) ??
+                    passingSidingBody(t) ??
+                    lanePath(centerline, t.fromPos, t.toPos, t.lane)),
             }))
             .filter((t) => t.pts.length > 1)
         : [],
@@ -834,7 +862,14 @@ export function BenchworkEditor({
     if (centerline.length < 2) return [];
     return tracks
       // A drawn spur is positioned by its path, not fromPos/toPos — no end drags.
-      .filter((t) => t.editable && !(t.path && t.path.length >= 2))
+      // A passing siding is pinned to its two turnouts — move those, not its
+      // ends; independent end drags pulled the body off the legs (#133).
+      .filter(
+        (t) =>
+          t.editable &&
+          !(t.path && t.path.length >= 2) &&
+          (legsByTrack.get(t.id)?.length ?? 0) < 2,
+      )
       .flatMap((t) => {
         // A turnout stub angles away — its far end sits at the end of the
         // diverging route, and its throat is pinned to the turnout (no from
