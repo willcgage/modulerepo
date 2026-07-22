@@ -711,6 +711,34 @@ export function SchematicEditor({
     });
     setSelection({ kind: "track", id });
   }
+  /** Turnout-first track creation (#136): from a turnout's "Diverges to", make
+   * a NEW spur or siding for it to feed, named so the owner can rename it, with
+   * a short default stub they then shape by dragging its end. Steve Branton's
+   * suggestion — the reverse of drawing a track and having it mint the turnout. */
+  const newDivergeTrack = (turnoutId: string, role: "spur" | "siding") => {
+    const tn = state.turnouts.find((t) => t.id === turnoutId);
+    if (!tn) return;
+    const id = nextId(role === "spur" ? "spur" : "sid", state.extraTracks.map((t) => t.id));
+    const p = Math.round(tn.pos * 10) / 10;
+    const stub =
+      Math.round(Math.max(6, Math.min(state.lengthInches - p, state.lengthInches * 0.12)) * 10) / 10;
+    patch((s) => {
+      s.extraTracks.push({
+        id,
+        role,
+        lane: nextLane(s),
+        fromPos: p,
+        toPos: Math.min(s.lengthInches, p + stub),
+        moduleTrackId: null,
+        trackName: role === "spur" ? "New spur" : "New siding",
+      });
+      const t = s.turnouts.find((x) => x.id === turnoutId);
+      if (t) t.divergeTrack = id;
+    });
+    // Select the new track so its name / kind / extent are right there to edit.
+    setSelection({ kind: "track", id });
+  };
+
   const onPlaceTrack = (
     p:
       | {
@@ -1422,6 +1450,7 @@ export function SchematicEditor({
             setEndplateWidth={setEndplateWidth}
             setEndplateTrackOffset={setEndplateTrackOffset}
             setSections={setSections}
+            onNewDivergeTrack={newDivergeTrack}
             activeSectionId={activeSectionId ?? state.sections[0]?.id ?? null}
             onShapeSection={(id) => {
               setActiveSectionId(id);
@@ -2137,6 +2166,7 @@ function Inspector({
   setEndplateWidth,
   setEndplateTrackOffset,
   setSections,
+  onNewDivergeTrack,
   activeSectionId,
   onShapeSection,
   sectionMeets,
@@ -2160,6 +2190,7 @@ function Inspector({
   setEndplateWidth: (id: string, raw: string) => void;
   setEndplateTrackOffset: (id: string, raw: string) => void;
   setSections: (next: SchematicSection[]) => void;
+  onNewDivergeTrack: (turnoutId: string, role: "spur" | "siding") => void;
   activeSectionId: string | null;
   onShapeSection: (id: string) => void;
   sectionMeets: { a: string; b: string; lengthInches: number }[];
@@ -2748,7 +2779,14 @@ function Inspector({
             Diverges to
             <select
               value={t.divergeTrack}
-              onChange={(e) => patch((s) => (s.turnouts[i].divergeTrack = e.target.value))}
+              onChange={(e) => {
+                const v = e.target.value;
+                // Turnout-first creation (#136): these mint a new track for the
+                // turnout to feed instead of picking an existing one.
+                if (v === "__new_spur__") onNewDivergeTrack(t.id, "spur");
+                else if (v === "__new_siding__") onNewDivergeTrack(t.id, "siding");
+                else patch((s) => (s.turnouts[i].divergeTrack = v));
+              }}
               className={`mt-0.5 ${inp}`}
             >
               {/* A turnout can't diverge into the track it sits on — there'd be
@@ -2759,6 +2797,9 @@ function Inspector({
                 .map((o) => (
                   <option key={o.value} value={o.value}>{o.label}</option>
                 ))}
+              <option disabled>──────────</option>
+              <option value="__new_spur__">＋ New spur…</option>
+              <option value="__new_siding__">＋ New siding…</option>
             </select>
           </label>
         </div>
