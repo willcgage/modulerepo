@@ -1367,6 +1367,7 @@ export function SchematicEditor({
                 endplateWidths={state.endplateWidths}
                 endplateTrackOffsets={renderTrackOffsets}
                 centerline={footprint.centerline}
+                mainLane={doc.tracks.find((t) => t.id === MAIN_TRACK_ID)?.lane ?? 0}
                 sectionBreaks={canvasSectionBreaks}
                 onSectionBreakMove={moveSectionJoint}
                 onEndplateEndMove={moveEndplateEnd}
