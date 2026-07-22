@@ -1551,6 +1551,43 @@ function trackLabel(
   }
 }
 
+/** The track's lane (stacking row). Commits on blur, not per keystroke, so a
+ * NEGATIVE lane can be typed — the "-" of "-1" would otherwise parse as NaN
+ * and snap to 1 before you finished, which is exactly why an owner couldn't
+ * put a siding below the main (#134). Lane 0 is Main 1, so 0 is rejected. */
+function LaneField({
+  value,
+  onCommit,
+  inp,
+}: {
+  value: number;
+  onCommit: (n: number) => void;
+  inp: string;
+}) {
+  const [draft, setDraft] = useState<string | null>(null);
+  const commit = () => {
+    if (draft === null) return;
+    const n = parseInt(draft, 10);
+    if (Number.isFinite(n) && n !== 0) onCommit(n);
+    setDraft(null);
+  };
+  return (
+    <input
+      type="number"
+      step={1}
+      value={draft ?? value}
+      title="Stacking row: 1+ above the main(s), −1 below Main 1 (the outside on a double-track module). Applied when you leave the field."
+      onChange={(e) => setDraft(e.target.value)}
+      onBlur={commit}
+      onKeyDown={(e) => {
+        if (e.key === "Enter") e.currentTarget.blur();
+        if (e.key === "Escape") setDraft(null);
+      }}
+      className={`mt-0.5 ${inp}`}
+    />
+  );
+}
+
 function SectionLengths({
   breaks,
   lengthInches,
@@ -3300,18 +3337,10 @@ function Inspector({
       <div className="grid grid-cols-2 gap-2">
         <label className="block text-xs font-medium text-gray-600">
           Lane
-          <input
-            type="number"
-            min={-2}
+          <LaneField
             value={t.lane}
-            title="Stacking row: 1+ above the main(s), −1 below Main 1 (the outside on a double-track module)"
-            onChange={(e) =>
-              patch((s) => {
-                const n = Number(e.target.value);
-                s.extraTracks[i].lane = Number.isFinite(n) && n !== 0 ? n : 1;
-              })
-            }
-            className={`mt-0.5 ${inp}`}
+            onCommit={(n) => patch((s) => (s.extraTracks[i].lane = n))}
+            inp={inp}
           />
         </label>
         <label className="block text-xs font-medium text-gray-600">
