@@ -1003,7 +1003,10 @@ export function SchematicEditor({
           // On the mainline (Main 1), diverging to the second main (#131).
           onTrack: MAIN_TRACK_ID,
           divergeTrack: MAIN2_TRACK_ID,
-          kind: touchesA ? "left" : "right",
+          // Hand so the leg lands on Main 2's side (matches buildTransition):
+          // Main 2 extends toward the double end (touchesA = double at A/west).
+          kind:
+            (touchesA ? -1 : 1) === (s.mainsSwapped ? -1 : 1) ? "left" : "right",
           size: turnoutSize,
         });
         const cpId = nextId("cp", s.controlPoints.map((c) => c.id));

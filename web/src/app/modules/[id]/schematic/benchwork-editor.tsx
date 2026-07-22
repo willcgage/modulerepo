@@ -722,6 +722,9 @@ export function BenchworkEditor({
    * carries the curve on. Length ≈ the stub's along-main span (the leg is the
    * turnout body; the tail is the track beyond it). Null → not a turnout stub. */
   const divergingStubPath = (t: CanvasTrack): Pt[] | null => {
+    // Main 2 is a MAIN — it runs parallel at its lane and meets Main 1 through
+    // the transition turnout's leg, so it never angles away like a spur (#131).
+    if (t.id === MAIN2_TRACK_ID) return null;
     const legs = legsByTrack.get(t.id);
     // Only a genuinely single-ended track (a spur/stub) angles away. A track
     // reached by TWO turnouts is a passing siding — it must stay parallel and
