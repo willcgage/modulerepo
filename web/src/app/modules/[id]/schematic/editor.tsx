@@ -2321,15 +2321,30 @@ function Inspector({
     patch((s) => {
       const L = 48; // lead length (in)
       const R = 24; // balloon radius (in) — ≥ the 22″ Free-moN minimum
-      const { path, outline } = returnLoopPath(shape, { leadInches: L, radius: R });
-      s.mainPath = path.map((p) => ({ x: p.x, y: p.y }));
-      s.sections = []; // the mainPath drives the centre-line now
-      s.outline = outline.map((p) => ({ x: p.x, y: p.y })); // smooth teardrop fascia
+      const { loopPath, outline } = returnLoopPath(shape, { leadInches: L, radius: R });
+      // The MAIN is the straight lead (A → throat); the loop is its own track
+      // that diverges from the wye and returns to it (a real return loop).
+      s.mainPath = [];
+      s.lengthInches = L;
+      s.sections = [];
+      s.outline = outline.map((p) => ({ x: p.x, y: p.y })); // the loop-shaped fascia
       s.loop = true;
       s.configB = "none"; // a pure turnback
-      // A wye at the throat where the loop's two ends rejoin the lead.
+      // The return-loop track: diverges from the wye, around, back to the wye.
+      const loopId = nextId("loop", s.extraTracks.map((t) => t.id));
+      s.extraTracks.push({
+        id: loopId,
+        role: "branch",
+        lane: 1,
+        fromPos: L,
+        toPos: L,
+        path: loopPath.map((p) => ({ x: p.x, y: p.y })),
+        moduleTrackId: null,
+        trackName: "Return loop",
+      });
+      // The wye at the throat, diverging to the loop track.
       const swId = nextId("sw", s.turnouts.map((t) => t.id));
-      s.turnouts.push({ id: swId, pos: L, onTrack: MAIN_TRACK_ID, divergeTrack: "", kind: "wye", name: "Wye" });
+      s.turnouts.push({ id: swId, pos: L, onTrack: MAIN_TRACK_ID, divergeTrack: loopId, kind: "wye", name: "Wye" });
     });
   const head = (title: string, sub?: string) => (
     <div className="mb-3 border-b border-gray-100 pb-2">
