@@ -114,16 +114,17 @@ export type ReturnLoopShape = "teardrop" | "circle" | "offset-teardrop" | "squar
  */
 export function returnLoopPath(
   shape: ReturnLoopShape,
-  opts: { leadInches: number; radius: number },
-): { path: Pt[]; throat: Pt } {
+  opts: { leadInches: number; radius: number; boardHalfWidth?: number },
+): { path: Pt[]; outline: Pt[]; throat: Pt } {
   const L = Math.max(1, opts.leadInches);
   const R = Math.max(1, opts.radius);
+  const hw = opts.boardHalfWidth ?? 6; // half the board width (fascia offset)
   const T = { x: L, y: 0 };
   const path: Pt[] = [{ x: 0, y: 0 }, { x: L, y: 0 }]; // A → lead → throat
-  const round2 = (v: number) => Math.round(v * 100) / 100;
+  const r2 = (v: number) => Math.round(v * 100) / 100;
+  const rd = (pts: Pt[]) => pts.map((p) => ({ x: r2(p.x), y: r2(p.y) }));
 
   if (shape === "square") {
-    // A rectangle turning back on itself — for a rectangular bench.
     const s = 2 * R;
     for (const p of [
       { x: L, y: R },
@@ -133,7 +134,14 @@ export function returnLoopPath(
       { x: L, y: 0 },
     ])
       path.push(p);
-    return { path: path.map((p) => ({ x: round2(p.x), y: round2(p.y) })), throat: T };
+    // Benchwork: the lead + the square, one padded rectangle.
+    const outline = [
+      { x: 0, y: hw },
+      { x: L + s + hw, y: hw },
+      { x: L + s + hw, y: -R - hw },
+      { x: 0, y: -R - hw },
+    ];
+    return { path: rd(path), outline: rd(outline), throat: T };
   }
 
   // teardrop / circle / offset-teardrop: a circle whose centre sits ahead of the
@@ -153,14 +161,31 @@ export function returnLoopPath(
   const a2 = base - ac;
   path.push({ x: C.x + R * Math.cos(a1), y: C.y + R * Math.sin(a1) }); // leg → P1
   const steps = 60;
-  const from = a1;
-  const to = a2 + 2 * Math.PI; // sweep the MAJOR arc (the far side), not through T
   for (let i = 1; i <= steps; i++) {
-    const a = from + (to - from) * (i / steps);
+    const a = a1 + (a2 + 2 * Math.PI - a1) * (i / steps); // MAJOR (far) arc
     path.push({ x: C.x + R * Math.cos(a), y: C.y + R * Math.sin(a) });
   }
   path.push({ x: T.x, y: T.y }); // leg P2 → throat
-  return { path: path.map((p) => ({ x: round2(p.x), y: round2(p.y) })), throat: T };
+
+  // Benchwork = the lead rectangle merged smoothly into the bulb circle (outer
+  // radius R + halfwidth): the lead's top/bottom edges run east until they meet
+  // the circle, then the major arc closes the bulb — a smooth teardrop, no band
+  // lumps or throat notch.
+  const Ro = R + hw;
+  const xTop = C.x - Math.sqrt(Math.max(0, Ro * Ro - (hw - C.y) ** 2));
+  const xBot = C.x - Math.sqrt(Math.max(0, Ro * Ro - (-hw - C.y) ** 2));
+  const thTop = Math.atan2(hw - C.y, xTop - C.x);
+  const thBot = Math.atan2(-hw - C.y, xBot - C.x);
+  const outline: Pt[] = [
+    { x: 0, y: hw },
+    { x: xTop, y: hw },
+  ];
+  for (let i = 1; i <= steps; i++) {
+    const a = thTop + (thBot - 2 * Math.PI - thTop) * (i / steps); // top → far → bottom
+    outline.push({ x: C.x + Ro * Math.cos(a), y: C.y + Ro * Math.sin(a) });
+  }
+  outline.push({ x: xBot, y: -hw }, { x: 0, y: -hw });
+  return { path: rd(path), outline: rd(outline), throat: T };
 }
 
 /**
