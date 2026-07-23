@@ -288,6 +288,7 @@ export function BenchworkEditor({
   mainLane = 0,
   onSectionBreakMove,
   onEndplateEndMove,
+  onEndplateMove,
   tracks = [],
   turnouts = [],
   signals = [],
@@ -346,6 +347,9 @@ export function BenchworkEditor({
    * end of the LAST board, so moving it lengthens or shortens that board and
    * with it the module (#108). */
   onEndplateEndMove?: (id: string, pos: number) => void;
+  /** Reposition a placed branch endplate (C, D…) — the owner drags it and it
+   * clings to the nearest benchwork edge, facing out (#170 junction). */
+  onEndplateMove?: (id: string, pt: Pt) => void;
   /** Sidings/spurs/main-2, positioned along the main and offset to their lane. */
   tracks?: CanvasTrack[];
   turnouts?: CanvasTurnout[];
@@ -449,6 +453,7 @@ export function BenchworkEditor({
     | { kind: "trackEnd"; id: string; end: "from" | "to" }
     | { kind: "sectionBreak"; i: number }
     | { kind: "endplateEnd"; id: string }
+    | { kind: "endplateMove"; id: string }
     | { kind: "industryEnd"; id: string; end: "from" | "to" }
     | null
   >(null);
@@ -1801,6 +1806,11 @@ export function BenchworkEditor({
       }
       return;
     }
+    if (d.kind === "endplateMove") {
+      onEndplateMove?.(d.id, p);
+      setReadout(`${fmt(p.x)}, ${fmt(p.y)}″`);
+      return;
+    }
     if (d.kind === "sectionBreak") {
       if (centerline.length >= 2) {
         // A joint is internal bench work, so nothing constrains where it lands
@@ -2652,11 +2662,11 @@ const ENDPLATE_TAB = 5; // ballast-shoulder band width, inches
               >
                 <title>{`Endplate ${p.id} — the standard interface`}</title>
               </line>
-              {/* Grip to slide this end along the main. Only the FAR end gets
-                  one: endplate A is the origin everything is measured from, so
-                  dragging it would move every position on the board rather
-                  than resize anything (#108). */}
-              {onEndplateEndMove && p.id !== "A" ? (
+              {/* Grip to slide this end along the main. Only endplate B gets
+                  one: A is the origin everything is measured from (dragging it
+                  would move every position on the board), and a branch endplate
+                  is placed in 2-D, not slid along the main (#108/#170). */}
+              {onEndplateEndMove && p.id === "B" ? (
                 <g>
                   {/* Sits a tab's length OUTBOARD of the plate rather than on
                       its track point. Benchwork corners land exactly there on
@@ -2688,6 +2698,26 @@ const ENDPLATE_TAB = 5; // ballast-shoulder band width, inches
                     <title>Drag to lengthen or shorten the last section</title>
                   </circle>
                 </g>
+              ) : null}
+              {/* A placed branch endplate (C, D…) is dragged in 2-D to sit on a
+                  fascia — its face clings to the nearest benchwork edge (#170). */}
+              {onEndplateMove && p.id !== "A" && p.id !== "B" ? (
+                <circle
+                  cx={cxp}
+                  cy={sy(cyp)}
+                  r={world(3.4)}
+                  fill="#fff"
+                  stroke="#7c3aed"
+                  strokeWidth={world(1)}
+                  className="cursor-move"
+                  onPointerDown={(e) => {
+                    e.stopPropagation();
+                    onSelect?.({ kind: "endplate", id: p.id });
+                    beginDrag(e, { kind: "endplateMove", id: p.id });
+                  }}
+                >
+                  <title>Drag to place this endplate on a board edge</title>
+                </circle>
               ) : null}
               <text x={p.x} y={sy(p.y) - r * 1.6} textAnchor="middle" fontSize={r * 2.4} fill="#2563eb">
                 {p.id}
