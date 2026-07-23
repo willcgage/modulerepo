@@ -232,6 +232,9 @@ export function SchematicEditor({
         // this, endplate B sits where a straight module of this length would
         // have ended, not at the end of the chain.
         sections: state.sections,
+        // A balloon/return loop turns back on itself — one endplate (A), no
+        // spurious far B at the throat where the loop closes (#loop).
+        loop: state.loop,
         poseOverrides: state.poseOverrides,
       }),
     [state, geometry],
