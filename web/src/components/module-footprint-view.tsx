@@ -3,6 +3,7 @@ import {
   type ModuleFootprintInput,
   type ModuleSchematicDoc,
 } from "@willcgage/module-schematic";
+import { physicalSchematic } from "@/lib/physical-track";
 
 /**
  * Read-only PHYSICAL module view — the actual board (benchwork outline, or the
@@ -14,10 +15,15 @@ import {
  */
 export function ModuleFootprintView({
   input,
+  doc = null,
   height = 160,
   className,
 }: {
   input: ModuleFootprintInput;
+  /** The schematic doc — when given, the full track plan (both mains, sidings,
+   * spurs, turnouts) is drawn to scale; without it only the mainline spine is,
+   * as before. */
+  doc?: ModuleSchematicDoc | null;
   height?: number;
   className?: string;
 }) {
@@ -58,7 +64,16 @@ export function ModuleFootprintView({
   const sw = Math.max(0.6, w * 0.006);
 
   const polys = boards.map((b) => b.map((p) => `${p.x},${sy(p.y)}`).join(" "));
-  const track = fp.centerline.map((p) => `${p.x},${sy(p.y)}`).join(" ");
+  // The full track plan when we have the doc; otherwise just the spine, as
+  // before — so a double-track / transition module no longer shows a lone line.
+  const plan = doc
+    ? physicalSchematic(fp.centerline, doc)
+    : {
+        tracks: [{ id: "main", pts: fp.centerline, role: "main" as const }],
+        turnouts: [],
+      };
+  const poly = (pts: { x: number; y: number }[]) =>
+    pts.map((p) => `${p.x},${sy(p.y)}`).join(" ");
 
   return (
     <svg
@@ -95,15 +110,25 @@ export function ModuleFootprintView({
           strokeLinecap="round"
         />
       ))}
-      {/* Mainline track */}
-      <polyline
-        points={track}
-        fill="none"
-        stroke="#334155"
-        strokeWidth={sw * 1.4}
-        strokeLinejoin="round"
-        strokeLinecap="round"
-      />
+      {/* The track plan — mains, sidings, spurs, crossovers — to scale */}
+      {plan.tracks
+        .filter((t) => t.pts.length >= 2)
+        .map((t) => (
+          <polyline
+            key={t.id}
+            points={poly(t.pts)}
+            fill="none"
+            stroke="#334155"
+            strokeWidth={t.role === "main" ? sw * 1.4 : sw * 1.1}
+            strokeLinejoin="round"
+            strokeLinecap="round"
+            strokeDasharray={t.role === "spur" ? `${sw * 3} ${sw * 2}` : undefined}
+          />
+        ))}
+      {/* Turnout nodes */}
+      {plan.turnouts.map((t) => (
+        <circle key={t.id} cx={t.x} cy={sy(t.y)} r={sw * 1.6} fill="#334155" />
+      ))}
     </svg>
   );
 }

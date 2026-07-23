@@ -9,7 +9,11 @@ export interface Pt {
   y: number;
 }
 
-import { FREEMO_TRACK_SPACING_INCHES } from "@/lib/module-schematic";
+import {
+  FREEMO_TRACK_SPACING_INCHES,
+  moduleFeatures,
+  type ModuleSchematicDoc,
+} from "@/lib/module-schematic";
 
 /** Free-moN double-track centre spacing (inches) — one lane step. Re-exported
  * from the shared contract so this app and Free-Dispatcher can't drift: the
@@ -120,4 +124,130 @@ export function lanePath(
     out.push({ x: p.x + p.nx * off, y: p.y + p.ny * off });
   }
   return out;
+}
+
+export interface PhysTrack {
+  id: string;
+  pts: Pt[];
+  role: "main" | "siding" | "spur" | "crossover";
+}
+export interface PhysTurnout {
+  id: string;
+  x: number;
+  y: number;
+}
+
+/**
+ * The full track plan of a module, laid on its real (to-scale, curve-following)
+ * centre-line — every main, siding and spur plus turnout nodes, in module-local
+ * inches. This is the physical counterpart of the straightened operations
+ * preview (SchematicPreview): it consumes the SAME `moduleFeatures` extraction
+ * so the two views can't disagree, then maps each feature's (fraction-along,
+ * lane) onto the centre-line so a double-track, a single↔double transition, a
+ * passing siding or a spur all draw as the actual board shows them — not just
+ * the lone spine the footprint used to render (#131 / physical-double-track).
+ */
+export function physicalSchematic(
+  center: Pt[],
+  doc: ModuleSchematicDoc,
+): { tracks: PhysTrack[]; turnouts: PhysTurnout[] } {
+  if (center.length < 2) return { tracks: [], turnouts: [] };
+  const f = moduleFeatures(doc);
+  const len = centerlineLength(center) || 1;
+  const c01 = (v: number) => Math.max(0, Math.min(1, v));
+  /** A point at (fraction along the main, lane offset). */
+  const P = (frac: number, lane: number): Pt => {
+    const s = sampleAt(center, c01(frac) * len);
+    const o = laneOffset(lane);
+    return { x: s.x + s.nx * o, y: s.y + s.ny * o };
+  };
+  /** A body between two fractions at a lane, order-preserving (follows curves). */
+  const body = (f0: number, f1: number, lane: number, steps = 24): Pt[] => {
+    const a = c01(f0) * len;
+    const b = c01(f1) * len;
+    const o = laneOffset(lane);
+    const out: Pt[] = [];
+    for (let s = 0; s <= steps; s++) {
+      const p = sampleAt(center, a + ((b - a) * s) / steps);
+      out.push({ x: p.x + p.nx * o, y: p.y + p.ny * o });
+    }
+    return out;
+  };
+  // A turnout body spans a few track-spacings along the main; as a fraction it
+  // sets the diverge diagonal's run and each siding/spur's throat taper.
+  const gapFrac = Math.min(0.06, (LANE_SPACING_INCHES * 4) / len);
+  const tracks: PhysTrack[] = [];
+
+  // --- Mains: through/branch of a transition, a partial Main 2, a full double,
+  //     or just the single spine — mirroring SchematicPreview's cases. --------
+  if (f.transition) {
+    const { throughLane, branchLane, atFrac, doubleSide } = f.transition;
+    const west = doubleSide === "west";
+    tracks.push({ id: "main1", pts: body(0, 1, throughLane), role: "main" });
+    tracks.push({
+      id: "main2",
+      pts: west
+        ? body(0, atFrac - gapFrac, branchLane)
+        : body(atFrac + gapFrac, 1, branchLane),
+      role: "main",
+    });
+    tracks.push({
+      id: "main2-diverge",
+      pts: [P(west ? atFrac - gapFrac : atFrac + gapFrac, branchLane), P(atFrac, throughLane)],
+      role: "main",
+    });
+  } else {
+    tracks.push({ id: "main1", pts: body(0, 1, 0), role: "main" });
+    if (f.main2Extent) {
+      const { fromFrac, toFrac } = f.main2Extent;
+      tracks.push({ id: "main2", pts: body(fromFrac, toFrac, 1), role: "main" });
+      if (fromFrac > 0)
+        tracks.push({ id: "main2-w", pts: [P(fromFrac - gapFrac, 0), P(fromFrac, 1)], role: "main" });
+      if (toFrac < 1)
+        tracks.push({ id: "main2-e", pts: [P(toFrac, 1), P(toFrac + gapFrac, 0)], role: "main" });
+    } else if (f.doubleMain && !f.loop) {
+      tracks.push({ id: "main2", pts: body(0, 1, 1), role: "main" });
+    }
+  }
+
+  // --- Sidings & spurs — a body on their lane, dipping to the main they
+  //     diverge from at each turnout end (a spur dips once, a siding twice). ---
+  const divergesTo = (id: string) => (doc.turnouts ?? []).some((sw) => sw.divergeTrack === id);
+  const onTrackHas = (id: string) => (doc.turnouts ?? []).some((sw) => sw.onTrack === id);
+  for (const t of f.extraTracks) {
+    const isSpur = t.role === "spur";
+    // A track that turnouts sit ON but nothing switches INTO (a crossover leg)
+    // stays flat — its connection is the crossover diagonal, not an end dip.
+    const flat = !isSpur && !divergesTo(t.id) && onTrackHas(t.id);
+    const tx = isSpur ? t.throatFrac : t.fromFrac;
+    const ex = isSpur ? t.stubFrac : t.toFrac;
+    const spanFrac = Math.abs(ex - tx);
+    const thr = Math.min(spanFrac * 0.12 + gapFrac, isSpur ? spanFrac : spanFrac / 2);
+    const dir = ex >= tx ? 1 : -1;
+    const pts = flat
+      ? body(tx, ex, t.lane)
+      : isSpur
+        ? [P(tx, t.divergesFromLane), ...body(tx + dir * thr, ex, t.lane)]
+        : [
+            P(tx, t.divergesFromLane),
+            ...body(tx + dir * thr, ex - dir * thr, t.lane),
+            P(ex, t.divergesFromLane),
+          ];
+    tracks.push({ id: t.id, pts, role: isSpur ? "spur" : "siding" });
+  }
+
+  // --- Crossovers — a straight diagonal joining the two mains. --------------
+  for (const x of f.crossovers)
+    tracks.push({
+      id: x.id,
+      pts: [P(x.fromPosFrac, x.fromLane), P(x.toPosFrac, x.toLane)],
+      role: "crossover",
+    });
+
+  const turnouts: PhysTurnout[] = f.turnouts.map((t) => {
+    const p = P(t.posFrac, t.onLane);
+    return { id: t.id, x: p.x, y: p.y };
+  });
+
+  return { tracks, turnouts };
 }

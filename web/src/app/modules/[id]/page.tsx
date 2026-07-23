@@ -255,6 +255,7 @@ export default async function ModuleDetailPage({
               </h3>
               <ModuleFootprintView
                 input={footprintInput(module, asModuleSchematic(module.schematic))}
+                doc={asModuleSchematic(module.schematic)}
                 height={200}
               />
               <p className="mt-1 text-xs text-gray-400">

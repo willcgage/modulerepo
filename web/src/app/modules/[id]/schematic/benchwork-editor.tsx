@@ -838,7 +838,13 @@ export function BenchworkEditor({
       // (spurTrackPath prepends it) or a single-ended stub (divergingStubPath
       // starts with it). A passing siding's body now runs frog→frog, so its
       // legs are NOT in the band — draw them all (#133).
-      for (let i = authored || stub ? 1 : 0; i < legs.length; i++) {
+      // Main 2 is the exception: it draws PARALLEL (lanePath / its own authored
+      // path, never spurTrackPath/divergingStubPath), so its band carries no
+      // leg. The transition turnout's throat→frog leg — the diverging rails
+      // joining Main 1 to Main 2 — must be drawn here or the transition shows
+      // only a bare frog dot (#131 regression: Main-2-parallel orphaned it).
+      const bandCarriesLeg0 = trackId !== MAIN2_TRACK_ID && (authored || stub);
+      for (let i = bandCarriesLeg0 ? 1 : 0; i < legs.length; i++) {
         out.push({ id: `${trackId}-leg${i}`, pts: legs[i].leg });
       }
     }

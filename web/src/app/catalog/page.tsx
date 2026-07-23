@@ -94,7 +94,7 @@ export default async function CatalogPage() {
 
                 <div className="mt-3 space-y-2">
                   {/* Physical board (to scale) — the primary browse signal */}
-                  <ModuleFootprintView input={footprintInput(m, doc)} height={90} />
+                  <ModuleFootprintView input={footprintInput(m, doc)} doc={doc} height={90} />
                   {/* Dispatcher schematic — how it operates */}
                   {doc ? (
                     <SchematicPreview doc={doc} />
