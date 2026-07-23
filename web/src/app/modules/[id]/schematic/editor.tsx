@@ -3500,6 +3500,43 @@ function Inspector({
   const i = state.extraTracks.findIndex((t) => t.id === selection.id);
   if (i < 0) return null;
   const t = state.extraTracks[i];
+  // A branch route to a placed endplate (#170) is authored by its PATH (bend it
+  // on the board) and pinned to its endplate — it has no siding-style extent,
+  // kind or capacity to edit, so it gets its own compact inspector.
+  if (t.role === "branch") {
+    const bIdx = state.branches.findIndex((b) => b.trackId === t.id);
+    const epId = bIdx >= 0 ? String.fromCharCode(67 + bIdx) : "?";
+    return shell(
+      `Track · ${trackLabel(t, i)}`,
+      <>
+        <label className="block text-xs font-medium text-gray-600">
+          Name
+          <input
+            value={t.trackName ?? ""}
+            onChange={(e) => patch((s) => (s.extraTracks[i].trackName = e.target.value))}
+            className={`mt-0.5 ${inp}`}
+          />
+        </label>
+        <p className="rounded-md bg-gray-50 px-2 py-1.5 text-xs text-gray-600">
+          Branch route to <span className="font-medium">endplate {epId}</span>.
+          Drag its bend handles on the board to match the build; it meets the
+          endplate square, straight for 4″ from the face (Free-moN §2.0).
+        </p>
+      </>,
+      {
+        fn: () =>
+          patch((s) => {
+            const removed = s.extraTracks[i]?.id;
+            s.extraTracks.splice(i, 1);
+            if (removed) {
+              for (const tn of s.turnouts) if (tn.divergeTrack === removed) tn.divergeTrack = "";
+              for (const b of s.branches) if (b.trackId === removed) b.trackId = null;
+            }
+          }),
+        label: "Remove branch route",
+      },
+    );
+  }
   return shell(
     `Track · ${trackLabel(t, i)}`,
     <>

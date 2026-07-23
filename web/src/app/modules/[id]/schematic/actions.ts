@@ -106,7 +106,10 @@ export async function saveModuleSchematic(
     }
 
     // Sync the module's Track section (module_tracks) from the schematic tracks.
-    const extraTracks = doc.tracks.filter((t) => t.role !== "main");
+    // A branch route to a placed endplate (#170) is through geometry, not a
+    // car-spotting track — it has no meaningful capacity (it can be zero-length
+    // along the main), so it lives only in the schematic doc, never module_tracks.
+    const extraTracks = doc.tracks.filter((t) => t.role !== "main" && t.role !== "branch");
     const keptIds: number[] = [];
     for (const t of extraTracks) {
       const capacity =
