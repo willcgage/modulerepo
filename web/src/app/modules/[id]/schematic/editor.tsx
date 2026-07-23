@@ -2402,7 +2402,20 @@ function Inspector({
                 type="checkbox"
                 className="mt-0.5"
                 checked={state.mainsSwapped ?? false}
-                onChange={(e) => patch((s) => (s.mainsSwapped = e.target.checked))}
+                onChange={(e) =>
+                  patch((s) => {
+                    s.mainsSwapped = e.target.checked;
+                    // The transition turnout's hand is coupled to which side
+                    // Main 2 is on, so re-derive it when the swap flips —
+                    // otherwise its leg keeps pointing at where Main 2 used to
+                    // be and stops connecting (#149). Same formula as
+                    // buildTransition: the leg lands on Main 2's side.
+                    const aDouble = s.configA === "double";
+                    const kind =
+                      (aDouble ? -1 : 1) === (s.mainsSwapped ? -1 : 1) ? "left" : "right";
+                    for (const t of s.turnouts) if (isTransitionTurnout(t)) t.kind = kind;
+                  })
+                }
               />
               <span>
                 <span className="font-medium">Draw Main 2 below Main 1</span> — put
