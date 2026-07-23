@@ -35,7 +35,8 @@ import {
   endplateLead,
   type SchematicSection,
 } from "@/lib/module-schematic";
-import { snapPoseToOutline, sampleAt, returnLoopPath, type ReturnLoopShape } from "@/lib/physical-track";
+import { snapPoseToOutline, sampleAt } from "@/lib/physical-track";
+import { returnLoop, type ReturnLoopShape } from "@/lib/module-schematic";
 import { SchematicPreview } from "./schematic-preview";
 import {
   BenchworkEditor,
@@ -2321,13 +2322,13 @@ function Inspector({
     patch((s) => {
       const L = 48; // lead length (in)
       const R = 24; // balloon radius (in) — ≥ the 22″ Free-moN minimum
-      const { loopPath, outline } = returnLoopPath(shape, { leadInches: L, radius: R });
+      const g = returnLoop(shape, { leadInches: L, radius: R }); // tested geometry
       // The MAIN is the straight lead (A → throat); the loop is its own track
       // that diverges from the wye and returns to it (a real return loop).
       s.mainPath = [];
       s.lengthInches = L;
       s.sections = [];
-      s.outline = outline.map((p) => ({ x: p.x, y: p.y })); // the loop-shaped fascia
+      s.outline = g.outlineOuter.map((p) => ({ x: p.x, y: p.y }));
       s.loop = true;
       s.configB = "none"; // a pure turnback
       // The return-loop track: diverges from the wye, around, back to the wye.
@@ -2338,7 +2339,7 @@ function Inspector({
         lane: 1,
         fromPos: L,
         toPos: L,
-        path: loopPath.map((p) => ({ x: p.x, y: p.y })),
+        path: g.loop.map((p) => ({ x: p.x, y: p.y })),
         moduleTrackId: null,
         trackName: "Return loop",
       });
