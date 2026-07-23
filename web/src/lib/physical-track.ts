@@ -126,6 +126,57 @@ export function lanePath(
   return out;
 }
 
+/**
+ * Snap a point to the module's benchwork perimeter and return where an endplate
+ * placed there sits: the nearest point on the outline boundary + the edge's
+ * OUTWARD-normal heading (degrees, 0 = +x east). This is how a placed 3rd
+ * endplate lands on a fascia — the owner drags it and it clings to the board
+ * edge, facing out. Returns null when there's no real outline yet.
+ */
+export function snapPoseToOutline(
+  outline: Pt[],
+  p: Pt,
+): { x: number; y: number; heading: number } | null {
+  if (!outline || outline.length < 2) return null;
+  let cx = 0;
+  let cy = 0;
+  for (const v of outline) {
+    cx += v.x;
+    cy += v.y;
+  }
+  cx /= outline.length;
+  cy /= outline.length;
+  let best: { x: number; y: number; d: number; heading: number } | null = null;
+  const n = outline.length;
+  for (let i = 0; i < n; i++) {
+    const a = outline[i];
+    const b = outline[(i + 1) % n];
+    const dx = b.x - a.x;
+    const dy = b.y - a.y;
+    const len2 = dx * dx + dy * dy || 1;
+    let t = ((p.x - a.x) * dx + (p.y - a.y) * dy) / len2;
+    t = Math.max(0, Math.min(1, t));
+    const qx = a.x + dx * t;
+    const qy = a.y + dy * t;
+    const d = Math.hypot(p.x - qx, p.y - qy);
+    if (!best || d < best.d) {
+      // Edge normal, flipped to point away from the polygon centroid (outward).
+      let nx = -dy;
+      let ny = dx;
+      const nl = Math.hypot(nx, ny) || 1;
+      nx /= nl;
+      ny /= nl;
+      if ((qx - cx) * nx + (qy - cy) * ny < 0) {
+        nx = -nx;
+        ny = -ny;
+      }
+      best = { x: qx, y: qy, d, heading: (Math.atan2(ny, nx) * 180) / Math.PI };
+    }
+  }
+  if (!best) return null;
+  return { x: best.x, y: best.y, heading: ((best.heading % 360) + 360) % 360 };
+}
+
 export interface PhysTrack {
   id: string;
   pts: Pt[];

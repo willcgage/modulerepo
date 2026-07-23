@@ -34,6 +34,7 @@ import {
   sectionSpans,
   type SchematicSection,
 } from "@/lib/module-schematic";
+import { snapPoseToOutline } from "@/lib/physical-track";
 import { SchematicPreview } from "./schematic-preview";
 import {
   BenchworkEditor,
@@ -650,6 +651,45 @@ export function SchematicEditor({
       const v = parseFloat(raw);
       if (raw.trim() !== "" && Number.isFinite(v)) s.endplateTrackOffsets[id] = v;
       else delete s.endplateTrackOffsets[id];
+    });
+
+  // --- Place-an-endplate (#170 junction authoring) --------------------------
+  // A 3rd+ endplate (C, D…) is PLACED on the board, then track is drawn to it
+  // separately (per the owner's model). Adding one creates no track or turnout.
+  const addEndplate = () => {
+    const id = String.fromCharCode(67 + state.branches.length); // C, D, E…
+    patch((s) => {
+      const midX = Math.max(1, Math.round(s.lengthInches / 2));
+      // Drop it on the perimeter: snap a far-side point to the nearest outline
+      // edge (facing out). Fallback to a default when there's no board yet.
+      const pose = snapPoseToOutline(s.outline, { x: midX, y: 1000 }) ?? {
+        x: midX,
+        y: 12,
+        heading: 90,
+      };
+      s.branches.push({
+        label: `Branch ${s.branches.length + 1}`,
+        pos: midX,
+        side: pose.heading > 180 ? "down" : "up",
+        config: "single",
+        kind: "branch",
+        trackId: null,
+      });
+      s.poseOverrides[id] = { x: pose.x, y: pose.y, heading: pose.heading };
+    });
+    setSelection({ kind: "endplate", id });
+  };
+  /** Drag a placed endplate along the perimeter — its face clings to the
+   * nearest benchwork edge, facing out; the ops-preview arrow follows. */
+  const moveEndplate = (id: string, pt: { x: number; y: number }) =>
+    patch((s) => {
+      const pose = snapPoseToOutline(s.outline, pt) ?? { x: pt.x, y: pt.y, heading: 90 };
+      s.poseOverrides[id] = { x: pose.x, y: pose.y, heading: pose.heading };
+      const bi = id.charCodeAt(0) - 67;
+      if (bi >= 0 && s.branches[bi]) {
+        s.branches[bi].pos = Math.max(0, Math.min(s.lengthInches, Math.round(pose.x)));
+        s.branches[bi].side = pose.heading > 180 ? "down" : "up";
+      }
     });
 
   // --- Draw-to-create sidings & spurs (#51) ---------------------------------
@@ -1385,6 +1425,7 @@ export function SchematicEditor({
                 sectionBreaks={canvasSectionBreaks}
                 onSectionBreakMove={moveSectionJoint}
                 onEndplateEndMove={moveEndplateEnd}
+                onEndplateMove={moveEndplate}
                 tracks={canvasTracks}
                 turnouts={canvasTurnouts}
                 signals={canvasSignals}
@@ -1489,6 +1530,7 @@ export function SchematicEditor({
               crossing: addCrossing,
               controlPoint: addControlPoint,
               industry: addIndustry,
+              endplate: addEndplate,
             }}
             mainlineDouble={isDouble}
             mainlineLocked={lockedConfigs.a || lockedConfigs.b}
@@ -2557,17 +2599,35 @@ function Inspector({
                 </select>
               </label>
             </div>
-            <label className="block text-xs font-medium text-gray-600">
-              Endplate track
-              <select
-                value={branch.config}
-                onChange={(e) => patch((s) => (s.branches[bi].config = e.target.value as "single" | "double"))}
-                className={`mt-0.5 ${inp}`}
-              >
-                <option value="single">Single</option>
-                <option value="double">Double</option>
-              </select>
-            </label>
+            <div className="grid grid-cols-2 gap-2">
+              <label className="block text-xs font-medium text-gray-600">
+                Endplate track
+                <select
+                  value={branch.config}
+                  onChange={(e) => patch((s) => (s.branches[bi].config = e.target.value as "single" | "double"))}
+                  className={`mt-0.5 ${inp}`}
+                >
+                  <option value="single">Single</option>
+                  <option value="double">Double</option>
+                </select>
+              </label>
+              <label className="block text-xs font-medium text-gray-600">
+                Route is a…
+                <select
+                  value={branch.kind ?? "branch"}
+                  onChange={(e) => patch((s) => (s.branches[bi].kind = e.target.value as "branch" | "main"))}
+                  className={`mt-0.5 ${inp}`}
+                >
+                  <option value="branch">Branch line</option>
+                  <option value="main">Diverging main</option>
+                </select>
+              </label>
+            </div>
+            <p className="text-[11px] text-gray-400">
+              Drag the endplate on the board to place it on a fascia, then draw
+              track to it. Track must cross square and run straight for 4″ from
+              the face (Free-moN §2.0).
+            </p>
           </>
         ) : (
           <label className="block text-xs font-medium text-gray-600">
@@ -3699,6 +3759,7 @@ function ObjectsList({
     controlPoint: () => void;
     industry: () => void;
     mainline: (config: "single" | "double") => void;
+    endplate: () => void;
   };
   mainlineDouble: boolean;
   mainlineLocked: boolean;
@@ -3735,7 +3796,20 @@ function ObjectsList({
       </h2>
 
       {endplates.length > 0 && (
-        <Group title="Endplates" count={endplates.length}>
+        <Group
+          title="Endplates"
+          count={endplates.length}
+          actions={
+            <button
+              type="button"
+              onClick={add.endplate}
+              className={addBtn}
+              title="Add a 3rd+ endplate (a junction) — placed on the board; draw track to it separately."
+            >
+              + Endplate
+            </button>
+          }
+        >
           {endplates.map((e) =>
             row(
               `ep${e.id}`,
