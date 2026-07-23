@@ -277,6 +277,8 @@ export function SchematicEditor({
         // footprint honest for docs that already carry them.
         sections: state.sections,
         mainPath: state.mainPath,
+        // A loop's centre-line ends at the throat — no far endplate face there.
+        loop: state.loop,
       }),
     [
       state.lengthInches,
@@ -285,6 +287,7 @@ export function SchematicEditor({
       state.outline,
       state.sections,
       state.mainPath,
+      state.loop,
       geometry,
     ],
   );

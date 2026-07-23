@@ -172,5 +172,7 @@ export function footprintInput(
     // the centre-line — without it the read-only/catalog views fell back to the
     // straight geometry and never drew the loop (#loop).
     mainPath: (doc as { mainPath?: ModuleSchematicDoc["mainPath"] } | null)?.mainPath ?? null,
+    // A loop's centre-line ends at the throat — drop the spurious far endplate face.
+    loop: (doc as { loop?: boolean } | null)?.loop === true,
   };
 }
