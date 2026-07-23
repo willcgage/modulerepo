@@ -2482,6 +2482,39 @@ function Inspector({
               interchange.
             </span>
           </label>
+          {/* Turn-key balloon: appends a ring of curved boards that turns the
+              main back on itself, so the physical view draws a teardrop. Each 90°
+              board is its own transportable section (a multi-section loop); tweak
+              their lengths to set the radius (r = length ÷ 1.571). (#loop) */}
+          <button
+            type="button"
+            onClick={() =>
+              patch((s) => {
+                const r = 15; // default balloon radius (in); tweak sections after
+                const arc = Math.round(r * (Math.PI / 2) * 10) / 10; // 90° arc len
+                const lead = s.sections.length
+                  ? [...s.sections]
+                  : [{ id: "sec1", name: "Lead", lengthInches: Math.max(12, Math.round(s.lengthInches || 24)) }];
+                let n = lead.reduce((m, sec) => {
+                  const k = /^sec(\d+)$/.exec(sec.id);
+                  return k ? Math.max(m, Number(k[1])) : m;
+                }, lead.length);
+                const balloon = [0, 1, 2, 3].map((i) => ({
+                  id: `sec${++n}`,
+                  name: `Balloon ${i + 1}`,
+                  lengthInches: arc,
+                  geometryType: "curve",
+                  geometryDegrees: 90,
+                }));
+                s.sections = [...lead, ...balloon];
+                s.loop = true;
+                s.configB = "none"; // a pure turnback, not an interchange
+              })
+            }
+            className={`${addBtn} w-full`}
+          >
+            Make a return loop (balloon) →
+          </button>
           {/* Which main draws above. MR puts Main 1 on the centre line by
               default, but on some modules the UPPER track is the through/
               primary main (#FMN-0043) — swap the drawn positions. */}
