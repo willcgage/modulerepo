@@ -2700,24 +2700,38 @@ const ENDPLATE_TAB = 5; // ballast-shoulder band width, inches
                 </g>
               ) : null}
               {/* A placed branch endplate (C, D…) is dragged in 2-D to sit on a
-                  fascia — its face clings to the nearest benchwork edge (#170). */}
+                  fascia — its face clings to the nearest benchwork edge (#170).
+                  The grab sits a tab OUTBOARD of the face so it clears the
+                  benchwork edge's own midpoint handle, which lands on the same
+                  spot when the plate is on an edge. */}
               {onEndplateMove && p.id !== "A" && p.id !== "B" ? (
-                <circle
-                  cx={cxp}
-                  cy={sy(cyp)}
-                  r={world(3.4)}
-                  fill="#fff"
-                  stroke="#7c3aed"
-                  strokeWidth={world(1)}
-                  className="cursor-move"
-                  onPointerDown={(e) => {
-                    e.stopPropagation();
-                    onSelect?.({ kind: "endplate", id: p.id });
-                    beginDrag(e, { kind: "endplateMove", id: p.id });
-                  }}
-                >
-                  <title>Drag to place this endplate on a board edge</title>
-                </circle>
+                <g>
+                  <line
+                    x1={cxp}
+                    y1={sy(cyp)}
+                    x2={cxp + hxo * ENDPLATE_TAB}
+                    y2={sy(cyp + hyo * ENDPLATE_TAB)}
+                    stroke="#7c3aed"
+                    strokeWidth={world(0.8)}
+                    pointerEvents="none"
+                  />
+                  <circle
+                    cx={cxp + hxo * ENDPLATE_TAB}
+                    cy={sy(cyp + hyo * ENDPLATE_TAB)}
+                    r={world(3.4)}
+                    fill="#fff"
+                    stroke="#7c3aed"
+                    strokeWidth={world(1)}
+                    className="cursor-move"
+                    onPointerDown={(e) => {
+                      e.stopPropagation();
+                      onSelect?.({ kind: "endplate", id: p.id });
+                      beginDrag(e, { kind: "endplateMove", id: p.id });
+                    }}
+                  >
+                    <title>Drag to place this endplate on a board edge</title>
+                  </circle>
+                </g>
               ) : null}
               <text x={p.x} y={sy(p.y) - r * 1.6} textAnchor="middle" fontSize={r * 2.4} fill="#2563eb">
                 {p.id}
