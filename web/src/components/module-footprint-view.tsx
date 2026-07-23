@@ -154,12 +154,18 @@ export function footprintInput(
     const w = (e as { widthInches?: number | null }).widthInches;
     if (typeof w === "number" && w > 0) endplateWidths[e.id] = w;
   }
+  // A return loop's mainline is just the LEAD (the loop is a separate track), so
+  // its length lives in the doc, not the module record's stored total — using the
+  // record here ran the main straight through the loop (#loop).
+  const isLoop = (doc as { loop?: boolean } | null)?.loop === true;
   const len =
-    (module.mainline_length_inches && module.mainline_length_inches > 0
-      ? module.mainline_length_inches
-      : module.length_total_inches && module.length_total_inches > 0
-        ? module.length_total_inches
-        : doc?.lengthInches) || 24;
+    (isLoop && doc?.lengthInches
+      ? doc.lengthInches
+      : module.mainline_length_inches && module.mainline_length_inches > 0
+        ? module.mainline_length_inches
+        : module.length_total_inches && module.length_total_inches > 0
+          ? module.length_total_inches
+          : doc?.lengthInches) || 24;
   return {
     lengthInches: len,
     geometryType: module.geometry_type,
