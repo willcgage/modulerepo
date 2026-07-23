@@ -102,6 +102,64 @@ export function projectToCenterline(
   return best;
 }
 
+export type ReturnLoopShape = "teardrop" | "circle" | "offset-teardrop" | "square";
+
+/**
+ * A computed return-loop centre-line: the LEAD (straight, from endplate A east
+ * to the throat) then the loop track, which curls around the chosen shape and
+ * returns to the throat. Used as the module's authored `mainPath` so the physical
+ * view draws the real teardrop/circle/square (a section chain can't express the
+ * sharp wye kink at the throat). `throat` is where the loop rejoins the lead — a
+ * wye turnout sits there. Pure geometry; tuned visually per shape (#loop).
+ */
+export function returnLoopPath(
+  shape: ReturnLoopShape,
+  opts: { leadInches: number; radius: number },
+): { path: Pt[]; throat: Pt } {
+  const L = Math.max(1, opts.leadInches);
+  const R = Math.max(1, opts.radius);
+  const T = { x: L, y: 0 };
+  const path: Pt[] = [{ x: 0, y: 0 }, { x: L, y: 0 }]; // A → lead → throat
+  const round2 = (v: number) => Math.round(v * 100) / 100;
+
+  if (shape === "square") {
+    // A rectangle turning back on itself — for a rectangular bench.
+    const s = 2 * R;
+    for (const p of [
+      { x: L, y: R },
+      { x: L + s, y: R },
+      { x: L + s, y: -R },
+      { x: L, y: -R },
+      { x: L, y: 0 },
+    ])
+      path.push(p);
+    return { path: path.map((p) => ({ x: round2(p.x), y: round2(p.y) })), throat: T };
+  }
+
+  // teardrop / circle / offset-teardrop: a circle whose centre sits ahead of the
+  // throat; the loop is the MAJOR (far) arc between the two tangent points, so
+  // the two throat legs meet at a point (the teardrop). A near centre → round
+  // (circle); a far centre → a narrow point (teardrop).
+  const D = shape === "circle" ? R * 1.08 : R * 3.4; // throat → circle-centre
+  const offY = shape === "offset-teardrop" ? R * 1.1 : 0;
+  const C = { x: L + D, y: offY };
+  const dist = Math.hypot(C.x - T.x, C.y - T.y) || R;
+  const ac = Math.acos(Math.min(1, R / dist)); // half-angle of the tangent legs
+  const base = Math.atan2(T.y - C.y, T.x - C.x); // C → T direction
+  const a1 = base + ac;
+  const a2 = base - ac;
+  path.push({ x: C.x + R * Math.cos(a1), y: C.y + R * Math.sin(a1) }); // leg → P1
+  const steps = 60;
+  const from = a1;
+  const to = a2 + 2 * Math.PI; // sweep the MAJOR arc (the far side), not through T
+  for (let i = 1; i <= steps; i++) {
+    const a = from + (to - from) * (i / steps);
+    path.push({ x: C.x + R * Math.cos(a), y: C.y + R * Math.sin(a) });
+  }
+  path.push({ x: T.x, y: T.y }); // leg P2 → throat
+  return { path: path.map((p) => ({ x: round2(p.x), y: round2(p.y) })), throat: T };
+}
+
 /**
  * The physical path of a track that runs from `fromPos` to `toPos` inches along
  * the mainline, offset to its lane — i.e. a siding/spur drawn on the real board,

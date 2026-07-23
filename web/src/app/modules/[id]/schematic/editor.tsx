@@ -35,7 +35,7 @@ import {
   endplateLead,
   type SchematicSection,
 } from "@/lib/module-schematic";
-import { snapPoseToOutline, sampleAt } from "@/lib/physical-track";
+import { snapPoseToOutline, sampleAt, returnLoopPath, type ReturnLoopShape } from "@/lib/physical-track";
 import { SchematicPreview } from "./schematic-preview";
 import {
   BenchworkEditor,
@@ -2309,6 +2309,25 @@ function Inspector({
   carTypes: { value: string; display_label: string }[];
   onCarTypeSuggested: (o: { value: string; display_label: string }) => void;
 }) {
+  const [loopShape, setLoopShape] = useState<ReturnLoopShape>("teardrop");
+  /** Turn the lead into a return loop of the chosen shape: a computed loop
+   * centre-line (a section chain can't express the sharp wye at the throat) set
+   * as the module's mainPath, plus a wye turnout where the loop rejoins the
+   * lead. Tuned visually per shape (#loop). */
+  const makeReturnLoop = (shape: ReturnLoopShape) =>
+    patch((s) => {
+      const L = 48; // lead length (in)
+      const R = 24; // balloon radius (in) — ≥ the 22″ Free-moN minimum
+      const { path } = returnLoopPath(shape, { leadInches: L, radius: R });
+      s.mainPath = path.map((p) => ({ x: p.x, y: p.y }));
+      s.sections = []; // the mainPath drives the centre-line now
+      s.outline = []; // derive the benchwork band from the centre-line
+      s.loop = true;
+      s.configB = "none"; // a pure turnback
+      // A wye at the throat where the loop's two ends rejoin the lead.
+      const swId = nextId("sw", s.turnouts.map((t) => t.id));
+      s.turnouts.push({ id: swId, pos: L, onTrack: MAIN_TRACK_ID, divergeTrack: "", kind: "wye", name: "Wye" });
+    });
   const head = (title: string, sub?: string) => (
     <div className="mb-3 border-b border-gray-100 pb-2">
       <h2 className="text-sm font-semibold text-gray-900">{title}</h2>
@@ -2486,40 +2505,33 @@ function Inspector({
               interchange.
             </span>
           </label>
-          {/* Turn-key balloon: appends a ring of curved boards that turns the
-              main back on itself, so the physical view draws a teardrop. Each 90°
-              board is its own transportable section (a multi-section loop); tweak
-              their lengths to set the radius (r = length ÷ 1.571). (#loop) */}
-          <button
-            type="button"
-            onClick={() =>
-              patch((s) => {
-                const r = 24; // default balloon radius (in) — ≥ the 22″ Free-moN
-                // minimum main-line radius; tweak the section lengths to change it
-                const arc = Math.round(r * (Math.PI / 2) * 10) / 10; // 90° arc len
-                const lead = s.sections.length
-                  ? [...s.sections]
-                  : [{ id: "sec1", name: "Lead", lengthInches: Math.max(12, Math.round(s.lengthInches || 24)) }];
-                let n = lead.reduce((m, sec) => {
-                  const k = /^sec(\d+)$/.exec(sec.id);
-                  return k ? Math.max(m, Number(k[1])) : m;
-                }, lead.length);
-                const balloon = [0, 1, 2, 3].map((i) => ({
-                  id: `sec${++n}`,
-                  name: `Balloon ${i + 1}`,
-                  lengthInches: arc,
-                  geometryType: "curve",
-                  geometryDegrees: 90,
-                }));
-                s.sections = [...lead, ...balloon];
-                s.loop = true;
-                s.configB = "none"; // a pure turnback, not an interchange
-              })
-            }
-            className={`${addBtn} w-full`}
-          >
-            Make a return loop (balloon) →
-          </button>
+          {/* Turn the lead into a return loop of the chosen shape, with a wye at
+              the throat where the loop rejoins the lead (#loop). */}
+          <div className="rounded-md border border-gray-200 p-2">
+            <p className="mb-1 text-xs font-medium text-gray-700">Return loop (balloon)</p>
+            <p className="mb-1.5 text-[11px] text-gray-500">
+              Turns the lead into a loop that returns to a wye at the throat.
+            </p>
+            <div className="flex items-center gap-2">
+              <select
+                value={loopShape}
+                onChange={(e) => setLoopShape(e.target.value as ReturnLoopShape)}
+                className={inp}
+              >
+                <option value="teardrop">Teardrop</option>
+                <option value="circle">Circle</option>
+                <option value="offset-teardrop">Offset teardrop</option>
+                <option value="square">Square</option>
+              </select>
+              <button
+                type="button"
+                onClick={() => makeReturnLoop(loopShape)}
+                className={`${addBtn} shrink-0`}
+              >
+                Make loop →
+              </button>
+            </div>
+          </div>
           {/* Which main draws above. MR puts Main 1 on the centre line by
               default, but on some modules the UPPER track is the through/
               primary main (#FMN-0043) — swap the drawn positions. */}
