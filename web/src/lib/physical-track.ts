@@ -140,8 +140,11 @@ export function returnLoopPath(
   // throat; the loop is the MAJOR (far) arc between the two tangent points, so
   // the two throat legs meet at a point (the teardrop). A near centre → round
   // (circle); a far centre → a narrow point (teardrop).
-  const D = shape === "circle" ? R * 1.08 : R * 3.4; // throat → circle-centre
-  const offY = shape === "offset-teardrop" ? R * 1.1 : 0;
+  // throat → circle-centre. Near R → the throat sits just off the circle: a
+  // full round loop (circle) or a teardrop with short converging legs at the
+  // point and a dominant bulb. Far → a stretched, narrow teardrop (avoid).
+  const D = shape === "circle" ? R * 1.05 : R * 1.25;
+  const offY = shape === "offset-teardrop" ? R * 0.8 : 0;
   const C = { x: L + D, y: offY };
   const dist = Math.hypot(C.x - T.x, C.y - T.y) || R;
   const ac = Math.acos(Math.min(1, R / dist)); // half-angle of the tangent legs
