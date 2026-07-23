@@ -566,6 +566,10 @@ export function SchematicEditor({
   /** Boards not connected to the piece endplate A is on. A module is one piece
    * of bench work; anything else is a board drawn somewhere it can't be. */
   const floatingSections = useMemo(() => {
+    // A loop's balloon boards form a RING that closes back on itself; the
+    // linear "does each board meet a neighbour" check can't model that closure,
+    // so it would flag every balloon board as floating. Skip it for loops (#loop).
+    if (state.loop) return new Set<string>();
     if (state.sections.length < 2) return new Set<string>();
     const groups = sectionComponents(
       state.sections.map((sec) => sec.id),
@@ -574,7 +578,7 @@ export function SchematicEditor({
     if (groups.length < 2) return new Set<string>();
     const main = groups.find((g) => g.includes(state.sections[0].id)) ?? groups[0];
     return new Set(groups.filter((g) => g !== main).flat());
-  }, [state.sections, sectionMeets]);
+  }, [state.sections, sectionMeets, state.loop]);
 
   /** The joints the canvas should draw. A sectioned module derives them from
    * cumulative section lengths; an unsectioned one still uses its authored
@@ -2490,7 +2494,8 @@ function Inspector({
             type="button"
             onClick={() =>
               patch((s) => {
-                const r = 15; // default balloon radius (in); tweak sections after
+                const r = 24; // default balloon radius (in) — ≥ the 22″ Free-moN
+                // minimum main-line radius; tweak the section lengths to change it
                 const arc = Math.round(r * (Math.PI / 2) * 10) / 10; // 90° arc len
                 const lead = s.sections.length
                   ? [...s.sections]
