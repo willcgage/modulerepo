@@ -168,5 +168,9 @@ export function footprintInput(
     endplateWidths,
     outline: (doc as { outline?: ModuleSchematicDoc["outline"] } | null)?.outline ?? null,
     sections: (doc as { sections?: ModuleSchematicDoc["sections"] } | null)?.sections ?? null,
+    // An authored mainline path (a drawn curve, or a computed return loop) wins
+    // the centre-line — without it the read-only/catalog views fell back to the
+    // straight geometry and never drew the loop (#loop).
+    mainPath: (doc as { mainPath?: ModuleSchematicDoc["mainPath"] } | null)?.mainPath ?? null,
   };
 }
