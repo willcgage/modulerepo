@@ -12,6 +12,7 @@ export interface Pt {
 import {
   FREEMO_TRACK_SPACING_INCHES,
   moduleFeatures,
+  samplePath,
   type ModuleSchematicDoc,
 } from "@/lib/module-schematic";
 
@@ -180,12 +181,19 @@ export function snapPoseToOutline(
 export interface PhysTrack {
   id: string;
   pts: Pt[];
-  role: "main" | "siding" | "spur" | "crossover";
+  role: "main" | "siding" | "spur" | "crossover" | "branch";
 }
 export interface PhysTurnout {
   id: string;
   x: number;
   y: number;
+}
+/** A drawn endplate face (the standardized interface) as a segment, for the ends
+ * moduleFootprint doesn't emit — i.e. the placed branch endplates C, D…. */
+export interface PhysFace {
+  id: string;
+  p1: Pt;
+  p2: Pt;
 }
 
 /**
@@ -201,8 +209,8 @@ export interface PhysTurnout {
 export function physicalSchematic(
   center: Pt[],
   doc: ModuleSchematicDoc,
-): { tracks: PhysTrack[]; turnouts: PhysTurnout[] } {
-  if (center.length < 2) return { tracks: [], turnouts: [] };
+): { tracks: PhysTrack[]; turnouts: PhysTurnout[]; faces: PhysFace[] } {
+  if (center.length < 2) return { tracks: [], turnouts: [], faces: [] };
   const f = moduleFeatures(doc);
   const len = centerlineLength(center) || 1;
   const c01 = (v: number) => Math.max(0, Math.min(1, v));
@@ -300,5 +308,33 @@ export function physicalSchematic(
     return { id: t.id, x: p.x, y: p.y };
   });
 
-  return { tracks, turnouts };
+  // --- Branch routes to placed endplates (#170) — an authored 2-D path that
+  //     leaves the main, so it's read straight off the doc, not the (frac,lane)
+  //     model that can't express a 90° exit. -------------------------------
+  for (const t of doc.tracks ?? []) {
+    if (t.role !== "branch" || !t.path || t.path.length < 2) continue;
+    const pts = samplePath(t.path);
+    if (pts.length >= 2) tracks.push({ id: t.id, pts, role: "branch" });
+  }
+
+  // --- Placed branch-endplate faces (C, D…) — moduleFootprint only emits the
+  //     axial A/B faces, so draw these from the endplate's placed pose. -----
+  const DEG = Math.PI / 180;
+  const faces: PhysFace[] = [];
+  for (const e of doc.endplates ?? []) {
+    if (e.id === "A" || e.id === "B") continue;
+    const pose = e.pose;
+    if (!pose) continue;
+    const hw = (typeof e.widthInches === "number" && e.widthInches > 0 ? e.widthInches : 24) / 2;
+    // Face runs perpendicular to the outward normal (heading).
+    const fx = Math.cos((pose.heading + 90) * DEG);
+    const fy = Math.sin((pose.heading + 90) * DEG);
+    faces.push({
+      id: e.id,
+      p1: { x: pose.x - fx * hw, y: pose.y - fy * hw },
+      p2: { x: pose.x + fx * hw, y: pose.y + fy * hw },
+    });
+  }
+
+  return { tracks, turnouts, faces };
 }

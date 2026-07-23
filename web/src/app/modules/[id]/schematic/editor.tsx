@@ -32,9 +32,10 @@ import {
   sectionNeighbours,
   sectionComponents,
   sectionSpans,
+  endplateLead,
   type SchematicSection,
 } from "@/lib/module-schematic";
-import { snapPoseToOutline } from "@/lib/physical-track";
+import { snapPoseToOutline, sampleAt } from "@/lib/physical-track";
 import { SchematicPreview } from "./schematic-preview";
 import {
   BenchworkEditor,
@@ -787,6 +788,46 @@ export function SchematicEditor({
     setSelection({ kind: "track", id });
   };
 
+  /** Draw a branch route from a turnout on the main out to a placed endplate
+   * (#170 junction). The default path leaves the turnout and meets the endplate
+   * FACE square, with the mandated §2.0 straight lead; the owner then shapes the
+   * middle (bend handles) to match the real build. Links the turnout's
+   * divergeTrack AND the endplate's trackId to the new track. */
+  const divergeToEndplate = (turnoutId: string, endplateId: string) => {
+    const tn = state.turnouts.find((t) => t.id === turnoutId);
+    const epPose = poses.find((p) => p.id === endplateId);
+    const center = footprint.centerline;
+    if (!tn || !epPose || center.length < 2) return;
+    const id = nextId("branch", state.extraTracks.map((t) => t.id));
+    const rnd = (v: number) => Math.round(v * 1000) / 1000;
+    const start = sampleAt(center, tn.pos); // the turnout's point on the main
+    const lead = endplateLead(epPose); // face + the 4″ perpendicular lead inboard
+    // start → inboard(4″ off the face) → face. The lead segment is straight and
+    // square by construction; the owner bows the start→inboard leg into place.
+    const path = [
+      { x: rnd(start.x), y: rnd(start.y) },
+      { x: rnd(lead.inboard.x), y: rnd(lead.inboard.y) },
+      { x: rnd(lead.face.x), y: rnd(lead.face.y) },
+    ];
+    patch((s) => {
+      s.extraTracks.push({
+        id,
+        role: "branch",
+        lane: nextLane(s),
+        fromPos: tn.pos,
+        toPos: tn.pos,
+        path,
+        moduleTrackId: null,
+        trackName: `To endplate ${endplateId}`,
+      });
+      const t = s.turnouts.find((x) => x.id === turnoutId);
+      if (t) t.divergeTrack = id;
+      const bi = endplateId.charCodeAt(0) - 67;
+      if (bi >= 0 && s.branches[bi]) s.branches[bi].trackId = id;
+    });
+    setSelection({ kind: "track", id });
+  };
+
   const onPlaceTrack = (
     p:
       | {
@@ -1507,6 +1548,7 @@ export function SchematicEditor({
             setEndplateTrackOffset={setEndplateTrackOffset}
             setSections={setSections}
             onNewDivergeTrack={newDivergeTrack}
+            onDivergeToEndplate={divergeToEndplate}
             activeSectionId={activeSectionId ?? state.sections[0]?.id ?? null}
             onShapeSection={(id) => {
               setActiveSectionId(id);
@@ -2225,6 +2267,7 @@ function Inspector({
   setEndplateTrackOffset,
   setSections,
   onNewDivergeTrack,
+  onDivergeToEndplate,
   activeSectionId,
   onShapeSection,
   sectionMeets,
@@ -2249,6 +2292,7 @@ function Inspector({
   setEndplateTrackOffset: (id: string, raw: string) => void;
   setSections: (next: SchematicSection[]) => void;
   onNewDivergeTrack: (turnoutId: string, role: "spur" | "siding") => void;
+  onDivergeToEndplate: (turnoutId: string, endplateId: string) => void;
   activeSectionId: string | null;
   onShapeSection: (id: string) => void;
   sectionMeets: { a: string; b: string; lengthInches: number }[];
@@ -2776,7 +2820,21 @@ function Inspector({
         </details>
       </>,
       branch
-        ? { fn: () => patch((s) => s.branches.splice(bi, 1)), label: `Remove endplate ${id}` }
+        ? {
+            fn: () =>
+              patch((s) => {
+                // Cascade: drop the diverging track this endplate owns and clear
+                // any turnout that fed it, so nothing is left dangling (#170).
+                const trackId = s.branches[bi]?.trackId;
+                if (trackId) {
+                  s.extraTracks = s.extraTracks.filter((t) => t.id !== trackId);
+                  for (const tn of s.turnouts) if (tn.divergeTrack === trackId) tn.divergeTrack = "";
+                }
+                delete s.poseOverrides[id];
+                s.branches.splice(bi, 1);
+              }),
+            label: `Remove endplate ${id}`,
+          }
         : undefined,
     );
   }
@@ -2873,6 +2931,8 @@ function Inspector({
                 // turnout to feed instead of picking an existing one.
                 if (v === "__new_spur__") onNewDivergeTrack(t.id, "spur");
                 else if (v === "__new_siding__") onNewDivergeTrack(t.id, "siding");
+                else if (v.startsWith("__to_ep__"))
+                  onDivergeToEndplate(t.id, v.slice("__to_ep__".length));
                 else patch((s) => (s.turnouts[i].divergeTrack = v));
               }}
               className={`mt-0.5 ${inp}`}
@@ -2888,6 +2948,15 @@ function Inspector({
               <option disabled>──────────</option>
               <option value="__new_spur__">＋ New spur…</option>
               <option value="__new_siding__">＋ New siding…</option>
+              {/* Draw a branch route out to a placed 3rd+ endplate (#170). */}
+              {state.branches.map((_, bi) => {
+                const epId = String.fromCharCode(67 + bi);
+                return (
+                  <option key={`ep${epId}`} value={`__to_ep__${epId}`}>
+                    → Endplate {epId}
+                  </option>
+                );
+              })}
             </select>
           </label>
         </div>
@@ -3567,7 +3636,20 @@ function Inspector({
         </label>
       )}
     </>,
-    { fn: () => patch((s) => s.extraTracks.splice(i, 1)), label: "Remove track" },
+    {
+      fn: () =>
+        patch((s) => {
+          const removed = s.extraTracks[i]?.id;
+          s.extraTracks.splice(i, 1);
+          if (removed) {
+            // Clear references so a branch endplate / turnout doesn't point at a
+            // track that no longer exists (#170).
+            for (const tn of s.turnouts) if (tn.divergeTrack === removed) tn.divergeTrack = "";
+            for (const b of s.branches) if (b.trackId === removed) b.trackId = null;
+          }
+        }),
+      label: "Remove track",
+    },
   );
 }
 

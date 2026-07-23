@@ -71,6 +71,7 @@ export function ModuleFootprintView({
     : {
         tracks: [{ id: "main", pts: fp.centerline, role: "main" as const }],
         turnouts: [],
+        faces: [],
       };
   const poly = (pts: { x: number; y: number }[]) =>
     pts.map((p) => `${p.x},${sy(p.y)}`).join(" ");
@@ -97,10 +98,14 @@ export function ModuleFootprintView({
           strokeLinejoin="round"
         />
       ))}
-      {/* Endplate faces (the standardized interface at each end) */}
-      {fp.endplateFaces.map((f, i) => (
+      {/* Endplate faces (the standardized interface at each end) — the axial
+          A/B faces from the footprint, plus any placed branch endplates (#170). */}
+      {[
+        ...fp.endplateFaces.map((f, i) => ({ id: `ab${i}`, p1: f.p1, p2: f.p2 })),
+        ...plan.faces,
+      ].map((f) => (
         <line
-          key={i}
+          key={f.id}
           x1={f.p1.x}
           y1={sy(f.p1.y)}
           x2={f.p2.x}
