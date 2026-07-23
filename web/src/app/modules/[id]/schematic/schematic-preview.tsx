@@ -326,29 +326,30 @@ export function SchematicPreview({
           );
         })}
 
-        {/* Branch endplates — named connector arrows off the module (#170) */}
+        {/* Branch endplates — the diverging track leaves the main at its turnout
+            and runs to the MODULE EDGE, drawn with an endplate tick. No "to X"
+            label here: Free-Dispatcher adds destination labels for the panel; the
+            schematic just shows a track exiting the module (#170). */}
         {f.branchConnectors.map((b) => {
           const bx = px(b.posFrac);
           const dir = b.side === "down" ? 1 : -1;
           const y0 = laneY(0);
-          const yTip = y0 + dir * (LANE_GAP + 2);
+          const yEdge = y0 + dir * (LANE_GAP + 2); // out to the module edge
+          const xEdge = bx + 6; // lean toward B so it reads as a diverge, not a crossing
+          const tick = 5; // the endplate face at the module edge
           return (
             <g key={b.id}>
-              <line x1={bx} y1={y0} x2={bx + 8 * 0.6} y2={yTip} stroke="#2563eb" strokeWidth={1.8} strokeLinecap="round" />
-              <polygon
-                points={`${bx + 4.8 - 3},${yTip} ${bx + 4.8 + 3},${yTip} ${bx + 4.8},${yTip + dir * 4}`}
-                fill="#2563eb"
+              <line x1={bx} y1={y0} x2={xEdge} y2={yEdge} stroke="#2563eb" strokeWidth={2.2} strokeLinecap="round" />
+              <line
+                x1={xEdge - tick}
+                y1={yEdge}
+                x2={xEdge + tick}
+                y2={yEdge}
+                stroke="#2563eb"
+                strokeWidth={1.6}
+                strokeLinecap="round"
               />
-              <text
-                x={bx + 8}
-                y={yTip + dir * 6}
-                fontSize="6"
-                fill="#64748b"
-                dominantBaseline={b.side === "down" ? "hanging" : "auto"}
-              >
-                {`to ${b.label}`}
-              </text>
-              <title>{`Branch endplate — to ${b.label}`}</title>
+              <title>{`Branch to the module edge${b.label ? ` — ${b.label}` : ""}`}</title>
             </g>
           );
         })}
