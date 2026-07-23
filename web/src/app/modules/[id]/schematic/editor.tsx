@@ -2318,10 +2318,10 @@ function Inspector({
     patch((s) => {
       const L = 48; // lead length (in)
       const R = 24; // balloon radius (in) — ≥ the 22″ Free-moN minimum
-      const { path } = returnLoopPath(shape, { leadInches: L, radius: R });
+      const { path, outline } = returnLoopPath(shape, { leadInches: L, radius: R });
       s.mainPath = path.map((p) => ({ x: p.x, y: p.y }));
       s.sections = []; // the mainPath drives the centre-line now
-      s.outline = []; // derive the benchwork band from the centre-line
+      s.outline = outline.map((p) => ({ x: p.x, y: p.y })); // smooth teardrop fascia
       s.loop = true;
       s.configB = "none"; // a pure turnback
       // A wye at the throat where the loop's two ends rejoin the lead.
