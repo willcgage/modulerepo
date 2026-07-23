@@ -2612,14 +2612,18 @@ function Inspector({
         {branch ? (
           <>
             <label className="block text-xs font-medium text-gray-600">
-              Name / destination
+              Name
               <input
                 value={branch.label}
                 onChange={(e) => patch((s) => (s.branches[bi].label = e.target.value))}
                 className={`mt-0.5 ${inp}`}
-                placeholder="MoPac West"
+                placeholder="e.g. North branch"
               />
             </label>
+            <p className="text-[11px] text-gray-400">
+              A local name for this endplate. The destination shown on the
+              dispatcher panel comes from whatever module is attached here.
+            </p>
             <div className="grid grid-cols-2 gap-2">
               <label className="block text-xs font-medium text-gray-600">
                 Position (in from A)
