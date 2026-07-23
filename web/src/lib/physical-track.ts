@@ -144,14 +144,27 @@ export function returnLoopPath(
     return { path: rd(path), outline: rd(outline), throat: T };
   }
 
-  // teardrop / circle / offset-teardrop: a circle whose centre sits ahead of the
-  // throat; the loop is the MAJOR (far) arc between the two tangent points, so
-  // the two throat legs meet at a point (the teardrop). A near centre → round
-  // (circle); a far centre → a narrow point (teardrop).
+  if (shape === "circle") {
+    // A COMPLETE circle tangent to the lead at the throat — the track closes as
+    // a full ring; the benchwork is the derived band (a donut). Centre directly
+    // above the throat so the lead runs in tangent at the bottom.
+    const C = { x: L, y: R };
+    const steps = 72;
+    for (let i = 1; i <= steps; i++) {
+      const a = -Math.PI / 2 + (2 * Math.PI * i) / steps; // T(bottom) → full CCW loop
+      path.push({ x: C.x + R * Math.cos(a), y: C.y + R * Math.sin(a) });
+    }
+    // No authored outline — the band around this ring IS the donut.
+    return { path: rd(path), outline: [], throat: T };
+  }
+
+  // teardrop / offset-teardrop: a circle whose centre sits ahead of the throat;
+  // the loop is the MAJOR (far) arc between the two tangent points, so the two
+  // throat legs meet at a point (the teardrop).
   // throat → circle-centre. Near R → the throat sits just off the circle: a
   // full round loop (circle) or a teardrop with short converging legs at the
   // point and a dominant bulb. Far → a stretched, narrow teardrop (avoid).
-  const D = shape === "circle" ? R * 1.05 : R * 1.25;
+  const D = R * 1.25; // throat → circle-centre (teardrop point + dominant bulb)
   const offY = shape === "offset-teardrop" ? R * 0.8 : 0;
   const C = { x: L + D, y: offY };
   const dist = Math.hypot(C.x - T.x, C.y - T.y) || R;
