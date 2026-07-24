@@ -529,8 +529,13 @@ export function SchematicEditor({
   /** The section the bench-work tool is editing — the chosen one, else the
    * first. Null when this module doesn't use sections, in which case the
    * module's own outline is still what gets edited. */
+  // An EXPLICIT pick ("Shape this board") always wins. Otherwise only fall back
+  // to the first section when the sections actually own the shape — a lone
+  // shapeless section used to hijack outline editing, so the module's authored
+  // corners were drawn by nobody and couldn't be edited at all (#173).
   const activeSection =
-    state.sections.find((sec) => sec.id === activeSectionId) ?? state.sections[0] ?? null;
+    state.sections.find((sec) => sec.id === activeSectionId) ??
+    (footprint.sectionOutlines.length ? (state.sections[0] ?? null) : null);
 
   /** The band this section would occupy if it had no authored shape — what
    * "Start from a rectangle" seeds, so a section's rectangle is its own
