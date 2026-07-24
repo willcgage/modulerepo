@@ -2612,9 +2612,13 @@ const ENDPLATE_TAB = 5; // ballast-shoulder band width, inches
                       .join(" ")}
                     fill="none"
                     stroke={node}
-                    strokeWidth={Math.max(world(1.4), RAILHEAD_INCHES * 2)}
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
+                    // RAILHEAD width, not double: the V's legs ARE rails. A #6
+                    // frog is only 9.46°, so at 0.531″ the two tips sit 0.087″
+                    // apart — draw them any heavier and the strokes overlap for
+                    // their whole length and the V merges into a blob.
+                    strokeWidth={Math.max(world(0.9), RAILHEAD_INCHES)}
+                    strokeLinecap="butt"
+                    strokeLinejoin="miter"
                     pointerEvents="none"
                   >
                     <title>Frog — where the diverging rails cross. Set by the turnout&rsquo;s position, not dragged.</title>
