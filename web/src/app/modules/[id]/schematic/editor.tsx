@@ -3012,7 +3012,18 @@ function Inspector({
             On track
             <select
               value={t.onTrack}
-              onChange={(e) => patch((s) => (s.turnouts[i].onTrack = e.target.value))}
+              onChange={(e) =>
+                patch((s) => {
+                  const v = e.target.value;
+                  const cur = s.turnouts[i];
+                  // Picking the track it currently diverges to would make it
+                  // diverge into itself (onTrack === divergeTrack) — the false
+                  // "no second route" warning on a reversed transition (#172).
+                  // Swap instead, so it keeps a valid second route.
+                  if (cur.divergeTrack === v) cur.divergeTrack = cur.onTrack;
+                  cur.onTrack = v;
+                })
+              }
               className={`mt-0.5 ${inp}`}
             >
               {trackOptions.map((o) => (
