@@ -5,6 +5,9 @@ import {
   sampleBenchworkOutline,
   samplePath,
   divergeSideForHand,
+  turnoutClosure,
+  RAIL_GAUGE_INCHES,
+  TURNOUT_LEAD_INCHES_PER_FROG,
   MAIN_TRACK_ID,
   MAIN2_TRACK_ID,
   type BenchworkPoint,
@@ -25,14 +28,9 @@ const DEG = Math.PI / 180;
 /** A 40-ft N-scale car is ~3.0″; ~3.3″ over the couplers — the real spacing a
  * train occupies. Capacity in cars reads truer than scale feet for a builder. */
 const CAR_INCHES = 3.3;
-/** Points → FROG for a #1 frog, inches — the turnout's LEAD, scaled by frog
- * number. Calibrated on a COMMERCIAL turnout rather than the prototype, since
- * owners lay real product: an Atlas code 55 #7 measures 3⅜″ points→frog (Steve
- * Branton, #173) → 3.375 / 7. For reference the prototype #7 lead is 62′-1″ =
- * 4.66″ in N, and commercial turnouts are compressed against that. */
-const TURNOUT_LEAD_INCHES_PER_FROG = 0.482;
-/** N-scale track gauge, inches (9 mm) — where the two rails are drawn. */
-const RAIL_GAUGE_INCHES = 0.354;
+// RAIL_GAUGE_INCHES + TURNOUT_LEAD_INCHES_PER_FROG come from the package, so the
+// closure maths and the drawn rails can't drift apart (they were local here
+// first — two copies of a shared constant is the #120 trap).
 
 /** Round a raw span up to a friendly grid increment (inches). */
 function niceStep(raw: number): number {
@@ -664,33 +662,38 @@ export function BenchworkEditor({
     // the right angle. It is NOT points→frog (that mistake put the throat a whole
     // ramp-length back, so facing turnouts 11″ apart drew overlapping, #173).
     const L = size * LANE_SPACING_INCHES * (t.curved ? 2.2 : 1);
-    // points → FROG, the real turnout's lead. Measured off an Atlas code 55 #7
-    // (3⅜″ points→frog, Steve Branton) → ~0.482″ per frog number; the frog sits
-    // PARTWAY along the ramp, only ~0.48″ off the through route, not at its end.
-    const lead = Math.min(L, size * TURNOUT_LEAD_INCHES_PER_FROG * (t.curved ? 2.2 : 1));
-    // A wye splits SYMMETRICALLY — each leg diverges at half the frog angle (half
-    // the lateral clearance), so the two legs open ± equally about the incoming
-    // route. A left/right turnout throws the full clearance to one side.
-    const lateral = t.kind === "wye" ? LANE_SPACING_INCHES / 2 : LANE_SPACING_INCHES;
-    // Walk the host from the throat, clearing to one track over at the frog, so
-    // on a curved main the leg curves with it. A *curved* turnout eases the
-    // lateral clearance quadratically (frac²) so the leg leaves tangent to the
-    // host and bows into an arc; a straight turnout ramps over linearly (a
-    // straight diagonal).
-    const steps = 8;
-    // The throat sits one LEAD back from the frog (not one ramp), and the ramp
-    // carries on past the frog until the route has cleared a full track spacing.
+    // The CLOSURE: points start ON the stock rail, reach one GAUGE of lateral at
+    // the frog (where the inner rails truly cross, so the frog lands exactly on
+    // `pos`), and leave at the frog angle 1/N. A curved turnout stretches the
+    // whole thing so its diverging route reads as a pronounced arc.
+    const stretch = t.curved ? 2.2 : 1;
+    // A wye splits SYMMETRICALLY — each route takes half the divergence, so the
+    // two legs open ± equally about the incoming route.
+    const half = t.kind === "wye" ? 0.5 : 1;
+    const cl = turnoutClosure(size, {
+      leadInches: size * TURNOUT_LEAD_INCHES_PER_FROG * stretch,
+      gaugeInches: RAIL_GAUGE_INCHES * half,
+    });
+    const lead = Math.min(L, cl.lead);
+    // Walk the host from the throat so the leg follows the mainline's curvature,
+    // laying the closure's lateral offset on the normal. Sampled finely enough
+    // that the curve near the points reads as a curve.
+    const steps = 16;
     const relThroat = relFrog - toward * lead;
-    const at = (frac: number): Pt => {
-      const ease = t.curved ? frac * frac : frac;
-      const p = sampleAt(host, Math.max(0, relThroat + toward * L * frac));
-      const off = side * lateral * ease;
+    /** A point `s` inches past the POINTS, along the host. */
+    const at = (s: number): Pt => {
+      const p = sampleAt(host, Math.max(0, relThroat + toward * s));
+      const off = side * cl.offsetAt(s) * half;
       return { x: p.x + off * p.nx, y: p.y + off * p.ny };
     };
+    // Run the leg out until it has cleared a full track spacing — that's where
+    // the diverging track proper begins (the JOIN).
+    const span = Math.max(lead, L);
     const leg: Pt[] = [];
-    for (let i = 0; i <= steps; i++) leg.push(at(i / steps));
-    // The frog itself — `pos` marks it (#132), so it must land exactly there.
-    return { leg, frog: at(lead / L) };
+    for (let i = 0; i <= steps; i++) leg.push(at((span * i) / steps));
+    // The frog — `pos` marks it (#132), and the closure is built so the rails
+    // cross exactly there.
+    return { leg, frog: at(lead) };
   };
   /** The lateral side (±1) a turnout's diverging route leaves toward — so a wye
    * can render a mirror leg on the opposite side. */
@@ -2137,6 +2140,9 @@ const ENDPLATE_TAB = 5; // ballast-shoulder band width, inches
     ...connectorLegs.map((c) => ({ id: c.id, pts: c.pts, main: false, selectable: false })),
   ];
 
+  /** Is a rail PAIR worth drawing, or is the gauge sub-pixel at this zoom? A
+   * gauge is 0.354″; below ~3 px of separation the two lines just smear. */
+  const railsVisible = RAIL_GAUGE_INCHES * scale >= 3;
   const renderTrack = (line: (typeof trackLines)[number]) => {
     // What clicking this line selects — the main's segments all report the main.
     const selId = line.selId ?? line.id;
@@ -2185,19 +2191,35 @@ const ENDPLATE_TAB = 5; // ballast-shoulder band width, inches
             instead made a track read as a pale ballast band with no track on it:
             "I'd rather see the tracks drawn instead of what I think is the
              ballast" (Steve, #173). The band stays as the ballast underneath;
-            the rails are what carries the eye. Below ~0.35″ apart they merge
-            into one dark line when zoomed out, which still reads as track. */}
-        {[RAIL_GAUGE_INCHES / 2, -RAIL_GAUGE_INCHES / 2].map((o, k) => (
+            the rails are what carries the eye.
+            LOD: a gauge is 0.354″, so on a fitted 120″ module it's only ~3 px —
+            below that the pair is mush, so draw ONE line, which still reads as
+            track. Where the rails DO show, the points taper and the frog X fall
+            out of the closure geometry for free: at the points the diverging
+            rails sit exactly on the stock rails, and at the frog the two inner
+            rails genuinely cross. */}
+        {railsVisible ? (
+          [RAIL_GAUGE_INCHES / 2, -RAIL_GAUGE_INCHES / 2].map((o, k) => (
+            <polyline
+              key={`rail${k}`}
+              points={poly(offsetPath(line.pts, o))}
+              fill="none"
+              stroke={on ? "#0284c7" : line.main ? "#1e293b" : "#334155"}
+              strokeWidth={world(0.6)}
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            />
+          ))
+        ) : (
           <polyline
-            key={`rail${k}`}
-            points={poly(offsetPath(line.pts, o))}
+            points={poly(line.pts)}
             fill="none"
             stroke={on ? "#0284c7" : line.main ? "#1e293b" : "#334155"}
-            strokeWidth={world(0.6)}
+            strokeWidth={world(1.1)}
             strokeLinecap="round"
             strokeLinejoin="round"
           />
-        ))}
+        )}
         <title>{line.main ? "Mainline" : line.id}</title>
       </g>
     );
@@ -2549,19 +2571,37 @@ const ENDPLATE_TAB = 5; // ballast-shoulder band width, inches
               {/* Frog node — where the diverging rails cross, one track over.
                   The turnout's position IS its frog (#132), so this marker is
                   set by the position field, not dragged. A small snap circle. */}
-              {t.frog && (
-                <circle
-                  cx={t.frog.x}
-                  cy={sy(t.frog.y)}
-                  r={r * 0.6}
-                  fill="#fff"
-                  stroke={node}
-                  strokeWidth={r * 0.28}
-                  pointerEvents="none"
-                >
-                  <title>Frog (where the diverging rails cross). Set by the turnout&rsquo;s position — not dragged here.</title>
-                </circle>
-              )}
+              {t.frog &&
+                (railsVisible ? (
+                  // Once the rails show, the two inner ones genuinely CROSS here
+                  // (the closure is built so `pos` is where the centre-lines are
+                  // one gauge apart). Mark the casting so that crossing reads as
+                  // a frog rather than two tracks happening to overlap.
+                  <rect
+                    x={t.frog.x - RAIL_GAUGE_INCHES * 0.5}
+                    y={sy(t.frog.y) - RAIL_GAUGE_INCHES * 0.5}
+                    width={RAIL_GAUGE_INCHES}
+                    height={RAIL_GAUGE_INCHES}
+                    fill={node}
+                    opacity={0.9}
+                    transform={`rotate(45 ${t.frog.x} ${sy(t.frog.y)})`}
+                    pointerEvents="none"
+                  >
+                    <title>Frog — where the diverging rails cross. Set by the turnout&rsquo;s position, not dragged.</title>
+                  </rect>
+                ) : (
+                  <circle
+                    cx={t.frog.x}
+                    cy={sy(t.frog.y)}
+                    r={r * 0.6}
+                    fill="#fff"
+                    stroke={node}
+                    strokeWidth={r * 0.28}
+                    pointerEvents="none"
+                  >
+                    <title>Frog (where the diverging rails cross). Set by the turnout&rsquo;s position — not dragged here.</title>
+                  </circle>
+                ))}
               {/* Turnout node — the draggable control, on the track beside its
                   frog. Dragging it sets the turnout's position (its frog, #132). */}
               <circle
