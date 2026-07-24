@@ -2331,6 +2331,13 @@ function Inspector({
       s.outline = g.outlineOuter.map((p) => ({ x: p.x, y: p.y }));
       s.loop = true;
       s.configB = "none"; // a pure turnback
+      // Regenerating REPLACES the previous loop — drop the old return-loop track
+      // and its wye, or each "Make loop" would stack another loop on top.
+      const oldLoopIds = new Set(
+        s.extraTracks.filter((t) => t.role === "branch" && t.trackName === "Return loop").map((t) => t.id),
+      );
+      s.extraTracks = s.extraTracks.filter((t) => !oldLoopIds.has(t.id));
+      s.turnouts = s.turnouts.filter((t) => !(t.kind === "wye" && oldLoopIds.has(t.divergeTrack ?? "")));
       // The return-loop track: diverges from the wye, around, back to the wye.
       const loopId = nextId("loop", s.extraTracks.map((t) => t.id));
       s.extraTracks.push({
