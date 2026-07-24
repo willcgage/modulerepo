@@ -1446,6 +1446,9 @@ export function SchematicEditor({
             <div className="min-h-0 flex-1 rounded-lg border border-gray-200 bg-white p-2">
               <BenchworkEditor
                 outline={activeSection ? (activeSection.outline ?? []) : state.outline}
+                // The loop's donut hole — only for the whole-module board, not a
+                // section being shaped on its own.
+                outlineInner={activeSection ? [] : state.outlineInner}
                 onChange={(next) =>
                   activeSection
                     ? setSections(
@@ -2329,6 +2332,8 @@ function Inspector({
       s.lengthInches = L;
       s.sections = [];
       s.outline = g.outlineOuter.map((p) => ({ x: p.x, y: p.y }));
+      // The open middle of the loop — makes the board a DONUT, not a filled disc.
+      s.outlineInner = g.outlineInner.map((p) => ({ x: p.x, y: p.y }));
       s.loop = true;
       s.configB = "none"; // a pure turnback
       // Regenerating REPLACES the previous loop — drop the old return-loop track
