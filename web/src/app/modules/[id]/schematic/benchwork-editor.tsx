@@ -845,6 +845,25 @@ export function BenchworkEditor({
     return body;
   };
 
+  /** A plain lane-parallel body, CLIPPED to any switch leg reaching it — so the
+   * rails run continuously from the leg into the track instead of the body
+   * carrying on underneath it. A track's stored extent ends at the turnout's
+   * FROG, but the leg only becomes parallel at its JOIN further along, so the
+   * two overlapped by (ramp − lead) and neither met the other end-to-end. Main 2
+   * showed this plainly: body 0→17.4, leg 21.8→10.6 (#173 follow-up). Tracks
+   * with two legs are handled by passingSidingBody; this covers the rest. */
+  const laneBody = (t: CanvasTrack): Pt[] => {
+    let from = t.fromPos;
+    let to = t.toPos;
+    for (const l of legsByTrack.get(t.id) ?? []) {
+      const jp = projectToCenterline(centerline, l.join).pos;
+      // Pull whichever end this leg reaches out to the join.
+      if (Math.abs(from - jp) <= Math.abs(to - jp)) from = jp;
+      else to = jp;
+    }
+    return lanePath(centerline, from, to, t.lane);
+  };
+
   /** A wye's mirrored second route — the leg forced to the opposite side, then
    * continued along its frog tangent to the same length as the (real) spur, so
    * the switch reads as a symmetric Y. Rendered as a band; it isn't a separately
@@ -959,9 +978,7 @@ export function BenchworkEditor({
                   ? samplePath(t.path)
                   : t.path && t.path.length >= 2
                     ? samplePath(spurTrackPath(t))
-                    : (divergingStubPath(t) ??
-                      passingSidingBody(t) ??
-                      lanePath(centerline, t.fromPos, t.toPos, t.lane)),
+                    : (divergingStubPath(t) ?? passingSidingBody(t) ?? laneBody(t)),
             }))
             .filter((t) => t.pts.length > 1)
         : [],
