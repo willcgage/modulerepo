@@ -672,12 +672,11 @@ export function BenchworkEditor({
     // `pos`), and leave at the frog angle 1/N. A curved turnout stretches the
     // whole thing so its diverging route reads as a pronounced arc.
     const stretch = t.curved ? 2.2 : 1;
-    // A wye splits SYMMETRICALLY — each route takes half the divergence, so the
-    // two legs open ± equally about the incoming route.
-    const half = t.kind === "wye" ? 0.5 : 1;
-    const cl = turnoutClosure(size, {
-      leadInches: size * TURNOUT_LEAD_INCHES_PER_FROG * stretch,
-      gaugeInches: RAIL_GAUGE_INCHES * half,
+    // A wye splits SYMMETRICALLY — each route takes HALF the divergence, i.e.
+    // each leg leaves at half the frog angle, which is a #2N.
+    const effN = t.kind === "wye" ? size * 2 : size;
+    const cl = turnoutClosure(effN, {
+      leadInches: effN * TURNOUT_LEAD_INCHES_PER_FROG * stretch,
     });
     const lead = Math.min(L, cl.lead);
     // Walk the host from the throat so the leg follows the mainline's curvature,
@@ -688,12 +687,18 @@ export function BenchworkEditor({
     /** A point `s` inches past the POINTS, along the host. */
     const at = (s: number): Pt => {
       const p = sampleAt(host, Math.max(0, relThroat + toward * s));
-      const off = side * cl.offsetAt(s) * half;
+      const off = side * cl.offsetAt(s);
       return { x: p.x + off * p.nx, y: p.y + off * p.ny };
     };
-    // Run the leg out until it has cleared a full track spacing — that's where
-    // the diverging track proper begins (the JOIN).
-    const span = Math.max(lead, L);
+    // Run the leg until it REACHES the diverging track's own lane — not a fixed
+    // span. Past the frog the closure is straight at 1/N, so solve for it. A
+    // fixed span left the leg short of the lane (0.997″ vs 1.125″ on a #6), and
+    // the rails jogged sideways where the leg met the body.
+    const targetOff = Math.abs(laneOffset(dt.lane)) || LANE_SPACING_INCHES;
+    const span = Math.max(
+      lead,
+      cl.lead + Math.max(0, (targetOff - RAIL_GAUGE_INCHES) * effN),
+    );
     const leg: Pt[] = [];
     for (let i = 0; i <= steps; i++) leg.push(at((span * i) / steps));
     // The frog — `pos` marks it (#132), and the closure is built so the rails
