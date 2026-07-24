@@ -2048,10 +2048,26 @@ export function BenchworkEditor({
  * clear the benchwork corner handles that share the endplate's track point. */
 const ENDPLATE_TAB = 5; // ballast-shoulder band width, inches
   const poly = (pts: Pt[]) => pts.map((p) => `${p.x},${sy(p.y)}`).join(" ");
-  /** Mainline + sidings/spurs as one list, so all get the same rendering. */
-  const trackLines: { id: string; pts: Pt[]; main: boolean; selectable: boolean }[] = [
+  /** Mainline + sidings/spurs as one list, so all get the same rendering.
+   * `id` is the render key (the main draws as several segments, so it needs a
+   * unique one per segment); `selId` is what SELECTING the line means — every
+   * main segment reports the real MAIN_TRACK_ID so clicking any part of the
+   * main selects the main, like every other track (#main1-select). */
+  const trackLines: {
+    id: string;
+    selId?: string;
+    pts: Pt[];
+    main: boolean;
+    selectable: boolean;
+  }[] = [
     // The main, drawn as segments so a wye leaves a gap (no straight-through).
-    ...mainSegments.map((pts, i) => ({ id: `__main__${i}`, pts, main: true, selectable: false })),
+    ...mainSegments.map((pts, i) => ({
+      id: `__main__${i}`,
+      selId: MAIN_TRACK_ID,
+      pts,
+      main: true,
+      selectable: true,
+    })),
     ...trackPaths.map((t) => ({ id: t.id, pts: t.pts, main: false, selectable: true })),
     // A wye's mirrored second route draws as a (non-selectable) band.
     ...wyeMirrorLegs.map((w) => ({ id: w.id, pts: w.pts, main: false, selectable: false })),
@@ -2060,7 +2076,9 @@ const ENDPLATE_TAB = 5; // ballast-shoulder band width, inches
   ];
 
   const renderTrack = (line: (typeof trackLines)[number]) => {
-    const on = selection?.kind === "track" && selection.id === line.id;
+    // What clicking this line selects — the main's segments all report the main.
+    const selId = line.selId ?? line.id;
+    const on = selection?.kind === "track" && selection.id === selId;
     const click =
       tool === "industry" && onAddIndustry
         ? (e: React.PointerEvent) => {
@@ -2072,7 +2090,7 @@ const ENDPLATE_TAB = 5; // ballast-shoulder band width, inches
           tool !== "turnout" && tool !== "signal" && line.selectable && onSelect
           ? (e: React.PointerEvent) => {
               e.stopPropagation();
-              onSelect({ kind: "track", id: line.id });
+              onSelect({ kind: "track", id: selId });
             }
           : undefined;
     return (

@@ -3577,6 +3577,37 @@ function Inspector({
     );
   }
 
+  // ---- Main 1 (the through main — selectable like every other track) ----
+  // It draws as SEGMENTS off the centre-line rather than as an extraTrack, so
+  // before this it was the one track you couldn't click (#main1-select).
+  if (selection.id === MAIN_TRACK_ID) {
+    const bent = state.mainPath.length >= 2;
+    const isDouble = state.configA === "double" || state.configB === "double";
+    return shell(
+      isDouble ? "Main 1" : "Main",
+      <>
+        <p className="text-xs text-gray-500">
+          The through main — it runs the whole module on the centre line. With
+          the <span className="font-medium">Track (T)</span> tool active, drag
+          the points to bend it — round a stretch with the ◆ handles. Leave it
+          alone and it follows the module&rsquo;s shape.
+        </p>
+        <p className="text-xs text-gray-500">
+          Shape: {bent ? "bent by hand" : "derived from the module shape"}
+        </p>
+        {bent && (
+          <button
+            type="button"
+            onClick={() => patch((s) => (s.mainPath = []))}
+            className={`${addBtn} w-full`}
+          >
+            Straighten (back to derived)
+          </button>
+        )}
+      </>,
+    );
+  }
+
   // ---- Main 2 (the second main is curvable, #131) ----
   if (selection.id === MAIN2_TRACK_ID) {
     const bent = state.main2Path.length >= 2;
