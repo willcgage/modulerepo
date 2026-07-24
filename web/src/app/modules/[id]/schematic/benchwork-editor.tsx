@@ -31,6 +31,8 @@ const CAR_INCHES = 3.3;
  * Branton, #173) → 3.375 / 7. For reference the prototype #7 lead is 62′-1″ =
  * 4.66″ in N, and commercial turnouts are compressed against that. */
 const TURNOUT_LEAD_INCHES_PER_FROG = 0.482;
+/** N-scale track gauge, inches (9 mm) — where the two rails are drawn. */
+const RAIL_GAUGE_INCHES = 0.354;
 
 /** Round a raw span up to a friendly grid increment (inches). */
 function niceStep(raw: number): number {
@@ -2162,14 +2164,19 @@ const ENDPLATE_TAB = 5; // ballast-shoulder band width, inches
           strokeLinecap="round"
           strokeLinejoin="round"
         />
-        {/* Band outline — the two edges (no ties, cleaner). */}
-        {[ROADBED / 2, -ROADBED / 2].map((o, k) => (
+        {/* RAILS — two lines at N-scale gauge. Outlining the roadbed's shoulders
+            instead made a track read as a pale ballast band with no track on it:
+            "I'd rather see the tracks drawn instead of what I think is the
+             ballast" (Steve, #173). The band stays as the ballast underneath;
+            the rails are what carries the eye. Below ~0.35″ apart they merge
+            into one dark line when zoomed out, which still reads as track. */}
+        {[RAIL_GAUGE_INCHES / 2, -RAIL_GAUGE_INCHES / 2].map((o, k) => (
           <polyline
-            key={`edge${k}`}
+            key={`rail${k}`}
             points={poly(offsetPath(line.pts, o))}
             fill="none"
-            stroke={on ? "#0284c7" : line.main ? "#475569" : "#64748b"}
-            strokeWidth={world(0.7)}
+            stroke={on ? "#0284c7" : line.main ? "#1e293b" : "#334155"}
+            strokeWidth={world(0.6)}
             strokeLinecap="round"
             strokeLinejoin="round"
           />

@@ -249,16 +249,20 @@ export function SchematicPreview({
           // A flipped turnout faces its points the other way, so its throat
           // taper leaves in the opposite direction (#turnout-flip).
           const dir = (ex >= tx ? 1 : -1) * (throat?.flipped ? -1 : 1);
-          // Keep the throat short (orig 0.12): on a ladder, turnouts sit ON a
-          // siding/spur, and a long taper would push its flat part past them so
-          // their dots float off the diagonal.
-          // A spur has ONE dip so it may use the whole span; a siding has one at
-          // EACH end, so its taper can be at most half — otherwise the two dips
-          // overshoot each other, the flat run between them reverses, and the
-          // track draws as a crossed tepee instead of a siding. A 17″ siding on
-          // a 384″ module hit exactly that.
+          // Diverge at 45° — run out equals the drop between lanes (Steve, #173).
+          // A dispatcher panel draws every diverging route at one fixed angle;
+          // the old span-proportional taper meant a long siding got a shallow
+          // diagonal and a short one a steep one, so nothing lined up. 45° also
+          // matches the single↔double transition, which already used G = LANE_GAP.
+          // A multi-lane diverge gets a proportionally longer run, staying 45°.
+          // STILL CLAMPED: a spur has ONE dip so it may use the whole span; a
+          // siding dips at EACH end, so its run can be at most half — otherwise
+          // the two overshoot, the flat between them reverses, and the track
+          // draws as a crossed tepee (a 17″ siding on a 384″ module hit exactly
+          // that). A track too short for 45° draws steeper rather than inverting.
           const span = Math.abs(ex - tx);
-          const thr = Math.min(span * 0.12 + 6, isSpur ? span : span / 2);
+          const drop = Math.abs(yl - ym) || LANE_GAP;
+          const thr = Math.min(drop, isSpur ? span : span / 2);
           const pts = flat
             ? `${tx},${yl} ${ex},${yl}`
             : isSpur
