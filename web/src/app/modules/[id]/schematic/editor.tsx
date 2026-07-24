@@ -36,7 +36,11 @@ import {
   type SchematicSection,
 } from "@/lib/module-schematic";
 import { snapPoseToOutline, sampleAt } from "@/lib/physical-track";
-import { returnLoop, type ReturnLoopShape } from "@/lib/module-schematic";
+import {
+  returnLoop,
+  type ReturnLoopShape,
+  FREEMO_ENDPLATE_WIDTH_RECOMMENDED_INCHES,
+} from "@/lib/module-schematic";
 import { SchematicPreview } from "./schematic-preview";
 import {
   BenchworkEditor,
@@ -2325,7 +2329,14 @@ function Inspector({
     patch((s) => {
       const L = 48; // lead length (in)
       const R = 24; // balloon radius (in) — ≥ the 22″ Free-moN minimum
-      const g = returnLoop(shape, { leadInches: L, radius: R }); // tested geometry
+      // The lead/interface board must be at least as wide as endplate A, so the
+      // benchwork is never narrower than the endplate at the face (Free-moN §2.0).
+      const epA = s.endplateWidths["A"] ?? FREEMO_ENDPLATE_WIDTH_RECOMMENDED_INCHES;
+      const g = returnLoop(shape, {
+        leadInches: L,
+        radius: R,
+        endplateHalfWidth: epA / 2,
+      }); // tested geometry
       // The MAIN is the straight lead (A → throat); the loop is its own track
       // that diverges from the wye and returns to it (a real return loop).
       s.mainPath = [];
