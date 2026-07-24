@@ -179,15 +179,15 @@ export function SchematicPreview({
             module it runs between the mainline turnout and the double end,
             with a diverge diagonal at the transition. */}
         {f.doubleMain && !f.loop && !f.main2Extent && !f.transition && (
-          <line x1={px(0)} y1={laneY(1)} x2={px(1)} y2={laneY(1)} stroke="#2563eb" strokeWidth={2.4} strokeLinecap="round" />
+          <line x1={px(0)} y1={laneY(f.main2Lane ?? 1)} x2={px(1)} y2={laneY(f.main2Lane ?? 1)} stroke="#2563eb" strokeWidth={2.4} strokeLinecap="round" />
         )}
         {f.main2Extent && !f.loop && !f.transition && (
           <>
             <line
               x1={px(f.main2Extent.fromFrac)}
-              y1={laneY(1)}
+              y1={laneY(f.main2Lane ?? 1)}
               x2={px(f.main2Extent.toFrac)}
-              y2={laneY(1)}
+              y2={laneY(f.main2Lane ?? 1)}
               stroke="#2563eb"
               strokeWidth={2.4}
               strokeLinecap="round"
@@ -202,7 +202,7 @@ export function SchematicPreview({
                 x1={px(f.main2Extent.fromFrac) - 10}
                 y1={laneY(0)}
                 x2={px(f.main2Extent.fromFrac)}
-                y2={laneY(1)}
+                y2={laneY(f.main2Lane ?? 1)}
                 stroke="#2563eb"
                 strokeWidth={2}
                 strokeLinecap="round"
@@ -213,7 +213,7 @@ export function SchematicPreview({
             {f.main2Extent.toFrac < 1 && (
               <line
                 x1={px(f.main2Extent.toFrac)}
-                y1={laneY(1)}
+                y1={laneY(f.main2Lane ?? 1)}
                 x2={px(f.main2Extent.toFrac) + 10}
                 y2={laneY(0)}
                 stroke="#2563eb"
