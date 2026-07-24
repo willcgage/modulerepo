@@ -25,6 +25,12 @@ const DEG = Math.PI / 180;
 /** A 40-ft N-scale car is ~3.0″; ~3.3″ over the couplers — the real spacing a
  * train occupies. Capacity in cars reads truer than scale feet for a builder. */
 const CAR_INCHES = 3.3;
+/** Points → FROG for a #1 frog, inches — the turnout's LEAD, scaled by frog
+ * number. Calibrated on a COMMERCIAL turnout rather than the prototype, since
+ * owners lay real product: an Atlas code 55 #7 measures 3⅜″ points→frog (Steve
+ * Branton, #173) → 3.375 / 7. For reference the prototype #7 lead is 62′-1″ =
+ * 4.66″ in N, and commercial turnouts are compressed against that. */
+const TURNOUT_LEAD_INCHES_PER_FROG = 0.482;
 
 /** Round a raw span up to a friendly grid increment (inches). */
 function niceStep(raw: number): number {
@@ -596,7 +602,10 @@ export function BenchworkEditor({
   /** A turnout's diverging leg — the throat→frog route, sampled *along the host*
    * so it follows the mainline's curvature (a curved turnout), easing out to one
    * track over at the frog. Null if nothing diverges. */
-  const frogLegOf = (t: CanvasTurnout, forceSide?: 1 | -1): Pt[] | null => {
+  const frogLegOf = (
+    t: CanvasTurnout,
+    forceSide?: 1 | -1,
+  ): { leg: Pt[]; frog: Pt } | null => {
     const dt = tracks.find((x) => x.id === t.divergeTrack);
     if (!dt) return null;
     const host = hostPointsOf(t.onTrack);
@@ -648,7 +657,15 @@ export function BenchworkEditor({
     // pronounced arc (carrying the curve well past a bare frog, per the curved-
     // turnout prototype) instead of a subtle bow; a straight turnout uses the
     // nominal points→frog length.
-    const L = size * LANE_SPACING_INCHES * (t.curved ? 2.2 : 1); // points → frog
+    // The RAMP: how far the diverging route runs to reach one full track spacing
+    // — its slope is the frog ratio 1:N, so this is what makes the leg leave at
+    // the right angle. It is NOT points→frog (that mistake put the throat a whole
+    // ramp-length back, so facing turnouts 11″ apart drew overlapping, #173).
+    const L = size * LANE_SPACING_INCHES * (t.curved ? 2.2 : 1);
+    // points → FROG, the real turnout's lead. Measured off an Atlas code 55 #7
+    // (3⅜″ points→frog, Steve Branton) → ~0.482″ per frog number; the frog sits
+    // PARTWAY along the ramp, only ~0.48″ off the through route, not at its end.
+    const lead = Math.min(L, size * TURNOUT_LEAD_INCHES_PER_FROG * (t.curved ? 2.2 : 1));
     // A wye splits SYMMETRICALLY — each leg diverges at half the frog angle (half
     // the lateral clearance), so the two legs open ± equally about the incoming
     // route. A left/right turnout throws the full clearance to one side.
@@ -659,16 +676,19 @@ export function BenchworkEditor({
     // host and bows into an arc; a straight turnout ramps over linearly (a
     // straight diagonal).
     const steps = 8;
-    const relThroat = relFrog - toward * L; // a leg-length back from the frog
-    const leg: Pt[] = [];
-    for (let i = 0; i <= steps; i++) {
-      const frac = i / steps;
+    // The throat sits one LEAD back from the frog (not one ramp), and the ramp
+    // carries on past the frog until the route has cleared a full track spacing.
+    const relThroat = relFrog - toward * lead;
+    const at = (frac: number): Pt => {
       const ease = t.curved ? frac * frac : frac;
       const p = sampleAt(host, Math.max(0, relThroat + toward * L * frac));
       const off = side * lateral * ease;
-      leg.push({ x: p.x + off * p.nx, y: p.y + off * p.ny });
-    }
-    return leg;
+      return { x: p.x + off * p.nx, y: p.y + off * p.ny };
+    };
+    const leg: Pt[] = [];
+    for (let i = 0; i <= steps; i++) leg.push(at(i / steps));
+    // The frog itself — `pos` marks it (#132), so it must land exactly there.
+    return { leg, frog: at(lead / L) };
   };
   /** The lateral side (±1) a turnout's diverging route leaves toward — so a wye
    * can render a mirror leg on the opposite side. */
@@ -690,14 +710,27 @@ export function BenchworkEditor({
    * several — keeping only one left the far end visually unconnected
    * (#FMN-0040). */
   const legsByTrack = useMemo(() => {
-    const map = new Map<string, { throat: Pt; frog: Pt; leg: Pt[]; turnoutId: string }[]>();
+    // `frog` is the FROG MARKER (at the turnout's pos, partway along the ramp);
+    // `join` is where the ramp has cleared a full track spacing and the diverging
+    // track proper begins. They were the same point while the frog was pinned to
+    // the ramp's end — they aren't any more (#173).
+    const map = new Map<
+      string,
+      { throat: Pt; frog: Pt; join: Pt; leg: Pt[]; turnoutId: string }[]
+    >();
     if (centerline.length >= 2) {
       for (const t of turnouts) {
         if (!t.divergeTrack) continue;
-        const leg = frogLegOf(t);
-        if (!leg || leg.length < 2) continue;
+        const r = frogLegOf(t);
+        if (!r || r.leg.length < 2) continue;
         const list = map.get(t.divergeTrack) ?? [];
-        list.push({ throat: leg[0], frog: leg[leg.length - 1], leg, turnoutId: t.id });
+        list.push({
+          throat: r.leg[0],
+          frog: r.frog,
+          join: r.leg[r.leg.length - 1],
+          leg: r.leg,
+          turnoutId: t.id,
+        });
         map.set(t.divergeTrack, list);
       }
     }
@@ -706,7 +739,10 @@ export function BenchworkEditor({
   }, [turnouts, tracks, centerline, lengthInches]);
   /** The primary (first) leg per track — what a drawn path pins its throat to. */
   const switchByTrack = useMemo(() => {
-    const map = new Map<string, { throat: Pt; frog: Pt; leg: Pt[]; turnoutId: string }>();
+    const map = new Map<
+      string,
+      { throat: Pt; frog: Pt; join: Pt; leg: Pt[]; turnoutId: string }
+    >();
     for (const [id, legs] of legsByTrack) map.set(id, legs[0]);
     return map;
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -716,7 +752,9 @@ export function BenchworkEditor({
   const frogPinnedPath = (t: CanvasTrack): BenchworkPoint[] => {
     const path = t.path;
     if (!path || path.length < 2) return path ?? [];
-    const f = switchByTrack.get(t.id)?.frog;
+    // Pin to the JOIN (the ramp's end), not the frog — spurTrackPath prepends the
+    // whole leg and drops this point, so it has to be the leg's last point.
+    const f = switchByTrack.get(t.id)?.join;
     return f ? [{ ...path[0], x: f.x, y: f.y }, ...path.slice(1)] : path;
   };
   /** The path to *render as track*: the diverging leg (throat → frog) plus the
@@ -773,13 +811,16 @@ export function BenchworkEditor({
     // spur auto-lands on a positive lane while its leg diverges below), which
     // made the body zig-zag across the main between frogs pinned on the far
     // side (#133).
+    // Measure at each leg's JOIN — where the ramp has reached full track spacing
+    // and the parallel body actually starts. (The frog is only ~½″ off the main,
+    // so riding the frogs' offset would draw the siding almost on top of it.)
     const at = legs
       .map((l) => {
-        const c = sampleAt(centerline, projectToCenterline(centerline, l.frog).pos);
+        const c = sampleAt(centerline, projectToCenterline(centerline, l.join).pos);
         return {
-          pos: projectToCenterline(centerline, l.frog).pos,
-          off: (l.frog.x - c.x) * c.nx + (l.frog.y - c.y) * c.ny,
-          frog: l.frog,
+          pos: projectToCenterline(centerline, l.join).pos,
+          off: (l.join.x - c.x) * c.nx + (l.join.y - c.y) * c.ny,
+          frog: l.join,
         };
       })
       .sort((a, b) => a.pos - b.pos);
@@ -813,8 +854,9 @@ export function BenchworkEditor({
       if (t.kind !== "wye" || !t.divergeTrack) continue;
       const spur = tracks.find((x) => x.id === t.divergeTrack);
       if (!spur) continue;
-      const leg = frogLegOf(t, (-divergeSideSign(t)) as 1 | -1);
-      if (!leg || leg.length < 2) continue;
+      const r = frogLegOf(t, (-divergeSideSign(t)) as 1 | -1);
+      if (!r || r.leg.length < 2) continue;
+      const leg = r.leg;
       const frog = leg[leg.length - 1];
       const prev = leg[leg.length - 2];
       const dl = Math.hypot(frog.x - prev.x, frog.y - prev.y) || 1;
@@ -1344,10 +1386,11 @@ export function BenchworkEditor({
             (tool === "track" || (t.path != null && t.path.length >= 2)),
         )
       : undefined;
-  /** The throat point — the turnout's frog (so the spur is continuous with the
-   * switch), falling back to the on-main turnout point if there's no frog yet. */
+  /** Where the spur body starts — the turnout's JOIN (the ramp's end, so the
+   * spur is continuous with the switch), falling back to the on-main turnout
+   * point if there's no leg yet. */
   const spurThroat = (t: CanvasTrack): Pt | null => {
-    const f = switchByTrack.get(t.id)?.frog;
+    const f = switchByTrack.get(t.id)?.join;
     if (f) return f;
     if (t.throatPos == null || centerline.length < 2) return null;
     const p = sampleAt(centerline, t.throatPos);
