@@ -6,8 +6,8 @@ import {
   samplePath,
   divergeSideForHand,
   turnoutClosure,
+  leadInchesForSize,
   RAIL_GAUGE_INCHES,
-  TURNOUT_LEAD_INCHES_PER_FROG,
   MAIN_TRACK_ID,
   MAIN2_TRACK_ID,
   type BenchworkPoint,
@@ -675,8 +675,11 @@ export function BenchworkEditor({
     // A wye splits SYMMETRICALLY — each route takes HALF the divergence, i.e.
     // each leg leaves at half the frog angle, which is a #2N.
     const effN = t.kind === "wye" ? size * 2 : size;
+    // The lead comes from the PARTS LIBRARY when a real part matches this frog
+    // number — an Atlas code 55 #7 is drawn at its measured 3⅜″, not a formula.
+    // Sizes with no part fall back to the per-frog rule (#179 stage 3).
     const cl = turnoutClosure(effN, {
-      leadInches: effN * TURNOUT_LEAD_INCHES_PER_FROG * stretch,
+      leadInches: leadInchesForSize(effN) * stretch,
     });
     const lead = Math.min(L, cl.lead);
     // Walk the host from the throat so the leg follows the mainline's curvature,
