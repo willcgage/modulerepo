@@ -31,6 +31,11 @@ const CAR_INCHES = 3.3;
 // RAIL_GAUGE_INCHES + TURNOUT_LEAD_INCHES_PER_FROG come from the package, so the
 // closure maths and the drawn rails can't drift apart (they were local here
 // first — two copies of a shared constant is the #120 trap).
+/** Railhead width, inches — N-scale code 55 is ~0.03″ across the head. Rails are
+ * drawn at a constant SCREEN width when zoomed out (so they stay visible), but
+ * once that would be thinner than the real railhead the real width takes over —
+ * otherwise zooming in made rails ever finer instead of resolving into rail. */
+const RAILHEAD_INCHES = 0.03;
 
 /** Round a raw span up to a friendly grid increment (inches). */
 function niceStep(raw: number): number {
@@ -605,7 +610,7 @@ export function BenchworkEditor({
   const frogLegOf = (
     t: CanvasTurnout,
     forceSide?: 1 | -1,
-  ): { leg: Pt[]; frog: Pt } | null => {
+  ): { leg: Pt[]; frog: Pt; frogV: [Pt, Pt] } | null => {
     const dt = tracks.find((x) => x.id === t.divergeTrack);
     if (!dt) return null;
     const host = hostPointsOf(t.onTrack);
@@ -693,7 +698,29 @@ export function BenchworkEditor({
     for (let i = 0; i <= steps; i++) leg.push(at((span * i) / steps));
     // The frog — `pos` marks it (#132), and the closure is built so the rails
     // cross exactly there.
-    return { leg, frog: at(lead) };
+    const frog = at(lead);
+    // The frog CASTING is a V: the two rails that cross here, carried on away
+    // from the points. One leg follows the through route, the other the
+    // diverging route, so the wedge opens the way a real frog does. (A blob
+    // centred on the crossing just hides it.)
+    const e = 0.05;
+    const unit = (a: Pt, b: Pt) => {
+      const d = Math.hypot(b.x - a.x, b.y - a.y) || 1;
+      return { x: (b.x - a.x) / d, y: (b.y - a.y) / d };
+    };
+    const dLeg = unit(at(Math.max(0, lead - e)), at(lead + e));
+    const hA = sampleAt(host, Math.max(0, relFrog - toward * e));
+    const hB = sampleAt(host, relFrog + toward * e);
+    const dHost = unit(hA, hB);
+    const vLen = RAIL_GAUGE_INCHES * 1.5;
+    return {
+      leg,
+      frog,
+      frogV: [
+        { x: frog.x + dHost.x * vLen, y: frog.y + dHost.y * vLen },
+        { x: frog.x + dLeg.x * vLen, y: frog.y + dLeg.y * vLen },
+      ] as [Pt, Pt],
+    };
   };
   /** The lateral side (±1) a turnout's diverging route leaves toward — so a wye
    * can render a mirror leg on the opposite side. */
@@ -721,7 +748,7 @@ export function BenchworkEditor({
     // the ramp's end — they aren't any more (#173).
     const map = new Map<
       string,
-      { throat: Pt; frog: Pt; join: Pt; leg: Pt[]; turnoutId: string }[]
+      { throat: Pt; frog: Pt; frogV: [Pt, Pt]; join: Pt; leg: Pt[]; turnoutId: string }[]
     >();
     if (centerline.length >= 2) {
       for (const t of turnouts) {
@@ -732,6 +759,7 @@ export function BenchworkEditor({
         list.push({
           throat: r.leg[0],
           frog: r.frog,
+          frogV: r.frogV,
           join: r.leg[r.leg.length - 1],
           leg: r.leg,
           turnoutId: t.id,
@@ -746,7 +774,7 @@ export function BenchworkEditor({
   const switchByTrack = useMemo(() => {
     const map = new Map<
       string,
-      { throat: Pt; frog: Pt; join: Pt; leg: Pt[]; turnoutId: string }
+      { throat: Pt; frog: Pt; frogV: [Pt, Pt]; join: Pt; leg: Pt[]; turnoutId: string }
     >();
     for (const [id, legs] of legsByTrack) map.set(id, legs[0]);
     return map;
@@ -1004,6 +1032,7 @@ export function BenchworkEditor({
               x: m.x,
               y: m.y,
               frog: sw && sw.turnoutId === t.id ? sw.frog : null,
+              frogV: sw && sw.turnoutId === t.id ? sw.frogV : null,
             };
           })
         : [],
@@ -2205,7 +2234,7 @@ const ENDPLATE_TAB = 5; // ballast-shoulder band width, inches
               points={poly(offsetPath(line.pts, o))}
               fill="none"
               stroke={on ? "#0284c7" : line.main ? "#1e293b" : "#334155"}
-              strokeWidth={world(0.6)}
+              strokeWidth={Math.max(world(0.6), RAILHEAD_INCHES)}
               strokeLinecap="round"
               strokeLinejoin="round"
             />
@@ -2572,23 +2601,24 @@ const ENDPLATE_TAB = 5; // ballast-shoulder band width, inches
                   The turnout's position IS its frog (#132), so this marker is
                   set by the position field, not dragged. A small snap circle. */}
               {t.frog &&
-                (railsVisible ? (
-                  // Once the rails show, the two inner ones genuinely CROSS here
-                  // (the closure is built so `pos` is where the centre-lines are
-                  // one gauge apart). Mark the casting so that crossing reads as
-                  // a frog rather than two tracks happening to overlap.
-                  <rect
-                    x={t.frog.x - RAIL_GAUGE_INCHES * 0.5}
-                    y={sy(t.frog.y) - RAIL_GAUGE_INCHES * 0.5}
-                    width={RAIL_GAUGE_INCHES}
-                    height={RAIL_GAUGE_INCHES}
-                    fill={node}
-                    opacity={0.9}
-                    transform={`rotate(45 ${t.frog.x} ${sy(t.frog.y)})`}
+                (railsVisible && t.frogV ? (
+                  // The frog CASTING, drawn as the V it actually is: the two
+                  // rails that cross here, carried on away from the points. An
+                  // opaque diamond centred on the crossing hid the very geometry
+                  // it was marking (its diagonal was wider than the gauge).
+                  <polyline
+                    points={[t.frogV[0], t.frog, t.frogV[1]]
+                      .map((p) => `${p.x},${sy(p.y)}`)
+                      .join(" ")}
+                    fill="none"
+                    stroke={node}
+                    strokeWidth={Math.max(world(1.4), RAILHEAD_INCHES * 2)}
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
                     pointerEvents="none"
                   >
                     <title>Frog — where the diverging rails cross. Set by the turnout&rsquo;s position, not dragged.</title>
-                  </rect>
+                  </polyline>
                 ) : (
                   <circle
                     cx={t.frog.x}
