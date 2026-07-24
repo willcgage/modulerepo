@@ -31,7 +31,24 @@ export default async function ModuleSchematicPage({
     .maybeSingle();
 
   if (!module) notFound();
-  if (module.owner_id !== user.id) redirect(`/modules/${moduleId}`);
+  // An ADMIN may open anyone's builder to diagnose a report, but READ-ONLY: the
+  // canvas and inspector are the only place a lot of this is visible, and
+  // reproducing an owner's module from scratch to debug it is guesswork.
+  // Read-only is enforced twice — `patch()` is inert here (so autosave never
+  // sees a dirty doc), AND saveModuleSchematic/updateModuleDimensions stay
+  // owner-only server-side. ⚠️ RLS grants admins UPDATE on every module, so the
+  // database will NOT stop an admin write — those action checks are the guard.
+  // Don't relax them for admins without replacing this invariant.
+  let readOnly = false;
+  if (module.owner_id !== user.id) {
+    const { data: profile } = await supabase
+      .from("owner_profiles")
+      .select("role")
+      .eq("id", user.id)
+      .maybeSingle();
+    if (profile?.role !== "admin") redirect(`/modules/${moduleId}`);
+    readOnly = true;
+  }
 
   const { data: moduleTracks } = await supabase
     .from("module_tracks")
@@ -140,7 +157,10 @@ export default async function ModuleSchematicPage({
         moduleName={module.module_name}
         initial={initial}
         hadSchematic={module.schematic != null}
-        newModule={isNew === "1"}
+        // A new module SEEDS its board on first open — that's a write, so never
+        // let it fire on someone else's module.
+        newModule={isNew === "1" && !readOnly}
+        readOnly={readOnly}
         // Endplate rows FOLLOW the schematic now (saveModuleSchematic syncs
         // track_config on every save), so existing rows no longer lock the
         // configs — the canvas is the source of truth; rows still SEED the

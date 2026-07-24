@@ -103,6 +103,7 @@ export function SchematicEditor({
   moduleName,
   initial,
   newModule = false,
+  readOnly = false,
   lockedConfigs = { a: false, b: false },
   geometries = [],
   industryTypes = [],
@@ -115,6 +116,9 @@ export function SchematicEditor({
   initial: EditorState;
   hadSchematic: boolean;
   newModule?: boolean;
+  /** Inspect-only: an ADMIN viewing a module they don't own. Every mutation is
+   * inert and nothing is ever saved (the server actions are owner-only too). */
+  readOnly?: boolean;
   /** True when the module's endplate records define the config — the selects
    * mirror them read-only (edit endplates on the module page instead). */
   lockedConfigs?: { a: boolean; b: boolean };
@@ -452,6 +456,13 @@ export function SchematicEditor({
   );
 
   const patch = (fn: (s: EditorState) => void) => {
+    // An admin inspecting someone else's module is READ-ONLY, and the cheapest
+    // honest way to mean it is to make every mutation inert at the source: no
+    // state change ⇒ the doc signature never moves ⇒ autosave never fires, and
+    // every tool, drag and inspector field goes dead without having to be
+    // disabled one by one (miss one and autosave writes to an owner's module).
+    // The server actions stay owner-only regardless.
+    if (readOnly) return;
     snapshot();
     setState((prev) => {
       const next = structuredClone(prev);
@@ -466,6 +477,9 @@ export function SchematicEditor({
    * can't drift apart.
    */
   const setDim = (p: Partial<ModuleDimensions>) => {
+    // Dimensions persist via updateModuleDimensions, a separate path from the
+    // doc — so read-only has to stop here too, not just in patch().
+    if (readOnly) return;
     snapshot();
     const next = { ...dims, ...p };
     setDims(next);
@@ -1239,6 +1253,7 @@ export function SchematicEditor({
   });
 
   const runSave = useCallback(async () => {
+    if (readOnly) return; // inspect-only: never write someone else's module
     if (savingRef.current) return; // in flight; its finally re-checks
     const target = { ...sigRef.current };
     if (target.doc === savedSig.current.doc && target.dims === savedSig.current.dims) {
@@ -1270,7 +1285,7 @@ export function SchematicEditor({
       savingRef.current = false;
       // Edited while saving? A later effect run already scheduled the next pass.
     }
-  }, [moduleId]);
+  }, [moduleId, readOnly]);
 
   // Debounce: settle 1s after the last change, then persist.
   useEffect(() => {
@@ -1404,7 +1419,18 @@ export function SchematicEditor({
           <div className="truncate text-xs text-gray-500">{recordNumber}</div>
         </div>
         <Readiness state={state} onGo={setTool} />
+        {readOnly && (
+          <span
+            className="shrink-0 rounded-md border border-amber-300 bg-amber-50 px-2 py-1 text-xs font-medium text-amber-900"
+            title="You are an admin viewing a module you don't own. Nothing you do here is saved."
+            role="status"
+          >
+            👁 Viewing as admin — read-only
+          </span>
+        )}
         <div className="ml-auto flex shrink-0 items-center gap-1.5">
+          {!readOnly && (
+          <>
           <button
             type="button"
             onClick={undo}
@@ -1444,6 +1470,8 @@ export function SchematicEditor({
           >
             Clear
           </button>
+          </>
+          )}
         </div>
       </header>
 
