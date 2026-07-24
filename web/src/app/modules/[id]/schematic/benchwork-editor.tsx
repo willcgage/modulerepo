@@ -275,6 +275,7 @@ export type CanvasTool = "select" | "benchwork" | "industry" | "track" | "turnou
  */
 export function BenchworkEditor({
   outline,
+  outlineInner = [],
   onChange,
   contextOutlines = [],
   seedOutline,
@@ -318,6 +319,9 @@ export function BenchworkEditor({
   tool = "select",
 }: {
   outline: BenchworkPoint[];
+  /** A benchwork HOLE — the loop's open middle, punched out of `outline` so the
+   * board reads as a donut, not a filled disc. Empty = solid board (#loop). */
+  outlineInner?: BenchworkPoint[];
   /** The module's OTHER sections, drawn as faint context so you can see what
    * the board you're editing has to meet (#96 phase 2b). Not editable. */
   contextOutlines?: { id: string; name?: string; outline: { x: number; y: number }[] }[];
@@ -532,6 +536,10 @@ export function BenchworkEditor({
   }, [poses, endplateWidths, endplateTrackOffsets, centerline]);
 
   const sampled = useMemo(() => sampleBenchworkOutline(outline, 24), [outline]);
+  const sampledInner = useMemo(
+    () => (outlineInner.length >= 3 ? sampleBenchworkOutline(outlineInner, 24) : []),
+    [outlineInner],
+  );
 
   // Track context. A track with an authored 2-D path draws along it; otherwise
   // it's laid onto the main centre-line, offset to its lane (#2d-track).
@@ -1983,6 +1991,12 @@ export function BenchworkEditor({
   };
 
   const polyPts = sampled.map((p) => `${p.x},${sy(p.y)}`).join(" ");
+  // The donut hole (loop's open middle), as an even-odd path cut from the board.
+  const donutD =
+    sampledInner.length >= 3
+      ? `M ${sampled.map((p) => `${p.x},${sy(p.y)}`).join(" L ")} Z ` +
+        `M ${sampledInner.map((p) => `${p.x},${sy(p.y)}`).join(" L ")} Z`
+      : null;
   const ctxPolys = contextOutlines.map((c) => ({
     id: c.id,
     pts: c.outline.map((p) => `${p.x},${sy(p.y)}`).join(" "),
@@ -2357,7 +2371,11 @@ const ENDPLATE_TAB = 5; // ballast-shoulder band width, inches
           />
         ))}
         {sampled.length >= 2 && outline.length >= 3 && (
-          <polygon points={polyPts} fill="#f6f2ea" fillOpacity={0.9} pointerEvents="none" />
+          donutD ? (
+            <path d={donutD} fillRule="evenodd" fill="#f6f2ea" fillOpacity={0.9} pointerEvents="none" />
+          ) : (
+            <polygon points={polyPts} fill="#f6f2ea" fillOpacity={0.9} pointerEvents="none" />
+          )
         )}
 
         {/* --- Track: roadbed + rails/ties (or a single line when zoomed out) --- */}

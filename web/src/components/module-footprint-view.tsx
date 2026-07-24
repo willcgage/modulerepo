@@ -64,6 +64,15 @@ export function ModuleFootprintView({
   const sw = Math.max(0.6, w * 0.006);
 
   const polys = boards.map((b) => b.map((p) => `${p.x},${sy(p.y)}`).join(" "));
+  // A return loop's board is a DONUT — the outline with an inner hole punched out.
+  // Draw it as one even-odd path (outer ring + hole) so the middle reads as open,
+  // not a filled disc (#loop). Only when there's a single authored board.
+  const ringD = (pts: { x: number; y: number }[]) =>
+    "M " + pts.map((p) => `${p.x},${sy(p.y)}`).join(" L ") + " Z";
+  const hole =
+    fp.outlineInner && fp.outlineInner.length >= 3 && boards.length === 1
+      ? fp.outlineInner
+      : null;
   // The full track plan when we have the doc; otherwise just the spine, as
   // before — so a double-track / transition module no longer shows a lone line.
   const plan = doc
@@ -86,18 +95,31 @@ export function ModuleFootprintView({
       role="img"
       aria-label="Physical module footprint with track"
     >
-      {/* Benchwork board(s) — one polygon per section when it has them */}
-      {polys.map((points, i) => (
-        <polygon
-          key={i}
-          points={points}
+      {/* Benchwork board(s) — one polygon per section when it has them. A loop's
+          board is a donut: one even-odd path with the hole cut out. */}
+      {hole ? (
+        <path
+          d={`${ringD(boards[0])} ${ringD(hole)}`}
+          fillRule="evenodd"
           fill="#0ea5e9"
           fillOpacity={0.12}
           stroke="#0369a1"
           strokeWidth={sw}
           strokeLinejoin="round"
         />
-      ))}
+      ) : (
+        polys.map((points, i) => (
+          <polygon
+            key={i}
+            points={points}
+            fill="#0ea5e9"
+            fillOpacity={0.12}
+            stroke="#0369a1"
+            strokeWidth={sw}
+            strokeLinejoin="round"
+          />
+        ))
+      )}
       {/* Endplate faces (the standardized interface at each end) — the axial
           A/B faces from the footprint, plus any placed branch endplates (#170). */}
       {[
@@ -173,6 +195,10 @@ export function footprintInput(
     geometryOffsetInches: module.geometry_offset_inches,
     endplateWidths,
     outline: (doc as { outline?: ModuleSchematicDoc["outline"] } | null)?.outline ?? null,
+    // The donut hole (return-loop open middle) — so the physical view punches it
+    // out of the board instead of filling a solid disc (#loop).
+    outlineInner:
+      (doc as { outlineInner?: ModuleSchematicDoc["outline"] } | null)?.outlineInner ?? null,
     sections: (doc as { sections?: ModuleSchematicDoc["sections"] } | null)?.sections ?? null,
     // An authored mainline path (a drawn curve, or a computed return loop) wins
     // the centre-line — without it the read-only/catalog views fell back to the
