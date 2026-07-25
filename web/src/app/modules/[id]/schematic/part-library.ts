@@ -39,28 +39,23 @@ export const PART_LIBRARY: TrackPart[] = mergeImportedParts(
 );
 
 /**
- * The part a turnout should be DRAWN as.
+ * The part a turnout should be DRAWN as — only ever one it NAMES.
  *
- * An explicit `partId` always wins — that is the real binding. Absent one, fall
- * back to a part with the same frog number that actually carries an outline, so
- * existing turnouts pick up real geometry without every module needing to be
- * re-authored. ⚠️ That fallback is a convenience of the fixture stage; once
- * owners import their own libraries, several parts may share a frog number and
- * the choice has to become explicit.
+ * ⚠️ There is deliberately NO fallback to matching the frog number. An earlier
+ * version had one, so any #7 in any module drew the fixture outline above — and
+ * that outline is hand-built, not measured. That put invented geometry in front
+ * of owners looking like real part data. Until parts come from a real import,
+ * an outline appears only where someone explicitly bound one.
+ *
+ * When real libraries arrive this stays explicit anyway: several parts can share
+ * a frog number, so guessing from `size` would pick one arbitrarily.
  */
 export function drawablePartFor(
   partId: string | null | undefined,
-  size: number | null | undefined,
+  _size: number | null | undefined,
   library: TrackPart[] = PART_LIBRARY,
 ): TrackPart | null {
-  if (partId) {
-    const named = library.find((p) => p.id === partId);
-    return named?.segments?.length ? named : null;
-  }
-  if (size == null) return null;
-  return (
-    library.find(
-      (p) => p.kind === "turnout" && p.frogNumber === size && p.segments?.length,
-    ) ?? null
-  );
+  if (!partId) return null;
+  const named = library.find((p) => p.id === partId);
+  return named?.segments?.length ? named : null;
 }

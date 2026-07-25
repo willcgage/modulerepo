@@ -5,6 +5,30 @@ Headings are `version — date` (YYYY-MM-DD).
 
 ---
 
+## v0.15.41 — 2026-07-24
+
+### Changed
+- **Turnouts are drawn at their real measured size.** Every switch used to be sized by a formula — points-to-frog was just the frog number times a constant. That constant came from one measurement and turned out to be wrong in both directions: about 20% short on a #5 and 13% long on a #10. Turnouts are now drawn from **physical measurements of Atlas code 55 parts** (#5, #7 and #10 measured end to end, points and frog), and in-between sizes are interpolated between real parts rather than multiplied out. **Every turnout on every module redraws** — the throat moves, most noticeably on #4s and #6s. Nothing you authored has changed; a turnout's position still marks its frog.
+
+## v0.15.40 — 2026-07-24
+
+### Changed
+- **Turnouts look like turnouts.** Switches were drawn as a plain wedge off the mainline. They are now drawn as real track: **rails instead of a solid band** once you zoom in far enough to see them, the **point rails tapering off the stock rail**, and a genuine **frog** where the two inner rails cross. The shape isn't decoration — it comes from the actual closure geometry, which is why the points and frog land where they do.
+- **The rails run continuously through a switch.** Where a turnout's diverging leg met the track it feeds, the two were drawn separately and didn't quite meet — a visible break, and on some modules a sideways jog. The leg now runs until it reaches its track's lane and the track begins where the leg ends.
+- **Diverging routes leave at the correct angle in the dispatcher view**, instead of every switch being drawn the same.
+
+### Fixed
+- **Wyes no longer split at twice the correct angle.** A wye's two legs each leave at half the frog angle; the halving was being applied twice.
+- **Authored positions keep their fractions.** Positions typed with a decimal — a turnout at 17.4″ — were being rounded to whole inches when a module was opened, silently moving things you had placed. (Affected any module whose length had been changed since authoring.)
+
+## v0.15.39 — 2026-07-24
+
+### Added
+- **Admins can open any module's builder, read-only.** Useful for looking into a reported problem without needing the owner present. Nothing can be saved from a read-only session — edits are inert, not merely hidden.
+
+### Fixed
+- **No more false "diverges to itself" warning.** A turnout whose diverging route pointed at its own host track raised a warning that couldn't be cleared. Choosing a new host in the dropdown now swaps the two rather than colliding, and existing modules with the problem are repaired when opened. (Reported by Steve Branton.)
+
 ## v0.15.38 — 2026-07-20
 
 ### Fixed
