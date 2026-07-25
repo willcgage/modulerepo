@@ -5,6 +5,11 @@ Headings are `version — date` (YYYY-MM-DD).
 
 ---
 
+## v0.15.46 — 2026-07-25
+
+### Fixed
+- **The mainline's rails no longer cut off at a wye.** Where a wye sat on the main, the main's rails were deliberately erased across it — a hangover from when the main was drawn as a plain band that would have run straight through the middle of the Y. Worse, the erased stretch was as long as **the whole track the wye fed**, so a wye feeding a 30″ siding wiped out 30″ of mainline. The main is now drawn end to end, and both routes' rails meet at the switch instead of one being hidden to make room for the other. (Reported on FMN-0068, FMN-0073 and VMN-0064.)
+
 ## v0.15.45 — 2026-07-25
 
 ### Fixed

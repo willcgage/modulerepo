@@ -1027,15 +1027,21 @@ export function BenchworkEditor({
    * stays the coordinate spine underneath; it's just not drawn across the wye. */
   const mainSegments = useMemo(() => {
     if (centerline.length < 2) return [];
+    // ⚠️ THE MAIN IS NEVER GAPPED. It used to be cut across every wye (v0.15.26)
+    // so a straight band would not bisect the Y — back when the main was a plain
+    // band and a wye had no real geometry of its own. Two things were wrong with
+    // that once wyes started drawing true mirrored legs:
+    //
+    //   1. The gap was as long as the DIVERGING TRACK, not the wye's legs
+    //      (`|spur.toPos - spur.fromPos|`). A wye feeding a 30" siding erased
+    //      30" of main. That is the "through route's rails cut off" report.
+    //   2. Erasing one route to stop it overlapping another is the wrong fix.
+    //      Both routes' rails should MEET, and the closure geometry now makes
+    //      them meet.
+    //
+    // If a straight band ever appears to bisect a Y again, fix the wye's leg
+    // geometry — do not delete the main to hide it.
     const clips: [number, number][] = [];
-    for (const t of turnouts) {
-      if (t.kind !== "wye") continue;
-      if (t.onTrack && t.onTrack !== MAIN_TRACK_ID) continue;
-      const spur = tracks.find((x) => x.id === t.divergeTrack);
-      const reach = spur ? Math.abs(spur.toPos - spur.fromPos) : 6;
-      const toward = spur ? Math.sign(spur.toPos - t.pos) || 1 : 1;
-      clips.push([Math.min(t.pos, t.pos + toward * reach), Math.max(t.pos, t.pos + toward * reach)]);
-    }
     // Main 1 rides mainLane — 0 normally, 1 when swapped so it's the upper
     // track. The swap already flips Main 2 (its doc lane); this makes the
     // realistic view honour it for Main 1 too, instead of stacking both on
