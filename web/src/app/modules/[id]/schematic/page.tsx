@@ -2,6 +2,7 @@ import { notFound, redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { docToState, nextId, MAIN_TRACK_ID } from "@/lib/module-schematic";
 import { fetchIndustryTypes, fetchCarTypes } from "@/lib/edge";
+import { loadStoredTrackParts } from "@/lib/track-parts";
 import { SchematicEditor } from "./editor";
 
 export default async function ModuleSchematicPage({
@@ -57,7 +58,9 @@ export default async function ModuleSchematicPage({
     .order("id");
 
   // Existing industries (rows of record) + the type/car lookups for the inspector.
-  const [{ data: industryRows }, industryTypes, carTypes] = await Promise.all([
+  // The turnout parts library — turnouts are drawn at their part's measured
+  // dimensions, so this is what an admin adding a manufacturer's switch changes.
+  const [{ data: industryRows }, industryTypes, carTypes, storedParts] = await Promise.all([
     supabase
       .from("freemon_industries")
       .select("id, industry_name, industry_type, track_id")
@@ -65,6 +68,7 @@ export default async function ModuleSchematicPage({
       .order("id"),
     fetchIndustryTypes(),
     fetchCarTypes(),
+    loadStoredTrackParts(),
   ]);
 
   // Car types spotted at each industry (join → rail_car_types.value).
@@ -169,6 +173,7 @@ export default async function ModuleSchematicPage({
         geometries={geometries ?? []}
         industryTypes={industryTypes}
         carTypes={carTypes}
+        storedParts={storedParts}
         initialDimensions={{
           geometry_type: module.geometry_type ?? "",
           geometry_degrees: module.geometry_degrees?.toString() ?? "",

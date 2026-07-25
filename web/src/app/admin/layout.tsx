@@ -6,6 +6,7 @@ const NAV_LINKS = [
   { href: "/admin", label: "Dashboard" },
   { href: "/admin/car-types", label: "Suggestions" },
   { href: "/admin/lookups", label: "Lookup tables" },
+  { href: "/admin/track-parts", label: "Track parts" },
   { href: "/admin/grants", label: "Grants" },
   { href: "/admin/users", label: "Users" },
   { href: "/admin/audit-log", label: "Audit log" },

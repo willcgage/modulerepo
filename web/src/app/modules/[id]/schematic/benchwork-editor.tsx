@@ -15,9 +15,10 @@ import {
   MAIN2_TRACK_ID,
   type BenchworkPoint,
   type EndplatePose,
+  type TrackPart,
   type TurnoutKind,
 } from "@willcgage/module-schematic";
-import { drawablePartFor } from "./part-library";
+import { drawablePartFor, PART_LIBRARY } from "./part-library";
 import {
   lanePath,
   sampleAt,
@@ -335,6 +336,7 @@ export function BenchworkEditor({
   selection = null,
   onSelect,
   tool = "select",
+  partLibrary = PART_LIBRARY,
 }: {
   outline: BenchworkPoint[];
   /** A benchwork HOLE — the loop's open middle, punched out of `outline` so the
@@ -464,6 +466,12 @@ export function BenchworkEditor({
   onSelect?: (s: CanvasSelection | null) => void;
   /** What a background click means. See CanvasTool. */
   tool?: CanvasTool;
+  /** The track/turnout parts library for this request — the admin-maintained
+   * parts folded over the compiled-in ones. A turnout is drawn at its part's
+   * MEASURED dimensions, so adding a part is what makes a frog number the app
+   * has never seen start drawing its own extent. Defaults to the built-ins so
+   * the canvas still works standalone. */
+  partLibrary?: TrackPart[];
 }) {
   const svgRef = useRef<SVGSVGElement | null>(null);
   const dragRef = useRef<
@@ -696,7 +704,7 @@ export function BenchworkEditor({
     // The lateral the diverging route must ARRIVE AT, parallel — the lane of
     // the track it feeds.
     const targetOff = Math.abs(laneOffset(dt.lane)) || LANE_SPACING_INCHES;
-    const leadIn = leadInchesForSize(effN) * stretch;
+    const leadIn = leadInchesForSize(effN, partLibrary) * stretch;
     // How much track there actually IS to run into — the diverging track's far
     // end, from the frog. The ease has to fit inside it.
     const farEnd =
@@ -773,7 +781,7 @@ export function BenchworkEditor({
     // from the frog, y lateral toward the diverging side — which is the frame
     // `at()` already walks, so it maps through the same host sampling and picks
     // up the mainline's curvature for free.
-    const part = drawablePartFor(t.partId, size);
+    const part = drawablePartFor(t.partId, size, partLibrary);
     const local = part ? partOutlineAtFrog(part, lead) : null;
     const outline = local
       ? local.map((poly) =>
@@ -798,7 +806,8 @@ export function BenchworkEditor({
     // Skipped for a wye (its lead is derived) and for a curved turnout (we
     // stretch that geometry to read as an arc, so a real part's strip wouldn't
     // sit on it).
-    const ext = !t.curved && t.kind !== "wye" ? partExtentForSize(size) : null;
+    const ext =
+      !t.curved && t.kind !== "wye" ? partExtentForSize(size, partLibrary) : null;
     const body = ext
       ? (() => {
           const s0 = -ext.behindPoints;

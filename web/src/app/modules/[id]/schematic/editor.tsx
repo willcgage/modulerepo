@@ -37,6 +37,8 @@ import {
   type SchematicSection,
 } from "@/lib/module-schematic";
 import { snapPoseToOutline, sampleAt, pinBranchStart } from "@/lib/physical-track";
+import { partLibraryWith } from "./part-library";
+import type { StoredTrackPart } from "@willcgage/module-schematic";
 import {
   returnLoop,
   type ReturnLoopShape,
@@ -110,6 +112,7 @@ export function SchematicEditor({
   industryTypes = [],
   carTypes = [],
   initialDimensions,
+  storedParts = [],
 }: {
   moduleId: number;
   recordNumber: string;
@@ -136,8 +139,15 @@ export function SchematicEditor({
   carTypes?: { value: string; display_label: string }[];
   /** The module's geometry + lengths — editable here, since they size the board. */
   initialDimensions: ModuleDimensions;
+  /** The stored track/turnout parts library, loaded per request. Turnouts are
+   * drawn at their part's measured dimensions, so this is what an admin adding
+   * a part changes. Absent = the compiled-in built-ins. */
+  storedParts?: StoredTrackPart[];
 }) {
   const [state, setState] = useState<EditorState>(initial);
+  /** The parts library this board draws with — admin-maintained parts folded
+   * over the compiled-in ones (the same library, later). */
+  const partLibrary = useMemo(() => partLibraryWith(storedParts), [storedParts]);
   /** What's selected — drives the one inspector on the right. */
   const [selection, setSelection] = useState<Selection | null>(null);
   /** What a canvas background click means. */
@@ -1602,6 +1612,7 @@ export function SchematicEditor({
                 }
                 selection={isCanvasSel(selection) ? selection : null}
                 onSelect={setSelection}
+                partLibrary={partLibrary}
               />
             </div>
           </div>

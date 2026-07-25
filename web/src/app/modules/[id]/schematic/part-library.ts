@@ -1,7 +1,9 @@
 import {
   BUILT_IN_TRACK_PARTS,
   mergeImportedParts,
+  mergeStoredParts,
   parseXtpLibrary,
+  type StoredTrackPart,
   type TrackPart,
 } from "@willcgage/module-schematic";
 
@@ -37,6 +39,19 @@ export const PART_LIBRARY: TrackPart[] = mergeImportedParts(
   BUILT_IN_TRACK_PARTS,
   "dev fixture",
 );
+
+/**
+ * The library as it stands for this request: the admin-maintained parts folded
+ * over the compiled-in ones.
+ *
+ * This is the SAME library, not a second one — the `track_parts` table was
+ * seeded from these built-ins, so a stored row is the built-in as an admin has
+ * since corrected it, and it wins. With no stored parts (or an unreachable
+ * table) this is exactly `PART_LIBRARY`, so turnouts still draw.
+ */
+export function partLibraryWith(stored: StoredTrackPart[] | null | undefined): TrackPart[] {
+  return stored?.length ? mergeStoredParts(stored, PART_LIBRARY) : PART_LIBRARY;
+}
 
 /**
  * The part a turnout should be DRAWN as — only ever one it NAMES.
