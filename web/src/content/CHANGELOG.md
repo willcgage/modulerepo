@@ -5,6 +5,11 @@ Headings are `version — date` (YYYY-MM-DD).
 
 ---
 
+## v0.15.44 — 2026-07-25
+
+### Fixed
+- **The diverging route now eases back parallel, so the rails line up.** Where a turnout's diverging leg met the track it feeds, it arrived at the right spacing but was **still angling away** — while the track it joined ran parallel to the main. Track can't change direction instantly, and because each rail sits square to its own direction, the two rails ended up meeting at slightly different points. That's the misalignment you've been seeing at switches; it was never a gap, it was a kink. The route now runs straight at the frog angle and then **curves gently back to parallel** before it joins, on about a 25″ radius — comfortably inside the Free-moN 22″ minimum. A turnout's diverging route is correspondingly **longer** (about 10¾″ rather than 9″ on a #7), because it needs the room to come back parallel. Turnout positions, frogs and leads are unchanged, and nothing you authored moves.
+
 ## v0.15.43 — 2026-07-24
 
 ### Fixed

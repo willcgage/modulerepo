@@ -683,8 +683,12 @@ export function BenchworkEditor({
     // The lead comes from the PARTS LIBRARY when a real part matches this frog
     // number — an Atlas code 55 #7 is drawn at its measured 3⅜″, not a formula.
     // Sizes with no part fall back to the per-frog rule (#179 stage 3).
+    // The lateral the diverging route must ARRIVE AT, parallel — the lane of
+    // the track it feeds.
+    const targetOff = Math.abs(laneOffset(dt.lane)) || LANE_SPACING_INCHES;
     const cl = turnoutClosure(effN, {
       leadInches: leadInchesForSize(effN) * stretch,
+      arriveAtInches: targetOff,
     });
     const lead = Math.min(L, cl.lead);
     // Walk the host from the throat so the leg follows the mainline's curvature,
@@ -702,11 +706,13 @@ export function BenchworkEditor({
     // span. Past the frog the closure is straight at 1/N, so solve for it. A
     // fixed span left the leg short of the lane (0.997″ vs 1.125″ on a #6), and
     // the rails jogged sideways where the leg met the body.
-    const targetOff = Math.abs(laneOffset(dt.lane)) || LANE_SPACING_INCHES;
-    const span = Math.max(
-      lead,
-      cl.lead + Math.max(0, (targetOff - RAIL_GAUGE_INCHES) * effN),
-    );
+    // Run to where the closure ARRIVES PARALLEL, not where it first reaches the
+    // lane. Solving for the offset (what this did) got there still climbing at
+    // 1/N while the track it joins runs parallel — an instantaneous change of
+    // direction. That kink is what read as "the rails don't line up": each rail
+    // is offset perpendicular to its own heading, so at a kink the two rails
+    // meet at different points. The closure now eases out and `span` includes it.
+    const span = Math.max(lead, cl.span);
     const leg: Pt[] = [];
     for (let i = 0; i <= steps; i++) leg.push(at((span * i) / steps));
     // The frog — `pos` marks it (#132), and the closure is built so the rails
