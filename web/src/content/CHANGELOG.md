@@ -5,6 +5,11 @@ Headings are `version — date` (YYYY-MM-DD).
 
 ---
 
+## v0.15.47 — 2026-07-25
+
+### Fixed
+- **The mainline's rails no longer vanish under a switch.** Where a turnout's leg crossed the main, the main's rails disappeared for that stretch — so the diverging route looked properly connected while the through route appeared to stop and restart. The rails were never missing: each track was drawing its pale ballast band and its rails together, and because the main is drawn first, every later track's band painted straight over the main's rails and buried them. Ballast for every track is now laid down first, and all the rails go on top, so nothing can cover anything else. Both routes' rails now read as continuous through the switch. (Reported on FMN-0068, FMN-0073 and VMN-0064.)
+
 ## v0.15.46 — 2026-07-25
 
 ### Fixed

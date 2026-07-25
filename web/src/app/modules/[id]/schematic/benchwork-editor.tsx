@@ -2242,27 +2242,46 @@ const ENDPLATE_TAB = 5; // ballast-shoulder band width, inches
   /** Is a rail PAIR worth drawing, or is the gauge sub-pixel at this zoom? A
    * gauge is 0.354″; below ~3 px of separation the two lines just smear. */
   const railsVisible = RAIL_GAUGE_INCHES * scale >= 3;
-  const renderTrack = (line: (typeof trackLines)[number]) => {
-    // What clicking this line selects — the main's segments all report the main.
-    const selId = line.selId ?? line.id;
-    const on = selection?.kind === "track" && selection.id === selId;
-    const click =
-      tool === "industry" && onAddIndustry
+  type TrackLine = (typeof trackLines)[number];
+  // What clicking a line selects — the main's segments all report the main.
+  const trackSelId = (line: TrackLine) => line.selId ?? line.id;
+  const trackOn = (line: TrackLine) =>
+    selection?.kind === "track" && selection.id === trackSelId(line);
+  const trackClick = (line: TrackLine) =>
+    tool === "industry" && onAddIndustry
+      ? (e: React.PointerEvent) => {
+          e.stopPropagation();
+          onAddIndustry(line.main ? "main" : line.id, posFrom(toLocal(e)));
+        }
+      : // Turnout / Signal tools: don't intercept — let the click fall through
+        // to the background handler, which drops on the nearest track (#63/#53).
+        tool !== "turnout" && tool !== "signal" && line.selectable && onSelect
         ? (e: React.PointerEvent) => {
             e.stopPropagation();
-            onAddIndustry(line.main ? "main" : line.id, posFrom(toLocal(e)));
+            onSelect({ kind: "track", id: trackSelId(line) });
           }
-        : // Turnout / Signal tools: don't intercept — let the click fall through
-          // to the background handler, which drops on the nearest track (#63/#53).
-          tool !== "turnout" && tool !== "signal" && line.selectable && onSelect
-          ? (e: React.PointerEvent) => {
-              e.stopPropagation();
-              onSelect({ kind: "track", id: selId });
-            }
-          : undefined;
+        : undefined;
+
+  /**
+   * ⚠️⚠️ TRACKS RENDER IN TWO PASSES — every roadbed band, THEN every rail.
+   * Do not merge them back together.
+   *
+   * Drawn per track (band and rails as one group) a later track's roadbed —
+   * 1.3″ wide — paints straight over an earlier track's rails, which are 0.03″.
+   * The main is first in `trackLines`, so EVERY switch leg erased the stretch of
+   * Main 1 it crossed. Main 1 was never broken: the DOM had it as one unbroken
+   * polyline 0→96 the whole time. It was buried.
+   *
+   * That is what "the through route's rails cut off, the diverging route is
+   * fine" was — the diverging route is drawn last, so nothing paints over it.
+   * Reported on FMN-0068, FMN-0073 and VMN-0064.
+   */
+  const renderTrackBand = (line: TrackLine) => {
+    const on = trackOn(line);
+    const click = trackClick(line);
     return (
       <g
-        key={`trk${line.id}`}
+        key={`trkb${line.id}`}
         style={click ? { cursor: "pointer" } : undefined}
         onPointerDown={click}
       >
@@ -2286,24 +2305,31 @@ const ENDPLATE_TAB = 5; // ballast-shoulder band width, inches
           strokeLinecap="round"
           strokeLinejoin="round"
         />
-        {/* RAILS — two lines at N-scale gauge. Outlining the roadbed's shoulders
-            instead made a track read as a pale ballast band with no track on it:
-            "I'd rather see the tracks drawn instead of what I think is the
-             ballast" (Steve, #173). The band stays as the ballast underneath;
-            the rails are what carries the eye.
-            LOD: a gauge is 0.354″, so on a fitted 120″ module it's only ~3 px —
-            below that the pair is mush, so draw ONE line, which still reads as
-            track. Where the rails DO show, the points taper and the frog X fall
-            out of the closure geometry for free: at the points the diverging
-            rails sit exactly on the stock rails, and at the frog the two inner
-            rails genuinely cross. */}
+        <title>{line.main ? "Mainline" : line.id}</title>
+      </g>
+    );
+  };
+
+  /* RAILS — two lines at N-scale gauge, drawn in the second pass so no other
+     track's roadbed can bury them. Outlining the roadbed's shoulders instead
+     made a track read as a pale ballast band with no track on it: "I'd rather
+     see the tracks drawn instead of what I think is the ballast" (Steve, #173).
+     LOD: a gauge is 0.354″, so on a fitted 120″ module it's only ~3 px — below
+     that the pair is mush, so draw ONE line, which still reads as track. Where
+     the rails DO show, the points taper and the frog X fall out of the closure
+     geometry for free. Pointer events stay off so the band keeps the hit test. */
+  const renderTrackRails = (line: TrackLine) => {
+    const on = trackOn(line);
+    const colour = on ? "#0284c7" : line.main ? "#1e293b" : "#334155";
+    return (
+      <g key={`trkr${line.id}`} pointerEvents="none">
         {railsVisible ? (
           [RAIL_GAUGE_INCHES / 2, -RAIL_GAUGE_INCHES / 2].map((o, k) => (
             <polyline
               key={`rail${k}`}
               points={poly(offsetPath(line.pts, o))}
               fill="none"
-              stroke={on ? "#0284c7" : line.main ? "#1e293b" : "#334155"}
+              stroke={colour}
               strokeWidth={Math.max(world(0.6), RAILHEAD_INCHES)}
               strokeLinecap="round"
               strokeLinejoin="round"
@@ -2313,13 +2339,12 @@ const ENDPLATE_TAB = 5; // ballast-shoulder band width, inches
           <polyline
             points={poly(line.pts)}
             fill="none"
-            stroke={on ? "#0284c7" : line.main ? "#1e293b" : "#334155"}
+            stroke={colour}
             strokeWidth={world(1.1)}
             strokeLinecap="round"
             strokeLinejoin="round"
           />
         )}
-        <title>{line.main ? "Mainline" : line.id}</title>
       </g>
     );
   };
@@ -2588,7 +2613,8 @@ const ENDPLATE_TAB = 5; // ballast-shoulder band width, inches
         {/* renderTrack's click handler reads the pointer via svgRef, but only
             when fired — not during render; the lint rule can't see that. */}
         {/* eslint-disable-next-line react-hooks/refs */}
-        {trackLines.map(renderTrack)}
+        {trackLines.map(renderTrackBand)}
+        {trackLines.map(renderTrackRails)}
         {/* Section joints — dashed dividers where the boards split (#48). */}
         {centerline.length >= 2 &&
           sectionBreaks.map((pos, i) => {
