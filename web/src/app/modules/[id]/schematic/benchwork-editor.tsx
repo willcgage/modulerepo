@@ -8,7 +8,9 @@ import {
   turnoutClosure,
   leadInchesForSize,
   partOutlineAtFrog,
+  partExtentForSize,
   RAIL_GAUGE_INCHES,
+  TIE_HALF_LENGTH_INCHES,
   MAIN_TRACK_ID,
   MAIN2_TRACK_ID,
   type BenchworkPoint,
@@ -615,7 +617,15 @@ export function BenchworkEditor({
   const frogLegOf = (
     t: CanvasTurnout,
     forceSide?: 1 | -1,
-  ): { leg: Pt[]; frog: Pt; frogV: [Pt, Pt]; outline: Pt[][] | null } | null => {
+  ): {
+    leg: Pt[];
+    frog: Pt;
+    frogV: [Pt, Pt];
+    outline: Pt[][] | null;
+    /** The measured part's tie strip, or null when the library has no part for
+     * this frog number — see the note where it's built (#part-vs-track). */
+    body: Pt[] | null;
+  } | null => {
     const dt = tracks.find((x) => x.id === t.divergeTrack);
     if (!dt) return null;
     const host = hostPointsOf(t.onTrack);
@@ -774,10 +784,47 @@ export function BenchworkEditor({
           }),
         )
       : null;
+    // THE PART ITSELF — its moulded tie strip, so the turnout can be told apart
+    // from the track past it. The leg runs until the route ARRIVES PARALLEL,
+    // which on a #7 is 10.79″; the part's own diverging rail stops at 5.375″ and
+    // everything beyond is flex track the OWNER lays. Drawing the whole sweep as
+    // one thing is what read as "a very long diverging route… the tracks are
+    // short" — the easement was right, it was just being attributed to the part.
+    //
+    // Only for a part we have actually MEASURED, and only at its own frog
+    // number: overall length is packaging, not a function of N (the #5 and the
+    // #7 are both 6.00″), so there is nothing to interpolate. No part ⇒ no
+    // boundary drawn, which is the honest answer rather than an invented one.
+    // Skipped for a wye (its lead is derived) and for a curved turnout (we
+    // stretch that geometry to read as an arc, so a real part's strip wouldn't
+    // sit on it).
+    const ext = !t.curved && t.kind !== "wye" ? partExtentForSize(size) : null;
+    const body = ext
+      ? (() => {
+          const s0 = -ext.behindPoints;
+          const s1 = Math.min(ext.aheadOfPoints, span);
+          const n = 24;
+          const near: Pt[] = [];
+          const far: Pt[] = [];
+          for (let i = 0; i <= n; i++) {
+            const s = s0 + ((s1 - s0) * i) / n;
+            const p = sampleAt(host, Math.max(0, relThroat + toward * s));
+            // Behind the points the two routes are the same track, so the strip
+            // is simply one track wide there.
+            const d = cl.offsetAt(Math.max(0, s));
+            const lo = side * -TIE_HALF_LENGTH_INCHES;
+            const hi = side * (d + TIE_HALF_LENGTH_INCHES);
+            near.push({ x: p.x + lo * p.nx, y: p.y + lo * p.ny });
+            far.push({ x: p.x + hi * p.nx, y: p.y + hi * p.ny });
+          }
+          return [...near, ...far.reverse()];
+        })()
+      : null;
     return {
       leg,
       frog,
       outline,
+      body,
       frogV: [
         { x: frog.x + dHost.x * vLen, y: frog.y + dHost.y * vLen },
         { x: frog.x + dLeg.x * vLen, y: frog.y + dLeg.y * vLen },
@@ -810,7 +857,7 @@ export function BenchworkEditor({
     // the ramp's end — they aren't any more (#173).
     const map = new Map<
       string,
-      { throat: Pt; frog: Pt; frogV: [Pt, Pt]; join: Pt; leg: Pt[]; outline: Pt[][] | null; turnoutId: string }[]
+      { throat: Pt; frog: Pt; frogV: [Pt, Pt]; join: Pt; leg: Pt[]; outline: Pt[][] | null; body: Pt[] | null; turnoutId: string }[]
     >();
     if (centerline.length >= 2) {
       for (const t of turnouts) {
@@ -823,6 +870,7 @@ export function BenchworkEditor({
           frog: r.frog,
           frogV: r.frogV,
           outline: r.outline,
+          body: r.body,
           join: r.leg[r.leg.length - 1],
           leg: r.leg,
           turnoutId: t.id,
@@ -837,7 +885,7 @@ export function BenchworkEditor({
   const switchByTrack = useMemo(() => {
     const map = new Map<
       string,
-      { throat: Pt; frog: Pt; frogV: [Pt, Pt]; join: Pt; leg: Pt[]; outline: Pt[][] | null; turnoutId: string }
+      { throat: Pt; frog: Pt; frogV: [Pt, Pt]; join: Pt; leg: Pt[]; outline: Pt[][] | null; body: Pt[] | null; turnoutId: string }
     >();
     for (const [id, legs] of legsByTrack) map.set(id, legs[0]);
     return map;
@@ -1102,6 +1150,7 @@ export function BenchworkEditor({
               y: m.y,
               frog: sw && sw.turnoutId === t.id ? sw.frog : null,
               outline: sw && sw.turnoutId === t.id ? sw.outline : null,
+              body: sw && sw.turnoutId === t.id ? sw.body : null,
               frogV: sw && sw.turnoutId === t.id ? sw.frogV : null,
             };
           })
@@ -2614,6 +2663,30 @@ const ENDPLATE_TAB = 5; // ballast-shoulder band width, inches
             when fired — not during render; the lint rule can't see that. */}
         {/* eslint-disable-next-line react-hooks/refs */}
         {trackLines.map(renderTrackBand)}
+        {/* The turnout PART's tie strip — between ballast and rail, where the
+            moulding actually sits. This is what separates the part from the
+            flex track running on past it: the strip's far edge is where the
+            owner's own track begins. Drawn only where a real part has been
+            measured, so its absence means the library has a gap, not that the
+            turnout is small. Same LOD gate as the rails — below that the whole
+            turnout is a few pixels and the strip would only muddy it. */}
+        {railsVisible &&
+          turnoutPts.map((t) =>
+            t.body ? (
+              <polygon
+                key={`tb${t.id}`}
+                points={t.body.map((p) => `${p.x},${sy(p.y)}`).join(" ")}
+                fill="#d8cfba"
+                stroke="#a89e88"
+                strokeWidth={Math.max(world(0.5), RAILHEAD_INCHES)}
+                strokeLinejoin="round"
+                vectorEffect="non-scaling-stroke"
+                pointerEvents="none"
+              >
+                <title>Turnout body — the part itself; track past it is flex</title>
+              </polygon>
+            ) : null,
+          )}
         {trackLines.map(renderTrackRails)}
         {/* Section joints — dashed dividers where the boards split (#48). */}
         {centerline.length >= 2 &&
