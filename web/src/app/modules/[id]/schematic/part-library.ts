@@ -59,3 +59,10 @@ export function drawablePartFor(
   const named = library.find((p) => p.id === partId);
   return named?.segments?.length ? named : null;
 }
+
+/** Parts that actually carry an outline, so the inspector only offers choices
+ * that change what is drawn. Naming a part with no geometry would look like a
+ * setting that does nothing. */
+export const DRAWABLE_PARTS: TrackPart[] = PART_LIBRARY.filter(
+  (p) => p.segments?.length,
+);

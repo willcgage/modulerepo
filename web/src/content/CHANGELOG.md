@@ -5,6 +5,11 @@ Headings are `version — date` (YYYY-MM-DD).
 
 ---
 
+## v0.15.42 — 2026-07-24
+
+### Added
+- **Say which part a turnout actually is.** A turnout's inspector now has a **Part** field. Leave it unset and the switch is drawn the way it always has been, from its frog number. Choose a part and it's drawn using **that part's own outline**, so what you see is the shape of the thing you'll lay rather than a shape calculated from a number. The part's frog should land on the turnout's position marker — if it visibly misses, that part's published geometry disagrees with our measurements, which is worth knowing. Only one part carries an outline today; importing your own XTrkCAD library is the next step.
+
 ## v0.15.41 — 2026-07-24
 
 ### Changed

@@ -1,5 +1,6 @@
 "use client";
 
+import { DRAWABLE_PARTS } from "./part-library";
 import { Fragment, useCallback, useEffect, useMemo, useRef, useState, useTransition } from "react";
 import Link from "next/link";
 import {
@@ -3137,6 +3138,34 @@ function Inspector({
             </select>
           </label>
         </div>
+        <label className="block text-xs font-medium text-gray-600">
+          Part
+          <select
+            value={t.partId ?? ""}
+            onChange={(e) =>
+              patch((s) => (s.turnouts[i].partId = e.target.value || undefined))
+            }
+            className={`mt-0.5 ${inp}`}
+            title="Draw this turnout as a specific commercial part, using that part's own outline instead of a shape derived from the frog number."
+          >
+            <option value="">Not specified — draw from the frog number</option>
+            {DRAWABLE_PARTS.map((p) => (
+              <option key={p.id} value={p.id}>
+                {p.manufacturer} {p.name}
+                {p.frogNumber != null && p.frogNumber !== (t.size ?? 6)
+                  ? ` — #${p.frogNumber}, not this turnout's size`
+                  : ""}
+              </option>
+            ))}
+          </select>
+          {t.partId ? (
+            <span className="mt-1 block font-normal text-[11px] text-gray-500">
+              Drawn from the part&apos;s own outline. Its frog should sit on the
+              turnout&apos;s position marker — if it misses, the part&apos;s
+              geometry disagrees with our measurements.
+            </span>
+          ) : null}
+        </label>
         <label className="flex items-center gap-2 text-xs font-medium text-gray-600">
           <input
             type="checkbox"
