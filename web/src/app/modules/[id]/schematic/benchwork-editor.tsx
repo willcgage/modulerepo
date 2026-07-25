@@ -7,6 +7,7 @@ import {
   divergeSideForHand,
   turnoutClosure,
   leadInchesForSize,
+  partOutlineAtFrog,
   RAIL_GAUGE_INCHES,
   MAIN_TRACK_ID,
   MAIN2_TRACK_ID,
@@ -14,6 +15,7 @@ import {
   type EndplatePose,
   type TurnoutKind,
 } from "@willcgage/module-schematic";
+import { drawablePartFor } from "./part-library";
 import {
   lanePath,
   sampleAt,
@@ -229,6 +231,9 @@ export interface CanvasTurnout {
   curved?: boolean;
   /** Rotated 180° — the points face the other way along the track. */
   flipped?: boolean;
+  /** The library part this turnout IS, when one is named — lets the renderer
+   * draw the part's own outline rather than a shape derived from `size`. */
+  partId?: string | null;
   /** Hand: left/right throw one route; a wye splits symmetrically (both routes
    * diverge ± half the frog angle), so it draws a mirrored second leg. */
   kind?: TurnoutKind;
@@ -610,7 +615,7 @@ export function BenchworkEditor({
   const frogLegOf = (
     t: CanvasTurnout,
     forceSide?: 1 | -1,
-  ): { leg: Pt[]; frog: Pt; frogV: [Pt, Pt] } | null => {
+  ): { leg: Pt[]; frog: Pt; frogV: [Pt, Pt]; outline: Pt[][] | null } | null => {
     const dt = tracks.find((x) => x.id === t.divergeTrack);
     if (!dt) return null;
     const host = hostPointsOf(t.onTrack);
@@ -721,9 +726,26 @@ export function BenchworkEditor({
     const hB = sampleAt(host, relFrog + toward * e);
     const dHost = unit(hA, hB);
     const vLen = RAIL_GAUGE_INCHES * 1.5;
+    // A part's REAL outline, when this turnout names one (#179 stage 3). The
+    // package hands it back in frog-local inches — x along the through route
+    // from the frog, y lateral toward the diverging side — which is the frame
+    // `at()` already walks, so it maps through the same host sampling and picks
+    // up the mainline's curvature for free.
+    const part = drawablePartFor(t.partId, size);
+    const local = part ? partOutlineAtFrog(part, lead) : null;
+    const outline = local
+      ? local.map((poly) =>
+          poly.map(({ x: px, y: py }) => {
+            const p = sampleAt(host, Math.max(0, relThroat + toward * (lead + px)));
+            const off = side * py;
+            return { x: p.x + off * p.nx, y: p.y + off * p.ny };
+          }),
+        )
+      : null;
     return {
       leg,
       frog,
+      outline,
       frogV: [
         { x: frog.x + dHost.x * vLen, y: frog.y + dHost.y * vLen },
         { x: frog.x + dLeg.x * vLen, y: frog.y + dLeg.y * vLen },
@@ -756,7 +778,7 @@ export function BenchworkEditor({
     // the ramp's end — they aren't any more (#173).
     const map = new Map<
       string,
-      { throat: Pt; frog: Pt; frogV: [Pt, Pt]; join: Pt; leg: Pt[]; turnoutId: string }[]
+      { throat: Pt; frog: Pt; frogV: [Pt, Pt]; join: Pt; leg: Pt[]; outline: Pt[][] | null; turnoutId: string }[]
     >();
     if (centerline.length >= 2) {
       for (const t of turnouts) {
@@ -768,6 +790,7 @@ export function BenchworkEditor({
           throat: r.leg[0],
           frog: r.frog,
           frogV: r.frogV,
+          outline: r.outline,
           join: r.leg[r.leg.length - 1],
           leg: r.leg,
           turnoutId: t.id,
@@ -782,7 +805,7 @@ export function BenchworkEditor({
   const switchByTrack = useMemo(() => {
     const map = new Map<
       string,
-      { throat: Pt; frog: Pt; frogV: [Pt, Pt]; join: Pt; leg: Pt[]; turnoutId: string }
+      { throat: Pt; frog: Pt; frogV: [Pt, Pt]; join: Pt; leg: Pt[]; outline: Pt[][] | null; turnoutId: string }
     >();
     for (const [id, legs] of legsByTrack) map.set(id, legs[0]);
     return map;
@@ -1040,6 +1063,7 @@ export function BenchworkEditor({
               x: m.x,
               y: m.y,
               frog: sw && sw.turnoutId === t.id ? sw.frog : null,
+              outline: sw && sw.turnoutId === t.id ? sw.outline : null,
               frogV: sw && sw.turnoutId === t.id ? sw.frogV : null,
             };
           })
@@ -2605,6 +2629,25 @@ const ENDPLATE_TAB = 5; // ballast-shoulder band width, inches
           const node = on ? "#0284c7" : "#475569";
           return (
             <g key={`to${t.id}`}>
+              {/* The PART's own outline, when this turnout names a library part
+                  that carries one. Drawn under the frog marker so the marker
+                  stays readable — and note it is anchored on our MEASURED lead,
+                  not the file's frog, so if a part's geometry disagrees its V
+                  will visibly miss the marker. That gap is the validation. */}
+              {railsVisible &&
+                t.outline?.map((poly, i) => (
+                  <polyline
+                    key={`po${t.id}-${i}`}
+                    points={poly.map((p) => `${p.x},${sy(p.y)}`).join(" ")}
+                    fill="none"
+                    stroke="#0f766e"
+                    strokeWidth={Math.max(world(0.9), RAILHEAD_INCHES)}
+                    strokeLinecap="butt"
+                    strokeLinejoin="round"
+                    vectorEffect="non-scaling-stroke"
+                    pointerEvents="none"
+                  />
+                ))}
               {/* Frog node — where the diverging rails cross, one track over.
                   The turnout's position IS its frog (#132), so this marker is
                   set by the position field, not dragged. A small snap circle. */}

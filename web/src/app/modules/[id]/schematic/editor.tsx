@@ -359,6 +359,7 @@ export function SchematicEditor({
         divergeTrack: t.divergeTrack || undefined,
         curved: t.curved,
         flipped: t.flipped,
+        partId: t.partId,
         kind: t.kind,
       })),
     [state.turnouts],
