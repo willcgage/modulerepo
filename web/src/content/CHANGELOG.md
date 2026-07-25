@@ -5,6 +5,11 @@ Headings are `version — date` (YYYY-MM-DD).
 
 ---
 
+## v0.15.48 — 2026-07-25
+
+### Fixed
+- **A flipped turnout now diverges the same way in both views.** You tell a switch three things: which track it sits on, whether it's left- or right-hand, and whether it's rotated 180°. The drawing canvas read all three, but the dispatcher view read only the first two — it ignored **Rotated 180°** entirely. So a flipped turnout's route was drawn above the main in one view and below it in the other. Both views now work out the diverging side from the same rule, using all three of your settings. (Reported on FMN-0068.)
+
 ## v0.15.47 — 2026-07-25
 
 ### Fixed
