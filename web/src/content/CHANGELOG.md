@@ -5,6 +5,11 @@ Headings are `version — date` (YYYY-MM-DD).
 
 ---
 
+## v0.15.43 — 2026-07-24
+
+### Fixed
+- **The frog marker sits on the frog.** A turnout's frog marker — and the V drawn at it — were placed on the diverging route's centre line, which at the frog is a full track gauge away from the main. But the frog is where the two **inner rails cross**, and that is half a gauge out. The marker was landing about 0.18″ clear of the rails it was supposed to mark, so the V never quite lined up with the crossing. Turnout positions and everything you authored are unchanged; only the marker moves.
+
 ## v0.15.42 — 2026-07-24
 
 ### Added

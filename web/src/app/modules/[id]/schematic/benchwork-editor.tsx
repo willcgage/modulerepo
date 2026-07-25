@@ -711,7 +711,17 @@ export function BenchworkEditor({
     for (let i = 0; i <= steps; i++) leg.push(at((span * i) / steps));
     // The frog — `pos` marks it (#132), and the closure is built so the rails
     // cross exactly there.
-    const frog = at(lead);
+    // ⚠️ NOT at(lead). `at` walks the DIVERGING CENTRE-LINE, which is one full
+    // gauge out at the frog — that is the definition of the lead. But the frog
+    // is where the two INNER RAILS cross, and those meet HALF a gauge off the
+    // through centre-line: the through route's inner rail sits at +g/2, the
+    // diverging route's inner rail at d−g/2, and d = g there. Using at(lead)
+    // put the marker and the V's apex 0.177″ off the rails they mark.
+    const frog = (() => {
+      const p = sampleAt(host, Math.max(0, relThroat + toward * lead));
+      const off = side * (RAIL_GAUGE_INCHES / 2);
+      return { x: p.x + off * p.nx, y: p.y + off * p.ny };
+    })();
     // The frog CASTING is a V: the two rails that cross here, carried on away
     // from the points. One leg follows the through route, the other the
     // diverging route, so the wedge opens the way a real frog does. (A blob
