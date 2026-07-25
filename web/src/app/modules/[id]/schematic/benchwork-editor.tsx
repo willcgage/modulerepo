@@ -686,9 +686,25 @@ export function BenchworkEditor({
     // The lateral the diverging route must ARRIVE AT, parallel — the lane of
     // the track it feeds.
     const targetOff = Math.abs(laneOffset(dt.lane)) || LANE_SPACING_INCHES;
+    const leadIn = leadInchesForSize(effN) * stretch;
+    // How much track there actually IS to run into — the diverging track's far
+    // end, from the frog. The ease has to fit inside it.
+    const farEnd =
+      Math.abs(dt.toPos - t.pos) >= Math.abs(dt.fromPos - t.pos) ? dt.toPos : dt.fromPos;
+    const available = Math.abs(farEnd - t.pos);
+    // A longer ease costs LENGTH: it gains offset at half the rate of the
+    // straight, so span = lead + (target−g)/m + b/2. Un-eased is the shortest
+    // the route can be, so the ease gets whatever is left over — and on a track
+    // too short even for that, it goes to zero rather than overrunning.
+    // ⚠️ Overrunning is not cosmetic: laneBody pulls the track's near end out to
+    // the join, so a join past the far end INVERTS the body and the track
+    // disappears. That is worse than the kink the ease exists to remove.
+    const straightSpan = leadIn + Math.max(0, (targetOff - RAIL_GAUGE_INCHES) * effN);
+    const easeIn = Math.max(0, Math.min(leadIn, 2 * (available - straightSpan)));
     const cl = turnoutClosure(effN, {
-      leadInches: leadInchesForSize(effN) * stretch,
+      leadInches: leadIn,
       arriveAtInches: targetOff,
+      easeInches: easeIn,
     });
     const lead = Math.min(L, cl.lead);
     // Walk the host from the throat so the leg follows the mainline's curvature,

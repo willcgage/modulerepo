@@ -5,6 +5,11 @@ Headings are `version — date` (YYYY-MM-DD).
 
 ---
 
+## v0.15.45 — 2026-07-25
+
+### Fixed
+- **Short spurs keep their track.** The easing curve added moments earlier made a turnout's diverging route about 1¾″ longer, and a track begins where that route ends — so on a spur shorter than roughly 10¾″ the start ran past the finish and **the track disappeared**, leaving rails stopping in mid-air. The curve now uses only the room the track actually has, easing as much as it can and straightening out entirely where there isn't space. A short spur is back to how it looked before, and anything with room keeps the smooth join.
+
 ## v0.15.44 — 2026-07-25
 
 ### Fixed
