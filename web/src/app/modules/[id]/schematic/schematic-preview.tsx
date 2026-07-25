@@ -28,11 +28,10 @@ export function SchematicPreview({
   const feet = Math.round((lengthInches / 12) * 10) / 10;
   // Vertical space follows the lane extents — negative lanes (a track outside
   // Main 1) grow the canvas downward, extra lanes upward (modulerepo#14).
-  // Branch connectors (#170) need a lane of headroom on their side.
-  const hasUpBranch = f.branchConnectors.some((b) => b.side === "up");
-  const hasDownBranch = f.branchConnectors.some((b) => b.side === "down");
-  const laneTop = Math.max(f.laneMax, f.doubleMain ? 1 : 0) + (hasUpBranch ? 1 : 0);
-  const laneBot = Math.min(f.laneMin, 0) - (hasDownBranch ? 1 : 0);
+  // Branch routes carry their own lane in those extents (#181), so there's no
+  // spare-lane headroom to add here.
+  const laneTop = Math.max(f.laneMax, f.doubleMain ? 1 : 0);
+  const laneBot = Math.min(f.laneMin, 0);
   const Y0 = 14 + laneTop * LANE_GAP; // Main 1; higher lanes stack upward
   const HEIGHT = Y0 - laneBot * LANE_GAP + 14;
   const laneY = (lane: number) => Y0 - lane * LANE_GAP;
@@ -330,30 +329,49 @@ export function SchematicPreview({
           );
         })}
 
-        {/* Branch endplates — the diverging track leaves the main at its turnout
-            and runs to the MODULE EDGE, drawn with an endplate tick. No "to X"
-            label here: Free-Dispatcher adds destination labels for the panel; the
-            schematic just shows a track exiting the module (#170). */}
+        {/* Branch routes — a main leaving the module at a third endplate (#181).
+            It diverges from its host main at 45° like every other diverge, then
+            runs its OWN length on a lane of its own and ends at an endplate face.
+            No "to X" label here: the destination depends on which module is
+            physically attached at the junction, so Free-Dispatcher derives the
+            panel label at runtime; the schematic just shows the route exiting. */}
         {f.branchConnectors.map((b) => {
-          const bx = px(b.posFrac);
-          const dir = b.side === "down" ? 1 : -1;
-          const y0 = laneY(0);
-          const yEdge = y0 + dir * (LANE_GAP + 2); // out to the module edge
-          const xEdge = bx + 6; // lean toward B so it reads as a diverge, not a crossing
-          const tick = 5; // the endplate face at the module edge
+          const x0 = px(b.posFrac);
+          const xe = px(b.endFrac);
+          const y0 = laneY(b.fromLane); // a branch need not leave Main 1
+          const yl = laneY(b.lane);
+          const dir = xe >= x0 ? 1 : -1;
+          // 45°, and never longer than the run itself (#173) — a branch shorter
+          // than the lane drop draws steeper rather than doubling back.
+          const thr = Math.min(Math.abs(yl - y0), Math.abs(xe - x0));
+          const isMain = b.kind === "main";
+          const tick = 5; // the endplate face it ends at
           return (
             <g key={b.id}>
-              <line x1={bx} y1={y0} x2={xEdge} y2={yEdge} stroke="#2563eb" strokeWidth={2.2} strokeLinecap="round" />
-              <line
-                x1={xEdge - tick}
-                y1={yEdge}
-                x2={xEdge + tick}
-                y2={yEdge}
-                stroke="#2563eb"
-                strokeWidth={1.6}
+              <polyline
+                points={`${x0},${y0} ${x0 + dir * thr},${yl} ${xe},${yl}`}
+                fill="none"
+                stroke={hi(b.trackId) ? HL : isMain ? "#2563eb" : "#64748b"}
+                strokeWidth={hi(b.trackId) ? 3 : isMain ? 2.4 : 1.8}
+                strokeLinejoin="round"
                 strokeLinecap="round"
               />
-              <title>{`Branch to the module edge${b.label ? ` — ${b.label}` : ""}`}</title>
+              <line
+                x1={xe}
+                y1={yl - tick}
+                x2={xe}
+                y2={yl + tick}
+                stroke="#94a3b8"
+                strokeWidth={1.4}
+                strokeLinecap="round"
+              />
+              <title>
+                {`${b.name || (isMain ? "Main" : "Branch")} — ${
+                  isMain ? "a main" : "a branch"
+                } leaving the module at endplate ${b.id}${
+                  b.label && b.label !== b.id ? ` (${b.label})` : ""
+                }, ${Math.round(b.lengthInches * 10) / 10}″ on this module`}
+              </title>
             </g>
           );
         })}
