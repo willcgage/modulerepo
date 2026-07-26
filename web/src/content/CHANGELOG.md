@@ -5,6 +5,13 @@ Headings are `version — date` (YYYY-MM-DD).
 
 ---
 
+## v0.19.2 — 2026-07-26
+
+### Added
+- **The mainline is in the Objects list.** It was the one thing on the board with no entry there — every siding, industry, turnout and even a benchwork corner was listed, but the module's own spine wasn't, and it can only be reshaped from the Track tool. So it read as something you couldn't change. Click **Mainline** and the Track tool takes over: drag its end to set how far the main runs, drag the ◇ on a stretch to curve it, click the line to add a bend. The entry also tells you whether the main is *drawn* or still *derived* from the module's shape.
+
+  On a module with **only one endplate**, the main can now stop short of the far edge — drag its end inward and the board keeps its full length while the track ends where you put it. That's the *end of the line* and *pocket* case; on a module with two endplates the main is expected to reach both.
+
 ## v0.19.0 — 2026-07-26
 
 ### Added

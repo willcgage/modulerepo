@@ -4218,7 +4218,7 @@ function ObjectsList({
 
       <Group
         title="Track"
-        count={state.extraTracks.length}
+        count={state.extraTracks.length + 1}
         actions={
           <AddTrackMenu
             add={add}
@@ -4229,6 +4229,27 @@ function ObjectsList({
           />
         }
       >
+        {/* THE MAINLINE. It was the only thing on the board with no entry here —
+            every siding, industry, turnout and even a benchwork corner was
+            listed, but the module's spine wasn't, and it can only be reshaped
+            from the Track tool. So it read as un-editable: "there is no ability
+            to change the length or curvature of the mainline" (#185). It isn't a
+            selectable object like the rest — clicking arms the tool that edits
+            it, which is the thing that was hard to find. */}
+        <button
+          type="button"
+          onClick={() => {
+            select(null); // the Track tool edits the MAIN when nothing is selected
+            setTool("track");
+          }}
+          className="flex w-full items-center gap-2 rounded px-2 py-1 text-left text-xs text-gray-700 hover:bg-gray-50"
+          title="Drag its ends to set how far the main runs; drag the ◇ on a stretch to curve it. On a module with only one endplate the main can stop short of the far edge."
+        >
+          <span className="flex-1 truncate">Mainline</span>
+          <span className="shrink-0 text-[10px] text-gray-400">
+            {state.mainPath.length >= 2 ? "drawn — click to edit" : "derived — click to draw"}
+          </span>
+        </button>
         {state.extraTracks.map((t, i) =>
           // Round to 0.1″ — raw float math read as 18.800000000000004″.
           row(t.id, trackLabel(t, i), { kind: "track", id: t.id }, `${Math.round(Math.abs(t.toPos - t.fromPos) * 10) / 10}″`),
