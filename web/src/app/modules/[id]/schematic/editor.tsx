@@ -300,6 +300,10 @@ export function SchematicEditor({
         mainPath: state.mainPath,
         // A loop's centre-line ends at the throat — no far endplate face there.
         loop: state.loop,
+        // …and neither does an end of the line / pocket, which presents one face
+        // and stops. Without this the board drew a plate at an end it hasn't got
+        // (#191).
+        endplateConfigs: [state.configA, state.configB],
       }),
     [
       state.lengthInches,

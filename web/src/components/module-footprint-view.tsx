@@ -206,5 +206,19 @@ export function footprintInput(
     mainPath: (doc as { mainPath?: ModuleSchematicDoc["mainPath"] } | null)?.mainPath ?? null,
     // A loop's centre-line ends at the throat — drop the spurious far endplate face.
     loop: (doc as { loop?: boolean } | null)?.loop === true,
+    // Which axial faces the module actually presents. Read from the doc's
+    // endplates rather than a config field: an end of the line or a pocket
+    // simply has no B, and without this the read-only and catalog views drew a
+    // plate at an end the module hasn't got (#184/#191).
+    endplateConfigs: [
+      doc?.endplates?.find((e) => e.id === "A")?.tracks?.[0]?.config === "double"
+        ? "double"
+        : "single",
+      doc?.endplates?.some((e) => e.id === "B")
+        ? doc.endplates.find((e) => e.id === "B")?.tracks?.[0]?.config === "double"
+          ? "double"
+          : "single"
+        : "none",
+    ],
   };
 }
