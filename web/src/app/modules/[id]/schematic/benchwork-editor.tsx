@@ -7,6 +7,7 @@ import {
   divergeSideForHand,
   turnoutClosure,
   leadInchesForSize,
+  pastFrogInchesForSize,
   partOutlineAtFrog,
   partExtentForSize,
   RAIL_GAUGE_INCHES,
@@ -701,29 +702,19 @@ export function BenchworkEditor({
     // The lead comes from the PARTS LIBRARY when a real part matches this frog
     // number — an Atlas code 55 #7 is drawn at its measured 3⅜″, not a formula.
     // Sizes with no part fall back to the per-frog rule (#179 stage 3).
-    // The lateral the diverging route must ARRIVE AT, parallel — the lane of
-    // the track it feeds.
-    const targetOff = Math.abs(laneOffset(dt.lane)) || LANE_SPACING_INCHES;
     const leadIn = leadInchesForSize(effN, partLibrary) * stretch;
-    // How much track there actually IS to run into — the diverging track's far
-    // end, from the frog. The ease has to fit inside it.
-    const farEnd =
-      Math.abs(dt.toPos - t.pos) >= Math.abs(dt.fromPos - t.pos) ? dt.toPos : dt.fromPos;
-    const available = Math.abs(farEnd - t.pos);
-    // A longer ease costs LENGTH: it gains offset at half the rate of the
-    // straight, so span = lead + (target−g)/m + b/2. Un-eased is the shortest
-    // the route can be, so the ease gets whatever is left over — and on a track
-    // too short even for that, it goes to zero rather than overrunning.
-    // ⚠️ Overrunning is not cosmetic: laneBody pulls the track's near end out to
-    // the join, so a join past the far end INVERTS the body and the track
-    // disappears. That is worse than the kink the ease exists to remove.
-    const straightSpan = leadIn + Math.max(0, (targetOff - RAIL_GAUGE_INCHES) * effN);
-    const easeIn = Math.max(0, Math.min(leadIn, 2 * (available - straightSpan)));
-    const cl = turnoutClosure(effN, {
-      leadInches: leadIn,
-      arriveAtInches: targetOff,
-      easeInches: easeIn,
-    });
+    // ⚠️ NO `arriveAtInches`, and NO ease. The closure is points → frog, then
+    // straight at the frog angle: the part's own diverging rail and nothing
+    // more.
+    //
+    // It used to be run until the route ARRIVED PARALLEL with the track it fed,
+    // so the rails wouldn't kink at the join. That was sound geometry solving
+    // the wrong problem — on a #7 it drew 10.79″ of turnout-shaped route for a
+    // part that is 6.00″ long, which is why turnouts read as enormous. The gap
+    // between the end of the moulding and the owner's track is REAL: it is
+    // their flex track, and they close it by dragging the track's end onto the
+    // turnout's rail (#189).
+    const cl = turnoutClosure(effN, { leadInches: leadIn });
     const lead = Math.min(L, cl.lead);
     // Walk the host from the throat so the leg follows the mainline's curvature,
     // laying the closure's lateral offset on the normal. Sampled finely enough
@@ -736,17 +727,16 @@ export function BenchworkEditor({
       const off = side * cl.offsetAt(s);
       return { x: p.x + off * p.nx, y: p.y + off * p.ny };
     };
-    // Run the leg until it REACHES the diverging track's own lane — not a fixed
-    // span. Past the frog the closure is straight at 1/N, so solve for it. A
-    // fixed span left the leg short of the lane (0.997″ vs 1.125″ on a #6), and
-    // the rails jogged sideways where the leg met the body.
-    // Run to where the closure ARRIVES PARALLEL, not where it first reaches the
-    // lane. Solving for the offset (what this did) got there still climbing at
-    // 1/N while the track it joins runs parallel — an instantaneous change of
-    // direction. That kink is what read as "the rails don't line up": each rail
-    // is offset perpendicular to its own heading, so at a kink the two rails
-    // meet at different points. The closure now eases out and `span` includes it.
-    const span = Math.max(lead, cl.span);
+    // The leg runs to the END OF THE PART — the frog plus however much moulding
+    // continues past it — and stops. Nothing here reaches for the track it
+    // feeds: a turnout is as long as the turnout is.
+    //
+    // `pastFrogInchesForSize` interpolates across the measured parts exactly as
+    // the lead does, because a turnout has to be drawn SOME length and a
+    // reasoned interpolation is the honest floor. That is a different claim from
+    // `partExtent`, which refuses to guess — the tie strip (which asserts "this
+    // part stops HERE") is still only drawn where a part was actually measured.
+    const span = lead + pastFrogInchesForSize(effN, partLibrary) * stretch;
     const leg: Pt[] = [];
     for (let i = 0; i <= steps; i++) leg.push(at((span * i) / steps));
     // The frog — `pos` marks it (#132), and the closure is built so the rails
@@ -900,24 +890,21 @@ export function BenchworkEditor({
     return map;
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [turnouts, tracks, centerline, lengthInches]);
-  /** A drawn spur's path with its authored point 0 pinned to the frog. Used for
-   * editing (the throat→frog leg belongs to the turnout, not the spur body). */
-  const frogPinnedPath = (t: CanvasTrack): BenchworkPoint[] => {
-    const path = t.path;
-    if (!path || path.length < 2) return path ?? [];
-    // Pin to the JOIN (the ramp's end), not the frog — spurTrackPath prepends the
-    // whole leg and drops this point, so it has to be the leg's last point.
-    const f = switchByTrack.get(t.id)?.join;
-    return f ? [{ ...path[0], x: f.x, y: f.y }, ...path.slice(1)] : path;
-  };
-  /** The path to *render as track*: the diverging leg (throat → frog) plus the
-   * spur body (frog → stub), so the whole switch reads as one ballasted track. */
-  const spurTrackPath = (t: CanvasTrack): BenchworkPoint[] => {
-    const base = frogPinnedPath(t);
-    const sw = switchByTrack.get(t.id);
-    // Prepend the curved throat→frog leg; base[0] is the frog, so drop it.
-    return sw ? [...sw.leg.map((p) => ({ x: p.x, y: p.y })), ...base.slice(1)] : base;
-  };
+  /**
+   * A drawn track's path — exactly as authored.
+   *
+   * ⚠️ This used to PIN the first point to the turnout's leg and prepend the leg
+   * to the drawn band, so a spur always appeared welded to its switch. It no
+   * longer does either. A turnout is a part of a fixed length; the track that
+   * meets it is the owner's, and where it starts is theirs to say. Silently
+   * moving their first point hid the gap rather than closing it, and hid it in
+   * only one of the two renderers besides — the read-only view drew the raw path
+   * and showed the route detached (#181, and now #189).
+   *
+   * The owner closes the gap by dragging the TRACK's end onto the turnout's
+   * rail, where it snaps. The turnout doesn't move: it's positioned by its frog.
+   */
+  const authoredTrackPath = (t: CanvasTrack): BenchworkPoint[] => t.path ?? [];
 
   /** A stub spur's diverging route, angled away like the prototype (Option 1):
    * the throat→frog leg (already at the frog angle) CONTINUES straight along the
@@ -981,18 +968,25 @@ export function BenchworkEditor({
     // it isn't a valid siding — leave it to the lane fallback rather than draw
     // a track that crosses its own main.
     if (Math.sign(at[0].off) !== Math.sign(at[at.length - 1].off)) return null;
-    const off = (at[0].off + at[at.length - 1].off) / 2;
+    // The SIDE still comes from the turnouts — a track's stored lane sign and
+    // the side its frogs actually diverge to can disagree, and riding the stored
+    // sign made the body zig-zag across the main (#138). But the OFFSET is the
+    // track's own lane, not the leg's: the leg now stops at the end of the part,
+    // barely off the main, so borrowing its offset would drag the siding down
+    // on top of the mainline (#189).
+    const side = Math.sign(at[0].off) || 1;
+    const off = side * (Math.abs(laneOffset(t.lane)) || LANE_SPACING_INCHES);
     const steps = 24;
     const body: Pt[] = [];
+    // ⚠️ Runs between the track's OWN extent, not frog to frog. A passing siding
+    // is as long as its owner said; the short run from each turnout out to it is
+    // flex track they lay and snap (#189).
     for (let i = 0; i <= steps; i++) {
-      const pos = at[0].pos + ((at[at.length - 1].pos - at[0].pos) * i) / steps;
+      const pos = t.fromPos + ((t.toPos - t.fromPos) * i) / steps;
       const c = sampleAt(centerline, pos);
       body.push({ x: c.x + c.nx * off, y: c.y + c.ny * off });
     }
     if (body.length < 2) return null;
-    // Pin the exact ends to the frogs so leg and body share a vertex.
-    body[0] = { x: at[0].frog.x, y: at[0].frog.y };
-    body[body.length - 1] = { x: at[at.length - 1].frog.x, y: at[at.length - 1].frog.y };
     return body;
   };
 
@@ -1003,17 +997,11 @@ export function BenchworkEditor({
    * two overlapped by (ramp − lead) and neither met the other end-to-end. Main 2
    * showed this plainly: body 0→17.4, leg 21.8→10.6 (#173 follow-up). Tracks
    * with two legs are handled by passingSidingBody; this covers the rest. */
-  const laneBody = (t: CanvasTrack): Pt[] => {
-    let from = t.fromPos;
-    let to = t.toPos;
-    for (const l of legsByTrack.get(t.id) ?? []) {
-      const jp = projectToCenterline(centerline, l.join).pos;
-      // Pull whichever end this leg reaches out to the join.
-      if (Math.abs(from - jp) <= Math.abs(to - jp)) from = jp;
-      else to = jp;
-    }
-    return lanePath(centerline, from, to, t.lane);
-  };
+  const laneBody = (t: CanvasTrack): Pt[] =>
+    // ⚠️ No longer pulled out to any switch leg's join. A track runs between the
+    // positions its owner gave it; if that leaves a gap to the turnout, the gap
+    // is real and theirs to close by dragging the end onto the rail (#189).
+    lanePath(centerline, t.fromPos, t.toPos, t.lane);
 
   /** A wye's mirrored second route — the leg forced to the opposite side, then
    * continued along its frog tangent to the same length as the (real) spur, so
@@ -1056,21 +1044,16 @@ export function BenchworkEditor({
     for (const [trackId, legs] of legsByTrack) {
       const t = tracks.find((x) => x.id === trackId);
       if (!t) continue;
-      // legs[0] is already drawn by the band itself when the track is an
-      // authored path (spurTrackPath prepends it) or a single-ended stub
-      // (divergingStubPath starts with it); otherwise draw them all.
+      // A turnout's own diverging rails are the TURNOUT's to draw, so they are
+      // drawn here for everything — an authored path no longer prepends the leg,
+      // and a passing siding's body no longer runs frog to frog (#189).
+      //
+      // The one exception is a bare STUB: it has no authored geometry of its
+      // own, so `divergingStubPath` builds it as leg + tail in one piece and
+      // already includes leg[0]. Drawing it again would double the ink.
       const authored = !!(t.path && t.path.length >= 2);
-      const stub = !authored && legs.length === 1;
-      // legs[0] is already carried by the band for an authored path
-      // (spurTrackPath prepends it) or a single-ended stub (divergingStubPath
-      // starts with it). A passing siding's body now runs frog→frog, so its
-      // legs are NOT in the band — draw them all (#133).
-      // Main 2 is the exception: it draws PARALLEL (lanePath / its own authored
-      // path, never spurTrackPath/divergingStubPath), so its band carries no
-      // leg. The transition turnout's throat→frog leg — the diverging rails
-      // joining Main 1 to Main 2 — must be drawn here or the transition shows
-      // only a bare frog dot (#131 regression: Main-2-parallel orphaned it).
-      const bandCarriesLeg0 = trackId !== MAIN2_TRACK_ID && (authored || stub);
+      const stub = !authored && legs.length === 1 && trackId !== MAIN2_TRACK_ID;
+      const bandCarriesLeg0 = stub;
       for (let i = bandCarriesLeg0 ? 1 : 0; i < legs.length; i++) {
         out.push({ id: `${trackId}-leg${i}`, pts: legs[i].leg });
       }
@@ -1131,11 +1114,11 @@ export function BenchworkEditor({
               pts:
                 // Main 2 is a main, not a spur — its authored path draws as-is,
                 // with no throat→frog leg prepended (#131).
-                t.id === MAIN2_TRACK_ID && t.path && t.path.length >= 2
-                  ? samplePath(t.path)
-                  : t.path && t.path.length >= 2
-                    ? samplePath(spurTrackPath(t))
-                    : (divergingStubPath(t) ?? passingSidingBody(t) ?? laneBody(t)),
+                // Any authored path draws AS AUTHORED — Main 2 always did; every
+                // other drawn track does now too (#189).
+                t.path && t.path.length >= 2
+                  ? samplePath(authoredTrackPath(t))
+                  : (divergingStubPath(t) ?? passingSidingBody(t) ?? laneBody(t)),
             }))
             .filter((t) => t.pts.length > 1)
         : [],
@@ -1565,6 +1548,63 @@ export function BenchworkEditor({
             (tool === "track" || (t.path != null && t.path.length >= 2)),
         )
       : undefined;
+  /**
+   * Every rail end a turnout offers to connect to — the end of its diverging
+   * leg, for each turnout on the board.
+   *
+   * These are what a track end snaps to now that nothing is auto-joined. A
+   * turnout is a part with ends; track meets it there or it doesn't meet it at
+   * all (#189).
+   */
+  const turnoutRailEnds = useMemo(() => {
+    const out: { at: Pt; trackId: string; turnoutId: string }[] = [];
+    for (const [trackId, legs] of legsByTrack) {
+      for (const l of legs) {
+        if (l.leg.length < 2) continue;
+        out.push({ at: l.leg[l.leg.length - 1], trackId, turnoutId: l.turnoutId });
+      }
+    }
+    return out;
+  }, [legsByTrack]);
+
+  /** How close a track end has to come before it takes hold, in inches. Generous
+   * on purpose: every existing module has a gap to close, and hunting for a
+   * pixel would make that chore miserable. */
+  const RAIL_SNAP_INCHES = 1.5;
+
+  /** The rail end a point should snap to, or null. Only ever the rail of a
+   * turnout that diverges to THIS track — snapping to an unrelated turnout
+   * across the board would connect two things the owner never joined. */
+  const snapToTurnoutRail = (p: Pt, trackId: string): Pt | null => {
+    let best: { at: Pt; d: number } | null = null;
+    for (const r of turnoutRailEnds) {
+      if (r.trackId !== trackId) continue;
+      const d = Math.hypot(r.at.x - p.x, r.at.y - p.y);
+      if (d <= RAIL_SNAP_INCHES && (!best || d < best.d)) best = { at: r.at, d };
+    }
+    return best?.at ?? null;
+  };
+
+  /**
+   * Turnout rails with nothing connected to them.
+   *
+   * This has to be LOUD. Removing the auto-join means every module built before
+   * it has gaps its owner has never seen, and a silently disconnected route
+   * would just look like a drawing bug. An open ring at the rail end says: your
+   * track belongs here, drag it over (#189).
+   */
+  const danglingRailEnds = useMemo(() => {
+    if (!turnoutRailEnds.length) return [];
+    const ends: Pt[] = [];
+    for (const tp of trackPaths) {
+      if (tp.pts.length < 2) continue;
+      ends.push(tp.pts[0], tp.pts[tp.pts.length - 1]);
+    }
+    return turnoutRailEnds.filter(
+      (r) => !ends.some((e) => Math.hypot(e.x - r.at.x, e.y - r.at.y) <= RAIL_SNAP_INCHES),
+    );
+  }, [turnoutRailEnds, trackPaths]);
+
   /** Where the spur body starts — the turnout's JOIN (the ramp's end, so the
    * spur is continuous with the switch), falling back to the on-main turnout
    * point if there's no leg yet. */
@@ -1588,21 +1628,32 @@ export function BenchworkEditor({
   };
   const editSpur: BenchworkPoint[] = editSpurTrack
     ? editSpurTrack.path && editSpurTrack.path.length >= 2
-      ? frogPinnedPath(editSpurTrack)
+      ? authoredTrackPath(editSpurTrack)
       : spurSeed(editSpurTrack)
     : [];
-  /** Commit a spur path — the throat (point 0) is always re-pinned to its
-   * turnout, so the spur stays connected even if the turnout later moves. */
+  /**
+   * Commit a spur path.
+   *
+   * ⚠️ Point 0 is NO LONGER force-pinned to the turnout. It used to be rewritten
+   * on every commit "so the spur stays connected even if the turnout later
+   * moves" — which meant the owner could not put their own track where they
+   * wanted it, and the connection was a fiction maintained by the renderer
+   * rather than a fact about the layout. The end now SNAPS when the owner brings
+   * it near a turnout's rail, and stays where they leave it otherwise (#189).
+   */
   const commitSpur = (t: CanvasTrack, next: BenchworkPoint[]) => {
     if (!next.length) return;
-    const pinned = next.map((p) => ({
+    const pts = next.map((p) => ({
       x: round(p.x),
       y: round(p.y),
       ...(p.bulge ? { bulge: round(p.bulge) } : {}),
     }));
-    const th = spurThroat(t);
-    if (th) pinned[0] = { ...pinned[0], x: round(th.x), y: round(th.y) };
-    onTrackPathChange?.(t.id, pinned);
+    const snapped = snapToTurnoutRail(pts[0], t.id);
+    if (snapped) pts[0] = { ...pts[0], x: round(snapped.x), y: round(snapped.y) };
+    const lastI = pts.length - 1;
+    const snappedEnd = snapToTurnoutRail(pts[lastI], t.id);
+    if (snappedEnd) pts[lastI] = { ...pts[lastI], x: round(snappedEnd.x), y: round(snappedEnd.y) };
+    onTrackPathChange?.(t.id, pts);
   };
   /** Remove a spur bend point (never the throat or the far stub end). */
   const removeSpurVertex = (t: CanvasTrack, i: number) => {
@@ -2697,6 +2748,26 @@ const ENDPLATE_TAB = 5; // ballast-shoulder band width, inches
             ) : null,
           )}
         {trackLines.map(renderTrackRails)}
+        {/* Turnout rails with nothing joined to them — drag a track end here. */}
+        {danglingRailEnds.map((r) => (
+          <circle
+            key={`dangle${r.turnoutId}-${r.trackId}`}
+            cx={r.at.x}
+            cy={sy(r.at.y)}
+            r={world(5)}
+            fill="none"
+            stroke="#d97706"
+            strokeWidth={world(1.6)}
+            strokeDasharray={`${world(3)} ${world(2)}`}
+            vectorEffect="non-scaling-stroke"
+            pointerEvents="none"
+          >
+            <title>
+              Nothing is connected to this turnout&apos;s diverging rail — drag the
+              track&apos;s end onto it. The turnout stays put; the track comes to it.
+            </title>
+          </circle>
+        ))}
         {/* Section joints — dashed dividers where the boards split (#48). */}
         {centerline.length >= 2 &&
           sectionBreaks.map((pos, i) => {

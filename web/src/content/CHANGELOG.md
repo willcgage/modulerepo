@@ -5,6 +5,48 @@ Headings are `version — date` (YYYY-MM-DD).
 
 ---
 
+## v0.17.0 — 2026-07-25
+
+### Changed
+- **⚠️ Turnouts are now drawn their real size — and your track no longer attaches itself to them. You will need to connect it up.**
+
+  **What was wrong.** A turnout's diverging route was drawn running until it came back **parallel** with the track it fed. On an Atlas #7 that meant drawing about **10¾″** of switch — for a part that is **6″ long end to end**. The geometry was right in itself; it just wasn't turnout. Everything past the moulding is flex track *you* lay, and drawing it as one continuous piece is why turnouts looked enormous and why the tracks around them looked short.
+
+  **What happens now.** A turnout is drawn as long as the turnout actually is: from its points, through the frog, to the end of its own rails. Where we have measured the part, that is its exact length — an Atlas #7 draws 6″, a #5 6″, a #10 8″. For a frog number we have no measurement for, the length is estimated from the ones we do have, which is still far closer than before.
+
+  **What you need to do.** Because the drawing no longer stretches a turnout out to meet your track, **there is now a real gap between the two on modules built before this change** — and you close it the way you would on the bench, by laying track between them.
+
+  1. Open your module in the builder. Look for an **amber dashed ring** — that marks a turnout rail with nothing connected to it.
+  2. Pick up the **end of the track** (not the turnout) and drag it onto that ring.
+  3. It **snaps** when it gets close, and the ring disappears once connected.
+
+  Drag the **track**, never the turnout: a turnout is positioned by its frog, so it stays where you put it and the track comes to meet it. Nothing you authored has been moved or deleted — positions, lengths and capacities are all exactly as you left them, and the dispatcher view is unaffected, so operations keep working while you catch up.
+
+## v0.16.0 — 2026-07-25
+
+### Added
+- **The turnout parts library can now be added to from inside the app.** Turnouts are drawn from measured parts, and the list of parts used to be fixed until the next release — so a frog number nobody had measured could never be drawn properly. Administrators can now add a manufacturer's switch under **Admin → Track parts**, and every module drawing picks it up. The Atlas code 55 parts that shipped with the app are in the same list and can be corrected there too. Measurements are entered as **positions along the part** rather than lengths, with a diagram showing exactly which features to measure from, and each one records where the number came from.
+
+## v0.15.52 — 2026-07-25
+
+### Added
+- **You can see where the turnout ends and your own track begins.** A turnout now draws its **body** — the moulded tie strip — so the part itself is distinguishable from the flex track running on past it. It appears only for parts we have actually measured; a frog number with no measured part is drawn without one, rather than guessing at a length.
+
+## v0.15.51 — 2026-07-25
+
+### Fixed
+- **Endplates that were never moved by hand follow their module again.** If a derived endplate position was ever written into a module, it quietly became a *manual* one and stopped tracking the module's length — so changing the length could leave an endplate behind. On one module endplate B was pinned 0.1″ past the end of its own board. Positions you set by hand are untouched and still take precedence.
+
+## v0.15.50 — 2026-07-25
+
+### Fixed
+- **A route to a third endplate stays attached to its turnout.** The drawn route was stored from wherever it was first created, and moving the turnout afterwards left it behind — the builder hid this by re-attaching it on screen, but the module's own page drew the route floating clear of the switch feeding it, by 11″ on one module. Moving a turnout now carries its route with it, and existing modules draw correctly straight away.
+
+## v0.15.49 — 2026-07-25
+
+### Changed
+- **A branch to a third endplate is drawn as the main it is.** A route leaving the module at a third endplate was missing from the operations view altogether — it had no position along the module, so it was skipped and only a small arrow was drawn at the edge. It now appears as a proper route: it leaves the main at its turnout, runs its own length on a track of its own, and ends at an endplate face. Whether it is drawn as a main or a branch follows what you set on the endplate.
+
 ## v0.15.48 — 2026-07-25
 
 ### Fixed
