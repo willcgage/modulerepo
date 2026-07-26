@@ -997,11 +997,26 @@ export function BenchworkEditor({
    * two overlapped by (ramp − lead) and neither met the other end-to-end. Main 2
    * showed this plainly: body 0→17.4, leg 21.8→10.6 (#173 follow-up). Tracks
    * with two legs are handled by passingSidingBody; this covers the rest. */
-  const laneBody = (t: CanvasTrack): Pt[] =>
+  const laneBody = (t: CanvasTrack): Pt[] => {
     // ⚠️ No longer pulled out to any switch leg's join. A track runs between the
     // positions its owner gave it; if that leaves a gap to the turnout, the gap
     // is real and theirs to close by dragging the end onto the rail (#189).
-    lanePath(centerline, t.fromPos, t.toPos, t.lane);
+    //
+    // MAIN 2 IS THE EXCEPTION, and it's a principled one: on a transition module
+    // Main 2's extent is DERIVED from the transition turnout rather than
+    // authored, and it has no draggable end (see `trackEnds`). Leaving it
+    // detached would show the owner a gap they have no way to close. It stays
+    // joined because they never positioned it in the first place.
+    if (t.id !== MAIN2_TRACK_ID) return lanePath(centerline, t.fromPos, t.toPos, t.lane);
+    let from = t.fromPos;
+    let to = t.toPos;
+    for (const l of legsByTrack.get(t.id) ?? []) {
+      const jp = projectToCenterline(centerline, l.join).pos;
+      if (Math.abs(from - jp) <= Math.abs(to - jp)) from = jp;
+      else to = jp;
+    }
+    return lanePath(centerline, from, to, t.lane);
+  };
 
   /** A wye's mirrored second route — the leg forced to the opposite side, then
    * continued along its frog tangent to the same length as the (real) spur, so
@@ -1601,7 +1616,11 @@ export function BenchworkEditor({
       ends.push(tp.pts[0], tp.pts[tp.pts.length - 1]);
     }
     return turnoutRailEnds.filter(
-      (r) => !ends.some((e) => Math.hypot(e.x - r.at.x, e.y - r.at.y) <= RAIL_SNAP_INCHES),
+      (r) =>
+        // Main 2 stays joined by derivation (see laneBody), so it is never
+        // dangling and must not be flagged as something to go and fix.
+        r.trackId !== MAIN2_TRACK_ID &&
+        !ends.some((e) => Math.hypot(e.x - r.at.x, e.y - r.at.y) <= RAIL_SNAP_INCHES),
     );
   }, [turnoutRailEnds, trackPaths]);
 
