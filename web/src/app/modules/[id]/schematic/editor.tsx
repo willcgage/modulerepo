@@ -26,13 +26,13 @@ import {
   turnoutFacing,
   turnoutOccupiedSpan,
   spanOverhang,
+  usableCapacity,
   partExtent,
   partExtentForSize,
   DEFAULT_FLEX_PART_ID,
   type FlexPiece,
   type TrackPart,
   nextId,
-  inchesToScaleFeet,
   carCapacity,
   type BenchworkPoint,
   type EditorState,
@@ -76,9 +76,10 @@ import { submitCarTypeSuggestion } from "../../new/actions";
 
 type CarTypeOption = { value: string; display_label: string };
 
-/** A 40-ft N-scale car is ~3.3″ over the couplers — the length a car occupies
- * on a track. Capacity in cars reads truer than scale feet for a builder. */
-const CAR_INCHES = 3.3;
+// NB: a local `CAR_INCHES = 3.3` used to live here, duplicating the package's
+// `N_CAR_LENGTH_INCHES` — whose own comment calls it "the single constant every
+// repo reads so a track's car count matches everywhere". Capacity now comes from
+// `usableCapacity`, which uses that constant, so the copy is gone (#19/#20).
 
 const inp =
   "block w-full rounded-md border border-gray-300 px-2 py-1 text-sm text-gray-900 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500";
@@ -4399,6 +4400,15 @@ function Inspector({
   const i = state.extraTracks.findIndex((t) => t.id === selection.id);
   if (i < 0) return null;
   const t = state.extraTracks[i];
+  // What this track actually holds, to the clearance-point standard (#19/#20).
+  const cap = usableCapacity({
+    fromPos: t.fromPos,
+    toPos: t.toPos,
+    governing: state.turnouts.filter((sw) => sw.divergeTrack === t.id),
+    measuredUsableInches: t.measuredUsableInches,
+    library: partLibrary,
+  });
+  const round1 = (v: number) => Math.round(v * 10) / 10;
   // A branch route to a placed endplate (#170) is authored by its PATH (bend it
   // on the board) and pinned to its endplate — it has no siding-style extent,
   // kind or capacity to edit, so it gets its own compact inspector.
@@ -4510,12 +4520,55 @@ function Inspector({
         </label>
         <label className="block text-xs font-medium text-gray-600">
           Capacity
-          <div className={`mt-0.5 ${inp} bg-gray-50 text-gray-600`} title="Derived from the drawn length — not typed.">
-            {Math.floor(Math.abs(t.toPos - t.fromPos) / CAR_INCHES)} cars ·{" "}
-            {Math.round(inchesToScaleFeet(Math.abs(t.toPos - t.fromPos)))} ft
+          <div
+            className={`mt-0.5 ${inp} bg-gray-50 text-gray-600`}
+            title="Usable capacity — measured from the governing turnout's clearance point, not rail end to rail end."
+          >
+            {cap.cars} cars · {cap.scaleFeet} ft
           </div>
         </label>
       </div>
+      {/* ⭐ USABLE capacity, per the clearance-point standard (#19). Physical
+          length is not capacity: a car standing short of the clearance point
+          fouls the route it diverged from, so those inches hold nothing. */}
+      <div className="rounded-md bg-gray-50 px-2 py-1.5 text-xs text-gray-600">
+        <div className="flex justify-between">
+          <span>Drawn</span>
+          <span className="tabular-nums">{round1(cap.drawnInches)}″</span>
+        </div>
+        {cap.givenUpInches > 0.05 && (
+          <div className="flex justify-between text-gray-500">
+            <span>
+              {t.measuredUsableInches != null ? "Not usable (measured)" : "Clearance point"}
+            </span>
+            <span className="tabular-nums">−{round1(cap.givenUpInches)}″</span>
+          </div>
+        )}
+        <div className="mt-0.5 flex justify-between border-t border-gray-200 pt-0.5 font-medium text-gray-800">
+          <span>Usable</span>
+          <span className="tabular-nums">{round1(cap.usableInches)}″</span>
+        </div>
+      </div>
+      <label className="block text-xs font-medium text-gray-600">
+        Measured usable length (in)
+        <CommitNumberField
+          value={t.measuredUsableInches ?? null}
+          placeholder={String(round1(cap.usableInches))}
+          onCommit={(v) =>
+            patch((s) => {
+              if (v == null || v < 0) delete s.extraTracks[i].measuredUsableInches;
+              else s.extraTracks[i].measuredUsableInches = v;
+            })
+          }
+          inp={inp}
+          title="Put a tape on the real track: clearance point to the end of the track (or clearance point to clearance point on a siding). Leave blank and it's worked out from the drawing."
+        />
+        <span className="mt-1 block font-normal text-[11px] text-gray-500">
+          {t.measuredUsableInches != null
+            ? "Your measurement, used instead of the drawing."
+            : "Blank — worked out from the drawing and the turnouts' clearance points. Type a figure if you've measured the real thing."}
+        </span>
+      </label>
       {/* Promote a parallel lane-1 track to MAIN 2 — the module becomes double
           track (both endplates), Main 2 runs endplate to endplate, and
           everything attached to this track moves onto it (#double-mainline). */}

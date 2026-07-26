@@ -262,9 +262,25 @@ export default function HelpPage() {
                         <td>A recognizable name, e.g. <em>House Track</em>, <em>Team Track</em>, <em>Grain Elevator Lead</em>. Max 120 characters.</td>
                       </tr>
                       <tr>
-                        <td><strong>Capacity (scale feet)</strong></td>
-                        <td><span className={s.req}>Required</span></td>
-                        <td>How many scale feet of rolling stock this track can hold. This drives car-count planning in Free Dispatcher.</td>
+                        <td><strong>Usable length (inches)</strong></td>
+                        <td><span className={s.opt}>Optional</span></td>
+                        <td>
+                          <p>
+                            The length a train can actually stand on, in <strong>real inches</strong> — put a tape on the module.
+                            We turn it into scale feet and a car count, which is what drives planning in Free Dispatcher.
+                          </p>
+                          <p className="mt-2">
+                            Measure from the <strong>clearance point</strong> of the turnout that governs the track — the point past
+                            the frog where a car has drawn far enough clear that it no longer fouls the track it came off. Not from
+                            the points, and not from the frog. On a <strong>spur</strong> that&rsquo;s clearance point → end of track;
+                            on a <strong>siding</strong>, clearance point → clearance point of the two turnouts.
+                          </p>
+                          <p className="mt-2">
+                            Leave it blank and the schematic builder works it out from your drawing: it knows each turnout&rsquo;s
+                            part and so where its clearance point falls. Fill it in when the real track has something the drawing
+                            can&rsquo;t know about — a bumper post short of the end, or a structure fouling the track.
+                          </p>
+                        </td>
                       </tr>
                       <tr>
                         <td><strong>Notes</strong></td>

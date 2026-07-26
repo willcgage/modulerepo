@@ -3,6 +3,7 @@
 import { useState, useTransition } from "react";
 import { WizardSteps } from "@/components/wizard-steps";
 import type { ReferenceOption } from "@/lib/edge";
+import { inchesToScaleFeet, carCapacity } from "@willcgage/module-schematic";
 import {
   checkModuleName,
   createModule,
@@ -24,6 +25,21 @@ type Geometry = {
 const inputClass =
   "mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 text-gray-900 shadow-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500";
 const labelClass = "block text-sm font-medium text-gray-700";
+
+/**
+ * What a measured length comes to — scale feet and cars (#20).
+ *
+ * The wizard used to demand **scale feet**, which nobody measures: you put a
+ * tape on the module and read inches. So it asks for inches and shows what they
+ * mean, rather than making the owner do 1:160 arithmetic in their head.
+ * Returns null for a blank or unusable entry, so the field falls back to
+ * explaining what to measure.
+ */
+function derivedCapacity(raw: string): string | null {
+  const inches = Number(raw);
+  if (!raw.trim() || !Number.isFinite(inches) || inches <= 0) return null;
+  return `${Math.round(inchesToScaleFeet(inches))} scale ft · ${carCapacity(0, inches)} cars`;
+}
 
 const EMPTY_BASICS: BasicsInput = {
   module_name: "",
@@ -145,7 +161,7 @@ export function ModuleWizard({
       ...rows,
       {
         track_name: "",
-        capacity_scale_feet: "",
+        usable_inches: "",
         notes: "",
       },
     ]);
@@ -632,16 +648,25 @@ function TracksStep({
                 placeholder="e.g. House Track"
               />
             </label>
+            {/* ⚠️ Asks for REAL INCHES, not scale feet. Nobody measures a module
+                in scale feet — you put a tape on it (#20). MR derives the scale
+                feet and the car count, which are what the field used to demand
+                and what operations actually reads. */}
             <label className={labelClass}>
-              Capacity (scale feet)
+              Usable length (inches)
               <input
                 className={inputClass}
                 type="number"
-                min="1"
-                value={track.capacity_scale_feet}
-                onChange={(e) => onUpdate(index, { capacity_scale_feet: e.target.value })}
-                required
+                min="0"
+                step="0.5"
+                value={track.usable_inches}
+                onChange={(e) => onUpdate(index, { usable_inches: e.target.value })}
+                placeholder="e.g. 59.5"
               />
+              <span className="mt-1 block text-xs font-normal text-gray-500">
+                {derivedCapacity(track.usable_inches) ??
+                  "Measured from the turnout's clearance point — where a car stops fouling the track it came off — to the end of the track. Leave blank and the schematic builder works it out from the drawing."}
+              </span>
             </label>
           </div>
           <label className={`${labelClass} mt-4 block`}>

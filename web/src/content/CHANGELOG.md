@@ -5,6 +5,24 @@ Headings are `version — date` (YYYY-MM-DD).
 
 ---
 
+## v0.28.0 — 2026-07-26
+
+### Changed
+- **Capacity now means what a track can actually hold.** It was measured rail end to rail end — but a car standing too close to the turnout it came off still fouls that route, so those inches hold nothing. Capacity is now measured from the **clearance point**: the point past the frog where a car has drawn far enough clear to stop being in the way. A spur counts from its turnout's clearance point to the end of the track; a siding, clearance point to clearance point.
+
+  **Your numbers will go down, and they were previously too generous.** On Oxnard Auto Port the passing siding goes from 21 cars to 17, and the module from 66 to 59. Nothing about your module changed — only the honesty of the figure. It updates when you next save.
+
+  There's no new measurement to take. Each turnout's clearance point is worked out from the part it is, so a **#5** clears 3.85″ past its frog, a **#7** 5.40″, a **#10** 7.71″ — a shallower frog takes longer to get clear. As the parts library fills in (Admin → Track parts), those figures get truer on their own.
+
+  The clearance distance is the standard's own **1.125″ track spacing** — the distance Free-moN already says two parallel tracks need to coexist, which is the same thing as one car clearing another. That's 15 scale feet centre to centre.
+
+- **The new-module wizard asks for inches, not scale feet.** It used to want "Capacity (scale feet)" with no guidance, which nobody measures — you put a tape on the module and read inches. It now asks for the **usable length in inches** and shows you what that comes to in scale feet and cars as you type. It's also optional now: leave it blank and the schematic builder works it out from your drawing.
+
+### Added
+- **A measured override, per track.** A track's panel shows what it's made of — drawn length, what the clearance points take off, and the usable figure. If the real track has something the drawing can't know about — a bumper post short of the end, a structure fouling it — type the length you measured and that's used instead.
+
+- The **Help** page now explains where to measure from, on the track entry it describes.
+
 ## v0.27.0 — 2026-07-26
 
 ### Fixed

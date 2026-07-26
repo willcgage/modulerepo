@@ -3,6 +3,7 @@
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { suggestCarType, validateModuleName } from "@/lib/edge";
+import { inchesToScaleFeet } from "@willcgage/module-schematic";
 
 export type BasicsInput = {
   module_name: string;
@@ -28,7 +29,9 @@ export type EndplateInput = {
 
 export type TrackInput = {
   track_name: string;
-  capacity_scale_feet: string;
+  /** MEASURED usable length in real inches — what an owner puts a tape to.
+   * Scale feet are derived from it (#20); nobody measures in scale feet. */
+  usable_inches: string;
   notes: string;
 };
 
@@ -134,7 +137,14 @@ export async function createModule(
         tracks.map((track) => ({
           module_id: moduleId,
           track_name: track.track_name.trim() || null,
-          capacity_scale_feet: Number(track.capacity_scale_feet),
+          // Real inches in, scale feet stored — the column is unchanged, only
+          // what the owner is asked for (#20).
+          capacity_scale_feet: (() => {
+            const inches = Number(track.usable_inches);
+            return Number.isFinite(inches) && inches > 0
+              ? Math.round(inchesToScaleFeet(inches))
+              : null;
+          })(),
           notes: track.notes.trim() || null,
         })),
       )
