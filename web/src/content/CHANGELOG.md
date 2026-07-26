@@ -5,6 +5,20 @@ Headings are `version — date` (YYYY-MM-DD).
 
 ---
 
+## v0.22.0 — 2026-07-26
+
+### Added
+- **Every piece of track is in the Objects list, and clicking one shows its details.** The list had every siding, spur, industry, turnout and even a benchwork corner — but not the two most important pieces of track on the board. The mainline got an entry last week, though only as a shortcut that armed a tool; **Main 1 and Main 2 are now ordinary selectable objects** like everything else, each showing its length and whether it's drawn or derived.
+
+  Select one and its panel above tells you what it is: its **length** (measured along the path you drew, or derived from the module), its **shape**, its **lane**, and — for a Main 2 that only runs part-way — the stretch it covers between its turnouts. There's a **Straighten** action to put a hand-bent main back to derived.
+
+- **Selecting a main is now what arms its handles.** That's how every other track works: click it, its points go live, drag them. Before, the mainline was edited by having *nothing* selected, which is backwards and was the hard thing to find. The old route still works — pick the Track tool with nothing selected and the main is live, which is how a brand-new module gets its first main drawn — it just isn't the only way in now. Dragging a main's own handle also selects it, so its details open.
+
+  Length is deliberately **not** an editable field. On a derived main the length *is* the module's length, so a second field for it would be a second place to change the same number; on a drawn main it's whatever the line measures. Drag the end, or change the module's length.
+
+### Fixed
+- **With Main 2 selected, clicking the canvas bent Main 1.** Under the Track tool the click fell through to the mainline, because Main 2 isn't a siding. It now bends whichever main you have selected. Clicking the background with something *else* selected — a turnout, an endplate — also used to bend the mainline; it now just clears the selection.
+
 ## v0.21.0 — 2026-07-26
 
 ### Fixed

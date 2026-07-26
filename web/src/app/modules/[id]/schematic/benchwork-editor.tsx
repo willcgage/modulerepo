@@ -1512,6 +1512,20 @@ export function BenchworkEditor({
   };
   /** The path the Track tool edits when no spur is selected — the authored one, or a fresh seed. */
   const editMain = mainPath.length >= 1 ? mainPath : seedMain();
+  /**
+   * Is Main 1 armed for editing? SELECTING it arms it, under Select or Track,
+   * the same gesture as every other track (#192) — Main 2 already worked that
+   * way, so Main 1 was the odd one out.
+   *
+   * The old route stays: the Track tool with nothing selected still edits the
+   * main. That is how a blank module gets its first main drawn, and it's what
+   * owners are being told to use for the #189 migration — so it keeps working,
+   * it just isn't the ONLY way in any more.
+   */
+  const editingMain =
+    (tool === "track" || tool === "select") &&
+    selection?.kind === "track" &&
+    selection.id === MAIN_TRACK_ID;
   /** Midpoint handle for mainline edge i (open path, no wrap). */
   const mainEdgeHandle = (i: number): Pt => {
     const p0 = editMain[i];
@@ -1617,6 +1631,11 @@ export function BenchworkEditor({
             (tool === "track" || (t.path != null && t.path.length >= 2)),
         )
       : undefined;
+  /** Are Main 1's handles live? Either it's selected, or the Track tool is up
+   * with nothing else claiming the handles (the original route, #192). */
+  const mainHandlesOn =
+    !pendingTrack &&
+    (editingMain || (tool === "track" && !selection && !editSpurTrack && !editingMain2));
   /**
    * Every rail end a turnout offers to connect to — the end of its diverging
    * leg, for each turnout on the board.
@@ -1849,11 +1868,14 @@ export function BenchworkEditor({
       }
       return;
     }
-    // Track tool: a background click bends the selected spur, or the mainline
-    // when no spur is selected (mainline + spur editing are one tool now).
+    // Track tool: a background click bends whichever track is armed — the
+    // selected spur, Main 2, or Main 1 (mainline + spur editing are one tool).
     if (tool === "track") {
       if (editSpurTrack && onTrackPathChange) addSpurVertex(editSpurTrack, toLocal(e));
-      else if (onMainPathChange) {
+      // Main 2 selected used to fall through and bend MAIN 1 instead, because
+      // Main 2 isn't an editable spur so `editSpurTrack` missed it (#192).
+      else if (editingMain2 && onMain2PathChange) addMain2Vertex(toLocal(e));
+      else if (mainHandlesOn && onMainPathChange) {
         // No main yet (a fresh module opens blank) → draw one from scratch: each
         // click extends the mainline. Otherwise add a bend to the existing main.
         if (mainPath.length < 2 && centerline.length < 2) {
@@ -1862,6 +1884,11 @@ export function BenchworkEditor({
           onMainPathChange([...mainPath, snapMainEnd(toLocal(e))]);
         } else addMainVertex(toLocal(e));
       }
+      // Something else is selected — a turnout, an endplate. A background click
+      // used to bend MAIN 1 anyway, which is a surprising edit to make by
+      // accident. Drop the selection instead; that arms the main, so the NEXT
+      // click bends it, on purpose.
+      else onSelect?.(null);
       return;
     }
     // Only the Benchwork tool draws. Under Select, background means "nothing" —
@@ -1888,6 +1915,12 @@ export function BenchworkEditor({
     else if (d.kind === "turnout") onSelect?.({ kind: "turnout", id: d.id });
     else if (d.kind === "trackEnd") onSelect?.({ kind: "track", id: d.id });
     else if (d.kind === "industryEnd") onSelect?.({ kind: "industry", id: d.id });
+    // Grabbing a main's own handle selects that main, so its details open like
+    // any other track's would (#192).
+    else if (d.kind === "mainVertex" || d.kind === "mainEdge")
+      onSelect?.({ kind: "track", id: MAIN_TRACK_ID });
+    else if (d.kind === "main2Vertex" || d.kind === "main2Edge")
+      onSelect?.({ kind: "track", id: MAIN2_TRACK_ID });
   };
   /** Pointer → inches along the main, clamped to the module. */
   const posFrom = (p: Pt) =>
@@ -3371,7 +3404,7 @@ const ENDPLATE_TAB = 5; // ballast-shoulder band width, inches
         ))}
 
         {/* Drawing a new main from scratch — the first placed point (#layers). */}
-        {tool === "track" && !editSpurTrack && !editingMain2 && !pendingTrack && editMain.length === 1 && (
+        {mainHandlesOn && editMain.length === 1 && (
           <circle
             cx={editMain[0].x}
             cy={sy(editMain[0].y)}
@@ -3384,8 +3417,8 @@ const ENDPLATE_TAB = 5; // ballast-shoulder band width, inches
             <title>Mainline start — click the other end to finish</title>
           </circle>
         )}
-        {/* --- Mainline edit handles (Track tool, no spur selected) — bend/drag the main --- */}
-        {tool === "track" && !editSpurTrack && !editingMain2 && !pendingTrack && editMain.length >= 2 && (
+        {/* --- Mainline edit handles — bend/drag the main once it's armed (#192) --- */}
+        {mainHandlesOn && editMain.length >= 2 && (
           <>
             {editMain.slice(0, -1).map((_, i) => {
               const h = mainEdgeHandle(i);

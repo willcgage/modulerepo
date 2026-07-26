@@ -15,6 +15,7 @@ import {
   moduleFootprint,
   endplateCentreOffsetInches,
   endplateTrackOffsetInches,
+  pathLengthInches,
   checkEndplateWidth,
   nextId,
   inchesToScaleFeet,
@@ -368,6 +369,66 @@ export function SchematicEditor({
         };
       });
   }, [doc, state.lengthInches, state.extraTracks, state.turnouts]);
+  /**
+   * The two mains as list entries. They aren't `extraTracks` — the main IS the
+   * module's centre-line — so the Objects pane has to be told about them
+   * explicitly, and #185's shortcut row wasn't a real selectable object (#192).
+   *
+   * How long each main is: its DRAWN path when the owner has bent one, otherwise
+   * the derived run. Main 2's derived extent is whatever `stateToDoc` worked out
+   * from the transition turnouts, so read it off the doc rather than guessing.
+   */
+  const mainRows = useMemo(() => {
+    const round1 = (v: number) => Math.round(v * 10) / 10;
+    const m2 = (doc.tracks ?? []).find((t) => t.id === MAIN2_TRACK_ID);
+    const m1 = (doc.tracks ?? []).find((t) => t.id === MAIN_TRACK_ID);
+    const entry = (
+      id: string,
+      label: string,
+      drawn: boolean,
+      lengthInches: number,
+      lane: number,
+      from: number,
+      to: number,
+    ) => ({
+      id,
+      label,
+      drawn,
+      lengthInches: round1(lengthInches),
+      lane,
+      fromPos: round1(from),
+      toPos: round1(to),
+      sub: `${round1(lengthInches)}″ · ${drawn ? "drawn" : "derived"}`,
+    });
+    const rows = [
+      entry(
+        MAIN_TRACK_ID,
+        isDouble ? "Main 1" : "Main",
+        mainDrawn,
+        mainDrawn ? pathLengthInches(state.mainPath) : state.lengthInches,
+        m1?.lane ?? 0,
+        0,
+        state.lengthInches,
+      ),
+    ];
+    if (isDouble && m2) {
+      const bent = state.main2Path.length >= 2;
+      const from = m2.fromPos ?? 0;
+      const to = m2.toPos ?? state.lengthInches;
+      rows.push(
+        entry(
+          MAIN2_TRACK_ID,
+          "Main 2",
+          bent,
+          bent ? pathLengthInches(state.main2Path) : to - from,
+          m2.lane ?? 1,
+          from,
+          to,
+        ),
+      );
+    }
+    return rows;
+  }, [doc, isDouble, mainDrawn, state.mainPath, state.main2Path, state.lengthInches]);
   const canvasTurnouts = useMemo(
     () =>
       state.turnouts.map((t) => ({
@@ -1628,6 +1689,7 @@ export function SchematicEditor({
             state={state}
             patch={patch}
             onTurnoutPos={moveTurnout}
+            mains={mainRows}
             dims={dims}
             setDim={setDim}
             geometries={geometries}
@@ -1665,6 +1727,7 @@ export function SchematicEditor({
               industry: addIndustry,
               endplate: addEndplate,
             }}
+            mains={mainRows}
             mainlineDouble={isDouble}
             mainlineLocked={lockedConfigs.a || lockedConfigs.b}
             endplates={poses.map((p) => ({ id: p.id, config: p.trackConfig }))}
@@ -2348,6 +2411,7 @@ function Inspector({
   state,
   patch,
   onTurnoutPos,
+  mains,
   dims,
   setDim,
   geometries,
@@ -2376,6 +2440,17 @@ function Inspector({
   /** Moving a turnout carries its branch route with it, which needs the
    * centre-line — so it's the parent's job, not a raw patch here (#181). */
   onTurnoutPos: (id: string, pos: number) => void;
+  /** The mains, with the facts their panels report (#192). */
+  mains: {
+    id: string;
+    label: string;
+    drawn: boolean;
+    lengthInches: number;
+    lane: number;
+    fromPos: number;
+    toPos: number;
+    sub: string;
+  }[];
   dims: ModuleDimensions;
   setDim: (p: Partial<ModuleDimensions>) => void;
   geometries: { value: string; display_label: string; requires_degrees: boolean; requires_offset_inches: boolean }[];
@@ -3712,60 +3787,87 @@ function Inspector({
     );
   }
 
-  // ---- Main 1 (the through main — selectable like every other track) ----
-  // It draws as SEGMENTS off the centre-line rather than as an extraTrack, so
-  // before this it was the one track you couldn't click (#main1-select).
-  if (selection.id === MAIN_TRACK_ID) {
-    const bent = state.mainPath.length >= 2;
-    const isDouble = state.configA === "double" || state.configB === "double";
+  // ---- The mains (Main 1 / Main 2) ----------------------------------------
+  // Neither is an `extraTrack` — the main IS the module's centre-line — so both
+  // are handled here rather than falling through to the track panel below. #185
+  // gave the mainline a list row but no details; this is the details (#192).
+  const main = mains.find((m) => m.id === selection.id);
+  if (main) {
+    const isMain2 = main.id === MAIN2_TRACK_ID;
+    const partial = isMain2 && (main.fromPos > 0 || main.toPos < state.lengthInches);
     return shell(
-      isDouble ? "Main 1" : "Main",
+      main.label,
       <>
         <p className="text-xs text-gray-500">
-          The through main — it runs the whole module on the centre line. With
-          the <span className="font-medium">Track (T)</span> tool active, drag
-          the points to bend it — round a stretch with the ◆ handles. Leave it
-          alone and it follows the module&rsquo;s shape.
+          {isMain2
+            ? "The second main. Left alone it runs parallel to Main 1 at standard spacing."
+            : "The through main — it runs the module on the centre line. Left alone it follows the module's shape."}{" "}
+          It&rsquo;s selected, so its points are live on the canvas: drag one to
+          move it, or a ◆ to bow that stretch into a curve.
         </p>
-        <p className="text-xs text-gray-500">
-          Shape: {bent ? "bent by hand" : "derived from the module shape"}
+        {/* The facts, as a definition list — the same shape a siding shows. */}
+        <dl className="grid grid-cols-[auto_1fr] gap-x-3 gap-y-1 text-xs">
+          <dt className="text-gray-500">Length</dt>
+          <dd className="text-gray-800">
+            {main.lengthInches}″
+            <span className="text-gray-400">
+              {" "}
+              ({main.drawn ? "measured along the path you drew" : "derived"})
+            </span>
+          </dd>
+          <dt className="text-gray-500">Shape</dt>
+          <dd className="text-gray-800">
+            {main.drawn
+              ? "bent by hand"
+              : isMain2
+                ? "parallel to Main 1"
+                : "derived from the module shape"}
+          </dd>
+          <dt className="text-gray-500">Lane</dt>
+          <dd className="text-gray-800">
+            {main.lane}
+            <span className="text-gray-400">
+              {" "}
+              {main.lane === 0
+                ? "(the centre line)"
+                : main.lane > 0
+                  ? "(above the centre line)"
+                  : "(below the centre line)"}
+            </span>
+          </dd>
+          {partial && (
+            <>
+              <dt className="text-gray-500">Runs</dt>
+              <dd className="text-gray-800">
+                {main.fromPos}″ → {main.toPos}″
+                <span className="text-gray-400"> (between its turnouts)</span>
+              </dd>
+            </>
+          )}
+        </dl>
+        {/* Length is NOT editable here on purpose. A derived main's length IS the
+            module's length, and a second field for it would be a second source
+            of truth; a drawn main's length is whatever the path measures. Change
+            it by dragging the end, or by editing the module's length. */}
+        <p className="text-xs text-gray-400">
+          {main.drawn
+            ? "To change the length, drag the end of the line."
+            : isMain2
+              ? "Its extent follows the turnouts that open and close it."
+              : "Its length is the module's length — change that in the Module panel, or drag the end to draw a shorter main."}
         </p>
-        {bent && (
+        {main.drawn && (
           <button
             type="button"
-            onClick={() => patch((s) => (s.mainPath = []))}
+            onClick={() =>
+              patch((s) => {
+                if (isMain2) s.main2Path = [];
+                else s.mainPath = [];
+              })
+            }
             className={`${addBtn} w-full`}
           >
-            Straighten (back to derived)
-          </button>
-        )}
-      </>,
-    );
-  }
-
-  // ---- Main 2 (the second main is curvable, #131) ----
-  if (selection.id === MAIN2_TRACK_ID) {
-    const bent = state.main2Path.length >= 2;
-    return shell(
-      "Main 2",
-      <>
-        <p className="text-xs text-gray-500">
-          The second main. With the{" "}
-          <span className="font-medium">Track (T)</span> tool active, drag the
-          purple points to bend it — round a stretch with the ◆ handles — so it
-          runs where you need at the endplates. Leave it alone and it follows
-          Main 1 at standard spacing.
-        </p>
-        <p className="text-xs text-gray-500">
-          Shape: {bent ? "bent by hand" : "parallel to Main 1 (derived)"}
-        </p>
-        {bent && (
-          <button
-            type="button"
-            onClick={() => patch((s) => (s.main2Path = []))}
-            className={`${addBtn} w-full`}
-          >
-            Straighten (back to parallel)
+            {isMain2 ? "Straighten (back to parallel)" : "Straighten (back to derived)"}
           </button>
         )}
       </>,
@@ -4137,6 +4239,7 @@ function ObjectsList({
   select,
   setTool,
   add,
+  mains,
   mainlineDouble,
   mainlineLocked,
   endplates,
@@ -4156,6 +4259,8 @@ function ObjectsList({
     mainline: (config: "single" | "double") => void;
     endplate: () => void;
   };
+  /** The mains as rows — they aren't `extraTracks`, so they're passed in (#192). */
+  mains: { id: string; label: string; sub: string }[];
   mainlineDouble: boolean;
   mainlineLocked: boolean;
   endplates: { id: string; config?: string }[];
@@ -4232,7 +4337,7 @@ function ObjectsList({
 
       <Group
         title="Track"
-        count={state.extraTracks.length + 1}
+        count={state.extraTracks.length + mains.length}
         actions={
           <AddTrackMenu
             add={add}
@@ -4243,27 +4348,12 @@ function ObjectsList({
           />
         }
       >
-        {/* THE MAINLINE. It was the only thing on the board with no entry here —
-            every siding, industry, turnout and even a benchwork corner was
-            listed, but the module's spine wasn't, and it can only be reshaped
-            from the Track tool. So it read as un-editable: "there is no ability
-            to change the length or curvature of the mainline" (#185). It isn't a
-            selectable object like the rest — clicking arms the tool that edits
-            it, which is the thing that was hard to find. */}
-        <button
-          type="button"
-          onClick={() => {
-            select(null); // the Track tool edits the MAIN when nothing is selected
-            setTool("track");
-          }}
-          className="flex w-full items-center gap-2 rounded px-2 py-1 text-left text-xs text-gray-700 hover:bg-gray-50"
-          title="Drag its ends to set how far the main runs; drag the ◇ on a stretch to curve it. On a module with only one endplate the main can stop short of the far edge."
-        >
-          <span className="flex-1 truncate">Mainline</span>
-          <span className="shrink-0 text-[10px] text-gray-400">
-            {state.mainPath.length >= 2 ? "drawn — click to edit" : "derived — click to draw"}
-          </span>
-        </button>
+        {/* THE MAINS. #185 gave the mainline an entry here, but only as a tool
+            shortcut — it wasn't selectable and had no details. Both mains are
+            now ordinary rows: they select like a siding, and selecting one is
+            what arms its handles (#192). They aren't `extraTracks` because the
+            main IS the module's centre-line, so they're listed explicitly. */}
+        {mains.map((m) => row(m.id, m.label, { kind: "track", id: m.id }, m.sub))}
         {state.extraTracks.map((t, i) =>
           // Round to 0.1″ — raw float math read as 18.800000000000004″.
           row(t.id, trackLabel(t, i), { kind: "track", id: t.id }, `${Math.round(Math.abs(t.toPos - t.fromPos) * 10) / 10}″`),
