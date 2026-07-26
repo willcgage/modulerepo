@@ -5,6 +5,20 @@ Headings are `version — date` (YYYY-MM-DD).
 
 ---
 
+## v0.30.0 — 2026-07-26
+
+### Added
+- **You can now say what a board's ends are — and the app works out whether they're standard endplates.** Asked for by an owner: *"how would I update my section joints to be endplates from within MR?"* Until now you couldn't. Endplates belonged to the module and were stuck to its two ends; the joints between your boards carried no information at all, so nothing could record that one of them is a real interface.
+
+  Each board now has a **West end** and an **East end**. Say what each presents — an ordinary internal joint, a single- or double-track endplate, or a closed end — and give it a face width if it isn't the usual 24″. The panel then tells you whether it **is** a standard endplate, and where two described ends meet it tells you whether that joint is a **standard interface** — meaning those two boards could be separated and each used against any other module.
+
+  This matters if you build every board with standard endplates so they can be used together or on their own. Until now there was no way to record that, and no way for anyone else to know it.
+
+### Notes
+- **There's no "this is an endplate" tickbox, on purpose.** The geometry decides. A box could be ticked wrongly, and then the registry would be telling Free Dispatcher that two boards will physically mate when they won't.
+- **Ends of different widths still mate.** The standard allows plates to differ in width and be offset as long as the track lines up — so only the *track count* has to match. A single end meeting a double one is flagged; a 24″ end meeting a 12″ one is not.
+- **Leaving an end as "internal joint" is not a fault.** The standard exempts joints inside a module from the end-interface rules, so an undescribed end is simply an ordinary joint.
+
 ## v0.29.1 — 2026-07-26
 
 ### Fixed

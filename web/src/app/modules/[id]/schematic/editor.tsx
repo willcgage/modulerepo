@@ -26,12 +26,15 @@ import {
   turnoutFacing,
   turnoutOccupiedSpan,
   spanOverhang,
+  assessSectionEnd,
+  assessSectionJoint,
   usableCapacity,
   partExtent,
   partExtentForSize,
   DEFAULT_FLEX_PART_ID,
   type FlexPiece,
   type TrackPart,
+  type TrackConfig,
   nextId,
   carCapacity,
   type BenchworkPoint,
@@ -2293,6 +2296,7 @@ function SectionList({
   geometries,
   onChange,
   onBoard,
+  main2Below,
   activeId,
   onShape,
   meets,
@@ -2310,6 +2314,10 @@ function SectionList({
   /** How many placed objects stand on this board — so removing it can say so
    * rather than silently displacing them (#195). */
   onBoard?: (sectionId: string) => number;
+  /** Whether Main 2 runs below Main 1 — a double end's recommended offset flips
+   * with it (#190), so an end authored for a swapped module must not read as
+   * off-centre (#130). */
+  main2Below?: boolean;
   activeId: string | null;
   onShape: (id: string) => void;
   meets: { a: string; b: string; lengthInches: number }[];
@@ -2508,6 +2516,89 @@ function SectionList({
                 </p>
               );
             })()}
+            {/* THIS BOARD'S TWO ENDS (#130). Owner's question was "how would I
+                update my section joints to be endplates from within MR?" — you
+                describe the end, and whether it IS one is derived. There is
+                deliberately no "this is an endplate" tickbox: ticked wrongly, the
+                registry would promise Free-Dispatcher a mating surface that
+                isn't there. */}
+            <div className="rounded border border-gray-200 p-1.5">
+              <p className="mb-1 text-xs font-medium text-gray-600">Ends of this board</p>
+              <div className="grid grid-cols-2 gap-1.5">
+                {(["endA", "endB"] as const).map((key) => {
+                  const end = sec[key] ?? null;
+                  const a = assessSectionEnd(end, { main2Below });
+                  return (
+                    <div key={key} className="space-y-1">
+                      <label className="block text-[11px] font-medium text-gray-500">
+                        {key === "endA" ? "West end" : "East end"}
+                        <select
+                          value={end?.config ?? ""}
+                          onChange={(e) =>
+                            set(i, {
+                              [key]: e.target.value
+                                ? { ...(end ?? {}), config: e.target.value as TrackConfig | "none" }
+                                : null,
+                            })
+                          }
+                          className={`mt-0.5 ${inp} text-xs`}
+                        >
+                          <option value="">Internal joint</option>
+                          <option value="single">Endplate · single</option>
+                          <option value="double">Endplate · double</option>
+                          <option value="none">Closed (bumper)</option>
+                        </select>
+                      </label>
+                      {a.described && (
+                        <label className="block text-[11px] font-medium text-gray-500">
+                          Face width (in)
+                          <input
+                            type="number"
+                            min={12}
+                            step={0.5}
+                            value={end?.widthInches ?? ""}
+                            placeholder="24"
+                            onChange={(e) =>
+                              set(i, {
+                                [key]: {
+                                  ...(end ?? {}),
+                                  widthInches: e.target.value ? Number(e.target.value) : null,
+                                },
+                              })
+                            }
+                            className={`mt-0.5 ${inp} text-xs`}
+                          />
+                        </label>
+                      )}
+                      {a.described &&
+                        (a.conforming ? (
+                          <p className="text-[11px] text-green-700">
+                            ✓ A standard endplate — this board can be used on its own.
+                          </p>
+                        ) : (
+                          <p className="text-[11px] text-amber-700">⚠ {a.issues[0]?.message}</p>
+                        ))}
+                    </div>
+                  );
+                })}
+              </div>
+              {/* What the JOINT with the next board is, once both sides are described. */}
+              {(() => {
+                const next = sections[i + 1];
+                if (!next) return null;
+                const j = assessSectionJoint(sec.endB, next.endA, { main2Below });
+                if (j.standardInterface)
+                  return (
+                    <p className="mt-1 text-[11px] text-green-700">
+                      ✓ Standard interface with {next.name || `section ${i + 2}`} — these two
+                      boards could be separated and each used against any module.
+                    </p>
+                  );
+                if (j.west.described || j.east.described)
+                  return <p className="mt-1 text-[11px] text-amber-700">⚠ Joint: {j.reason}</p>;
+                return null;
+              })()}
+            </div>
             <div className="flex items-center gap-2 text-xs">
               <span className={sec.outline ? "text-gray-600" : "text-gray-400"}>
                 {sec.outline ? "Shape: drawn" : "Shape: derived from length"}
@@ -2969,6 +3060,7 @@ function Inspector({
               geometries={geometries}
               onChange={setSections}
               onBoard={countOnSection}
+              main2Below={state.mainsSwapped === true}
               activeId={activeSectionId}
               onShape={onShapeSection}
               meets={sectionMeets}
