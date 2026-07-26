@@ -5,6 +5,22 @@ Headings are `version — date` (YYYY-MM-DD).
 
 ---
 
+## v0.31.0 — 2026-07-26
+
+### Added
+- **Both Atlas Code 55 wyes are measured, so they now draw at their real size.** Until today neither wye had any dimensions, and a turnout with no measurements claims no body at all — so flex track ran straight *through* the wye instead of stopping at it. Both are now measured off the physical parts:
+
+  | wye | overall | points | frog | past the frog |
+  |---|---|---|---|---|
+  | #2.5 (2056) | 6½″ | 1⅝″ | 4⅛″ | 2⅜″ |
+  | #3.5 (2057) | 5″ | ¾″ | 3⁵⁄₃₂″ | 1¹³⁄₁₆″ |
+
+  If you have either wye on a module, its drawn length and the point where your flex track begins will both change — they were wrong before, and this is the correction. Nothing else moves: no straight turnout's geometry is affected.
+
+- **Admins can record the diverging rail, and the form checks it against the frog.** There's a new measurement on a track part — frog to the end of the diverging rail, measured *along* the rail. It isn't used for drawing; it's there to catch mistakes. Because the rail runs at an angle it must be slightly longer than the straight-line distance it covers, so if it disagrees with the frog position the form now says so while the part is still in your hand.
+
+  This earned its place immediately: the 2057's frog was first read as 5⁵⁄₃₂″ on a part only 5″ long, which would have put the frog past the end of the turnout. The diverging rail made that impossible and the re-read gave 3⁵⁄₃₂″.
+
 ## v0.30.1 — 2026-07-26
 
 ### Fixed

@@ -52,6 +52,7 @@ function readPart(formData: FormData) {
   const points = number(formData, "points_offset_inches");
   const frog = number(formData, "frog_offset_inches");
   const overall = number(formData, "overall_length_inches");
+  const diverging = number(formData, "diverging_length_inches");
 
   // The database enforces these too; checking here turns a constraint violation
   // into a sentence that says which landmark is wrong.
@@ -63,6 +64,29 @@ function readPart(formData: FormData) {
     );
   if (frog != null && overall != null && frog >= overall)
     fail("The frog must sit inside the part — check which end you measured from.");
+
+  // The diverging rail is the hypotenuse of the angle it leaves at, so it must
+  // run LONGER than the straight-line distance it covers. This is the check
+  // that caught the Atlas 2057 (modulerepo#180): its frog first read 5 5/32"
+  // against a 5" overall length, and a 1 30/32" diverging rail made that
+  // impossible. Cheap, and it fires while the part is still in your hand.
+  if (diverging != null && frog != null && overall != null) {
+    const axial = overall - frog;
+    if (diverging <= axial)
+      fail(
+        `A diverging rail of ${diverging}" is too short to reach the end of the ` +
+          `part: it has to cover ${axial.toFixed(4)}" along the part's length, and ` +
+          "it runs at an angle, so it must be LONGER than that. One of the frog, " +
+          "the overall length or this reading is wrong.",
+      );
+    if (diverging / axial > 1.15)
+      fail(
+        `A diverging rail of ${diverging}" is more than 15% longer than the ` +
+          `${axial.toFixed(4)}" it has to cover. At turnout angles that is too ` +
+          "steep to be the angle — check whether the frog was measured to the " +
+          "APEX of the V rather than the end of the casting.",
+      );
+  }
 
   return {
     slug,
@@ -81,6 +105,8 @@ function readPart(formData: FormData) {
     frog_offset_source: source(formData, "frog_offset_source"),
     overall_length_inches: overall,
     overall_length_source: source(formData, "overall_length_source"),
+    diverging_length_inches: diverging,
+    diverging_length_source: source(formData, "diverging_length_source"),
     lead_inches: number(formData, "lead_inches"),
     lead_source: source(formData, "lead_source"),
     outer_radius_inches: number(formData, "outer_radius_inches"),

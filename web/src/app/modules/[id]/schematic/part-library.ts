@@ -101,9 +101,10 @@ export function selectableParts(library: TrackPart[] = PART_LIBRARY): TrackPart[
     !!p.segments?.length ||
     // A FROG NUMBER counts. Naming a part adopts its frog number (#187), and
     // that drives the drawn angle, the lead and where the flex begins — so a
-    // part identified only by its number is still a real choice. The Atlas 2057
-    // wye is exactly that: we know it's a #3.5 and nothing else yet, and
-    // excluding it would hide a part an owner is holding.
+    // part identified only by its number is still a real choice, and excluding
+    // it would hide a part an owner is holding. (The Atlas 2057 wye used to be
+    // the example here; both wyes are fully measured as of #180, so the rule now
+    // earns its keep on whatever gets added next rather than on a live case.)
     p.frogNumber != null ||
     !!p.lead ||
     !!p.pointsOffset ||

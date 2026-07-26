@@ -9,6 +9,7 @@ export const TRACK_PART_COLUMNS =
   "points_offset_inches, points_offset_source, " +
   "frog_offset_inches, frog_offset_source, " +
   "overall_length_inches, overall_length_source, " +
+  "diverging_length_inches, diverging_length_source, " +
   "lead_inches, lead_source, " +
   "outer_radius_inches, inner_radius_inches, radius_source, " +
   "actual_angle_deg, actual_angle_source, " +
@@ -32,6 +33,8 @@ export interface TrackPartRow {
   frog_offset_source: string | null;
   overall_length_inches: number | string | null;
   overall_length_source: string | null;
+  diverging_length_inches: number | string | null;
+  diverging_length_source: string | null;
   lead_inches: number | string | null;
   lead_source: string | null;
   outer_radius_inches: number | string | null;
@@ -70,6 +73,8 @@ export function rowToStoredPart(r: TrackPartRow): StoredTrackPart {
     frogOffsetSource: r.frog_offset_source,
     overallLengthInches: num(r.overall_length_inches),
     overallLengthSource: r.overall_length_source,
+    divergingLengthInches: num(r.diverging_length_inches),
+    divergingLengthSource: r.diverging_length_source,
     leadInches: num(r.lead_inches),
     leadSource: r.lead_source,
     outerRadiusInches: num(r.outer_radius_inches),

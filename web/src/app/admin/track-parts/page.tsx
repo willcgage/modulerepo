@@ -117,7 +117,17 @@ function PartFields({ row }: { row?: TrackPartRow }) {
           <SelectField label="…source" name="frog_offset_source" defaultValue={row?.frog_offset_source ?? ""} options={SOURCE_OPTIONS} required={false} />
           <NumberField label="Overall length (end tie to end tie)" name="overall_length_inches" defaultValue={n(row?.overall_length_inches)} required={false} step="any" min={0} />
           <SelectField label="…source" name="overall_length_source" defaultValue={row?.overall_length_source ?? ""} options={SOURCE_OPTIONS} required={false} />
+          <NumberField label="Frog → end of the diverging rail (along the rail)" name="diverging_length_inches" defaultValue={n(row?.diverging_length_inches)} required={false} step="any" min={0} />
+          <SelectField label="…source" name="diverging_length_source" defaultValue={row?.diverging_length_source ?? ""} options={SOURCE_OPTIONS} required={false} />
         </div>
+        <p className="mt-1 text-xs text-gray-500">
+          The diverging rail is a <span className="font-medium">cross-check</span>,
+          not a drawing input. Measure it along the angled rail and the form will
+          tell you if it disagrees with the frog: it has to be a little longer
+          than the straight-line distance it covers, because it runs at an angle.
+          This is what caught the Atlas 2057, whose frog was first read past the
+          end of the part.
+        </p>
         <p className="mt-1 text-xs text-gray-500">
           Only a <span className="font-medium">measured</span> points offset and
           overall length let the app draw where the part physically stops — the
