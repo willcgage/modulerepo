@@ -238,10 +238,11 @@ export function SchematicEditor({
         geometryType: geometry.type,
         geometryDegrees: geometry.degrees,
         geometryOffsetInches: geometry.offset,
-        endplateConfigs: [
-          state.configA,
-          state.configB === "none" ? "single" : state.configB,
-        ],
+        // ⚠️ Pass "none" THROUGH. This used to coerce it to "single", which is
+        // the same coercion the package used to do — so a single-ended module
+        // still derived a pose for a plate it hasn't got, and endplate B stayed
+        // in the Objects list after the owner removed it (#184).
+        endplateConfigs: [state.configA, state.configB],
         branches: state.branches.map((b, i) => ({
           id: String.fromCharCode(67 + i),
           atPos: b.pos,
