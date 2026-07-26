@@ -25,6 +25,7 @@ import {
   resizeFlexPiece,
   turnoutFacing,
   turnoutOccupiedSpan,
+  spanOverhang,
   partExtent,
   partExtentForSize,
   DEFAULT_FLEX_PART_ID,
@@ -3842,6 +3843,53 @@ function Inspector({
     const cars =
       carCapacity(ind.fromPos, ind.toPos) +
       ind.spots.reduce((n, sp) => n + carCapacity(sp.fromPos, sp.toPos), 0);
+    /**
+     * Does this spot's span actually fit on the track it spots (#194)? Nothing
+     * checked, so an industry could claim car spots with no rail under them —
+     * and its capacity counted them.
+     *
+     * Deliberately a WARNING, not a correction: the numbers are the owner's, the
+     * fix is theirs to choose (shorten the span, or lengthen the track), and
+     * that's how an off-centre endplate (#190) and an over-long flex piece
+     * (#193) are handled too.
+     */
+    const spanWarning = (track: string, fromPos: number, toPos: number) => {
+      // The mains carry their extents already (#192); everything else is an
+      // extraTrack. A spot on a track that no longer exists warns about nothing.
+      const m = mains.find((x) => x.id === track);
+      const et = state.extraTracks.find((x) => x.id === track);
+      const ext = m
+        ? { from: m.fromPos, to: m.toPos }
+        : et
+          ? { from: et.fromPos, to: et.toPos }
+          : null;
+      if (!ext) return null;
+      const o = spanOverhang({
+        fromPos,
+        toPos,
+        trackFromPos: ext.from,
+        trackToPos: ext.to,
+      });
+      if (o.overhangInches < 0.05) return null;
+      const name =
+        trackOptions.find((x) => x.value === track)?.label ?? track;
+      const lost = carCapacity(fromPos, toPos) - carCapacity(0, o.onTrackInches);
+      const r1 = (v: number) => Math.round(v * 10) / 10;
+      const ends = [
+        o.beforeInches >= 0.05 ? `${r1(o.beforeInches)}″ before its start` : null,
+        o.afterInches >= 0.05 ? `${r1(o.afterInches)}″ past its end` : null,
+      ].filter(Boolean);
+      return (
+        <p className="rounded-md bg-amber-50 px-2 py-1 text-xs text-amber-800" role="status">
+          ⚠ This span runs off <span className="font-medium">{name}</span> —{" "}
+          {ends.join(" and ")}. Only {r1(o.onTrackInches)}″ of it has rail under it
+          {lost > 0
+            ? `, so ${lost} of the cars counted below can't actually be spotted`
+            : ""}
+          . Shorten the span, or extend the track to meet it.
+        </p>
+      );
+    };
     return shell(
       `Industry · ${ind.name || "unnamed"}`,
       <>
@@ -3920,6 +3968,7 @@ function Inspector({
             </div>
           </label>
         </div>
+        {spanWarning(ind.track, ind.fromPos, ind.toPos)}
         <div className="border-t border-gray-100 pt-2">
           <div className="flex items-center justify-between">
             <span className="text-xs font-medium text-gray-600">House-track spots</span>
@@ -3989,6 +4038,8 @@ function Inspector({
                       title="Ends (in from A)"
                     />
                   </div>
+                  {/* Each spot rides its own track, so each is checked (#194). */}
+                  {spanWarning(sp.track, sp.fromPos, sp.toPos)}
                 </div>
               ))}
             </div>

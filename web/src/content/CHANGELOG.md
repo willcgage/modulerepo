@@ -5,6 +5,15 @@ Headings are `version — date` (YYYY-MM-DD).
 
 ---
 
+## v0.25.1 — 2026-07-26
+
+### Added
+- **An industry now tells you when its car spots run off the end of the track.** An industry is a span with a start and an end, and its capacity is worked out from those — but nothing checked the span actually fits on the siding it's spotting. So an industry could be counting car spots with no rail under them.
+
+  Its panel now says so, with the numbers: which track it runs off, by how much at each end, how much of the span really has rail under it, and how many of the counted cars can't be spotted. Each house-track spot is checked separately, since each rides its own track.
+
+  **Your numbers are left exactly as you typed them.** The fix is yours to choose — shorten the span, or extend the track to meet it — the same way an off-centre endplate and an over-long piece of flex are flagged rather than quietly corrected.
+
 ## v0.25.0 — 2026-07-26
 
 ### Fixed
