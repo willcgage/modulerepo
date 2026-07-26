@@ -105,8 +105,12 @@ export function QuickCreate({
           </select>
         </label>
 
+        {/* ⚠️ This is the FIRST BOARD's length, not a module total. A module's
+            length is the sum of the boards it's built from (#108), so asking for
+            a total up front is the thing that made a multi-board module fight
+            you: every section then had to divide INTO a fixed number. */}
         <label className="block text-sm font-medium text-gray-700">
-          Footprint length (in)
+          First board&rsquo;s length (in)
           <input
             type="number"
             min={1}
@@ -117,7 +121,9 @@ export function QuickCreate({
             placeholder="48"
           />
           <span className="mt-1 block text-xs font-normal text-gray-500">
-            The board opens blank — draw the mainline, then add track, on the canvas.
+            How long this board runs. A module built from several boards gets the
+            rest added on the canvas, and its length is the sum of them — you
+            don&rsquo;t have to know the total now.
           </span>
         </label>
 

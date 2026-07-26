@@ -402,7 +402,7 @@ function BasicsStep({
         </label>
 
         <label className={labelClass}>
-          Geometry
+          First board&rsquo;s shape
           <select
             className={inputClass}
             value={basics.geometry_type}
@@ -456,7 +456,7 @@ function BasicsStep({
 
       <div className="mb-1">
         <label className={`${labelClass} mb-1 block`}>
-          Module footprint length (inches)
+          First board&rsquo;s length (inches)
           <input
             className={inputClass}
             type="number"
@@ -467,8 +467,15 @@ function BasicsStep({
             required
           />
         </label>
+        {/* The module's length is the SUM of its boards (#108) — so this is the
+            first one, and the geometry above is ITS shape. Asking for a module
+            total up front is what made a multi-board module impossible to
+            author: no single length or geometry describes one. */}
         <p className="mb-4 text-xs text-gray-500">
-          The physical end-to-end length of the module itself.
+          How long this board runs, and the shape above is <em>its</em> shape. A
+          module built from several boards gets the rest added on the canvas —
+          its length and centre line are worked out from them, so a mostly
+          straight module can still have a curved board in the middle.
         </p>
       </div>
 

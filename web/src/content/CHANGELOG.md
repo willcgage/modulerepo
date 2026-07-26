@@ -5,6 +5,18 @@ Headings are `version — date` (YYYY-MM-DD).
 
 ---
 
+## v0.29.0 — 2026-07-26
+
+### Changed
+- **A new module now starts as a board, not as a length.** Modules are built from boards, and a module's length is the sum of them — so being asked for a *module total* up front was backwards, and it's what made a multi-board module fight you: every board then had to divide into a fixed number, and changing one stole from its neighbour.
+
+  The create form now asks for the **first board's length and shape**, and the module is created with that one board already in it. Add the next board on the canvas and the module simply gets longer. Nothing to convert, no total to keep in step.
+
+  This also means a **curved board is just a board**. A mostly-straight module with a couple of curved sections in the middle — which no single module-level shape could ever describe — is now the ordinary case rather than something you have to fight the app into.
+
+### Notes
+- Modules made before this are untouched and keep working exactly as they did. When you want boards on one, its Module panel has **Build this module from sections →**, which turns the joints you've already drawn into real boards, each with its own length and shape.
+
 ## v0.28.0 — 2026-07-26
 
 ### Changed

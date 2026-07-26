@@ -1618,13 +1618,25 @@ export function SchematicEditor({
     return () => window.removeEventListener("keydown", onKey);
   }, [undo, redo]);
 
-  // Seed a rectangular board the first time a brand-new module opens, so the
-  // canvas starts as a real board (not an empty SVG with a button). Autosave
-  // persists it; the owner can reshape or undo it.
+  /**
+   * Seed a brand-new module: ONE SECTION carrying the length and shape just
+   * entered, plus a rectangular board so the canvas starts as a real board and
+   * not an empty SVG with a button. Autosave persists it; undo drops it.
+   *
+   * ⭐ A module is **born sections-first** (#108). It used to be created with a
+   * module-level length and no sections at all, so its very first act was to be
+   * the thing sections-first replaced — and an owner adding a second board had
+   * to find "Build this module from sections →" before they could. That button
+   * is now what it should be: a migration for modules authored before this.
+   *
+   * The length is the same number the owner typed; it just belongs to the board
+   * rather than to the module, so the module's length is derived from the start
+   * and a second board adds to it instead of stealing from it.
+   */
   const seeded = useRef(false);
   useEffect(() => {
     if (!newModule || seeded.current) return;
-    if (state.outline.length > 0 || state.lengthInches <= 0) return;
+    if (state.outline.length > 0 || state.sections.length > 0 || state.lengthInches <= 0) return;
     seeded.current = true;
     const L = state.lengthInches;
     const d = 24;
@@ -1632,6 +1644,17 @@ export function SchematicEditor({
     // up), not render-synchronous state React should batch.
     queueMicrotask(() =>
       patch((s) => {
+        s.sections = [
+          {
+            id: nextId("sec", []),
+            lengthInches: L,
+            // Whatever shape the new-module form was told — a curved first board
+            // is ordinary, and this is what makes it the SECTION's shape.
+            geometryType: geometry.type || "straight",
+            ...(geometry.degrees ? { geometryDegrees: geometry.degrees } : {}),
+            ...(geometry.offset ? { geometryOffsetInches: geometry.offset } : {}),
+          },
+        ];
         s.outline = [
           { x: 0, y: -d / 2 },
           { x: L, y: -d / 2 },
