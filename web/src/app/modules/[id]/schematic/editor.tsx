@@ -4006,6 +4006,16 @@ function Inspector({
     if (!f) return null;
     const u = flexUsage(f.pieces);
     const part = flexPartFor(f.partId, partLibrary);
+    // A branch route is drawn ACROSS the board rather than along it, so there's
+    // no run here to cut into lengths. Say that and nothing else — a product
+    // chooser would imply it changes something.
+    if (f.runInches < 0.01)
+      return (
+        <p className="border-t border-gray-100 pt-2 text-xs text-gray-500">
+          This route is drawn as a path rather than measured along the module, so its lengths of
+          flex aren&rsquo;t worked out yet.
+        </p>
+      );
     return (
       <div className="space-y-1 border-t border-gray-100 pt-2">
         <label className="block text-xs font-medium text-gray-600">
@@ -4034,11 +4044,7 @@ function Inspector({
           </select>
         </label>
         <p className="text-xs text-gray-500">
-          {f.runInches < 0.01 ? (
-            // A branch route is authored by its drawn path, not by a stretch of
-            // the module, so there's no run here to cut into lengths yet.
-            "This route is drawn as a path rather than measured along the module, so its lengths aren't worked out yet."
-          ) : u.pieces === 0 ? (
+          {u.pieces === 0 ? (
             "No flex on this run — the parts fill it."
           ) : (
             <>
@@ -4264,6 +4270,7 @@ function Inspector({
           Drag its bend handles on the board to match the build; it meets the
           endplate square, straight for 4″ from the face (Free-moN §2.0).
         </p>
+        {flexBlock(t.id)}
       </>,
       {
         fn: () =>
