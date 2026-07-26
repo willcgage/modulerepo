@@ -58,7 +58,10 @@ export function SchematicPreview({
         <text x={2} y={laneY(0) - LANE_GAP / 2} fontSize="7" fill="#94a3b8" dominantBaseline="middle">
           {f.loop ? "Entry" : "A"}
         </text>
-        {!f.loop && (
+        {/* Only label the far end if there IS one. An end of the line or a
+            pocket presents a single face and the track just stops, so a "B"
+            there would announce a plate the module hasn't got (#184/#191). */}
+        {!f.loop && f.hasEndplateB && (
           <text x={W - 2} y={laneY(0) - LANE_GAP / 2} fontSize="7" fill="#94a3b8" textAnchor="end" dominantBaseline="middle">
             B
           </text>
