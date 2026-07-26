@@ -5,6 +5,17 @@ Headings are `version — date` (YYYY-MM-DD).
 
 ---
 
+## v0.27.0 — 2026-07-26
+
+### Fixed
+- **You can type a negative number again.** In the benchwork corner fields, the minus sign of "−6" was being read on its own — before the 6 arrived — and there is no such number, so the field fought you. Reported: *"I can't enter '−6'. Instead I have to enter 0 and press − until I get a value −6.xxx and then delete the trailing digits."* Sorry — that's a miserable way to place a corner.
+
+  Those fields now wait until you've finished typing (or press Enter) before taking the value. The same bug was in three other places, all fixed together: the **endplate pose** X, Y and heading, and the **Main 1 offset from plate centre** — which is signed by definition, so a double end's own recommended value of −0.5625″ couldn't be typed at all.
+
+- **"Single track" in the + Track menu did nothing, and didn't explain itself.** Those options don't *add* a track — every module already has a main; it *is* the module's centre line, there from the moment the module has a length. So on a module that was already single-track, clicking "Single track" was a silent no-op. Reported by an owner building a 12×12″ single-track control point who reasonably concluded the track couldn't be added.
+
+  The menu now says the mainline is already on the board and that these choose how many tracks it is — and clicking one **selects the mainline**, opening its panel and putting its handles on the board. That answers the question actually being asked: *where is my track?* (The mainline also became a proper entry in the Objects list in v0.22.0, which is the other half of this.)
+
 ## v0.26.0 — 2026-07-26
 
 ### Added

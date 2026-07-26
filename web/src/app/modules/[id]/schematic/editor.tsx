@@ -1648,11 +1648,26 @@ export function SchematicEditor({
     passingSiding: armSiding,
     spur: armSpur,
     crossover: addCrossover,
-    mainline: (config: "single" | "double") =>
+    /**
+     * Choose whether the main is single or double — it does NOT add one. Every
+     * module already has a main: it IS the centre-line, from the moment the
+     * module has a length.
+     *
+     * An owner building a 12″ single-track control point read this as "add a
+     * single track", clicked it on a module that was ALREADY single, and got a
+     * silent no-op: *"I could not add the track… I selected Single Track radio
+     * button but couldn't determine how to actually add the track segment"*
+     * (#210). So it now also SELECTS the main, which opens its panel and puts
+     * its handles on the board — answering the question they were really
+     * asking, which is "where is my track?".
+     */
+    mainline: (config: "single" | "double") => {
       patch((s) => {
         s.configA = config;
         if (s.configB !== "none") s.configB = config;
-      }),
+      });
+      setSelection({ kind: "track", id: MAIN_TRACK_ID });
+    },
   };
   const canCrossover =
     !state.loop && (state.configA === "double" || state.configB === "double");
@@ -1939,11 +1954,25 @@ function sectionLengths(breaks: number[], lengthInches: number): number[] {
 /**
  * A number field that COMMITS ON BLUR (or Enter), not per keystroke.
  *
- * The same lesson as the section length fields below: when the committed value
- * is clamped against a neighbour, committing mid-typing shrinks the headroom
- * under you — typing "18" applies 1 first, the neighbour absorbs 29, and by the
- * time you type the 8 there's nothing left to give. Holding a draft until blur
- * means what you type is what gets applied. Used by the flex piece length (#193).
+ * ⭐ Two separate bugs live here, and both are why a per-keystroke number input
+ * is almost always wrong:
+ *
+ * 1. **You cannot type a negative number.** The "−" of "−6" parses as NaN on its
+ *    own, so whatever the handler does with NaN happens before you've typed the
+ *    6 — the value is zeroed, cleared, or corrupted, and the field fights you.
+ *    An owner reported it on the benchwork corners: *"I can't enter '-6'.
+ *    Instead I have to enter 0 and press − until I get a value −6.xxx and then
+ *    delete the trailing digits"* (#209). `LaneField` below exists for exactly
+ *    this on lanes (#134); this is the same fix for every other signed field.
+ * 2. **A committed value clamped against a neighbour shrinks as you type** —
+ *    "18" applies 1 first, the neighbour absorbs 29, and there's nothing left
+ *    to give by the time you reach the 8. That's the flex piece length (#193)
+ *    and the section lengths below.
+ *
+ * Holding a draft until blur fixes both: what you type is what gets applied.
+ *
+ * `value: null` shows an empty field, and clearing one commits `null` — for a
+ * field whose blank is meaningful ("use the standard's recommendation").
  */
 function CommitNumberField({
   value,
@@ -1951,26 +1980,36 @@ function CommitNumberField({
   inp,
   title,
   step = 0.5,
+  placeholder,
 }: {
-  value: number;
-  onCommit: (n: number) => void;
+  value: number | null;
+  /** `null` = the field was cleared. */
+  onCommit: (n: number | null) => void;
   inp: string;
   title?: string;
   step?: number;
+  placeholder?: string;
 }) {
   const [draft, setDraft] = useState<string | null>(null);
   const commit = () => {
     if (draft === null) return;
-    const n = Number(draft);
+    const raw = draft.trim();
     setDraft(null);
-    if (Number.isFinite(n)) onCommit(n);
+    if (raw === "") onCommit(null);
+    else {
+      const n = Number(raw);
+      // Unparseable ("−", "1e", "abc") reverts to the current value rather than
+      // committing a NaN — dropping the draft has already done that.
+      if (Number.isFinite(n)) onCommit(n);
+    }
   };
   return (
     <input
       type="number"
       step={step}
-      value={draft ?? value}
+      value={draft ?? (value ?? "")}
       title={title}
+      placeholder={placeholder}
       onChange={(e) => setDraft(e.target.value)}
       onBlur={commit}
       onKeyDown={(e) => {
@@ -3088,10 +3127,10 @@ function Inspector({
     const pose = derivedPoses.find((p) => p.id === id);
     if (!pose) return null;
     const o = state.poseOverrides[id];
-    const setPose = (k: "x" | "y" | "heading", v: string) =>
+    const setPose = (k: "x" | "y" | "heading", v: number | null) =>
       patch((s) => {
         const base = s.poseOverrides[id] ?? { x: pose.x, y: pose.y, heading: pose.heading };
-        s.poseOverrides[id] = { ...base, [k]: Number(v) || 0 };
+        s.poseOverrides[id] = { ...base, [k]: v ?? 0 };
       });
     // A/B are the schematic's drawing axis; C+ are authored branches.
     const bi = id.charCodeAt(0) - 67;
@@ -3224,10 +3263,13 @@ function Inspector({
             one of the two tracks at its double end. */}
         <label className="block text-xs font-medium text-gray-600">
           Main 1 offset from plate centre (in)
-          <input
-            type="number"
+          {/* SIGNED by definition — a double end's own recommended value is
+              −0.5625 — and blank is meaningful ("use the recommendation"). Per
+              keystroke the "−" parsed as NaN and DELETED the offset, so the
+              standard's own default could not be typed (#209). */}
+          <CommitNumberField
             step={0.0625}
-            value={state.endplateTrackOffsets[id] ?? ""}
+            value={state.endplateTrackOffsets[id] ?? null}
             placeholder={String(
               endplateTrackOffsetInches(
                 undefined,
@@ -3235,8 +3277,8 @@ function Inspector({
                 state.mainsSwapped === true,
               ),
             )}
-            onChange={(e) => setEndplateTrackOffset(id, e.target.value)}
-            className={`mt-0.5 ${inp}`}
+            onCommit={(v) => setEndplateTrackOffset(id, v == null ? "" : String(v))}
+            inp={inp}
             title="Signed distance of Main 1 from the centre of this endplate. Leave blank for the standard's recommendation (single centred, double straddling the centre). 0 means explicitly centred."
           />
         </label>
@@ -3274,34 +3316,34 @@ function Inspector({
               : "Override only if the map looks wrong."}
           </p>
           <div className="mt-2 grid grid-cols-3 gap-2">
+            {/* All three are SIGNED (a plate west of A, below the centre line,
+                or facing −90°). Per keystroke, `Number("−") || 0` snapped the
+                field to 0 before the digits arrived (#209). */}
             <label className="block text-xs font-medium text-gray-600">
               X (in)
-              <input
-                type="number"
-                step="0.1"
+              <CommitNumberField
+                step={0.1}
                 value={Math.round((o?.x ?? pose.x) * 10) / 10}
-                onChange={(e) => setPose("x", e.target.value)}
-                className={`mt-0.5 ${inp}`}
+                onCommit={(v) => setPose("x", v)}
+                inp={inp}
               />
             </label>
             <label className="block text-xs font-medium text-gray-600">
               Y (in)
-              <input
-                type="number"
-                step="0.1"
+              <CommitNumberField
+                step={0.1}
                 value={Math.round((o?.y ?? pose.y) * 10) / 10}
-                onChange={(e) => setPose("y", e.target.value)}
-                className={`mt-0.5 ${inp}`}
+                onCommit={(v) => setPose("y", v)}
+                inp={inp}
               />
             </label>
             <label className="block text-xs font-medium text-gray-600">
               Heading °
-              <input
-                type="number"
-                step="1"
+              <CommitNumberField
+                step={1}
                 value={Math.round(o?.heading ?? pose.heading)}
-                onChange={(e) => setPose("heading", e.target.value)}
-                className={`mt-0.5 ${inp}`}
+                onCommit={(v) => setPose("heading", v)}
+                inp={inp}
               />
             </label>
           </div>
@@ -3345,19 +3387,22 @@ function Inspector({
     const i = selection.i;
     const c = state.outline[i];
     if (!c) return null;
-    const set = (k: "x" | "y", v: string) =>
-      patch((s) => (s.outline[i] = { ...s.outline[i], [k]: Number(v) }));
+    // Both are SIGNED — a corner below the centre line or west of endplate A is
+    // ordinary — so both commit on blur. Per keystroke, the "−" of "−6" parsed
+    // as NaN and wrote it straight into the corner (#209).
+    const set = (k: "x" | "y", v: number | null) =>
+      patch((s) => (s.outline[i] = { ...s.outline[i], [k]: v ?? 0 }));
     return shell(
       `Benchwork corner ${i + 1}`,
       <>
         <div className="grid grid-cols-2 gap-2">
           <label className="block text-xs font-medium text-gray-600">
             X (in)
-            <input type="number" step={0.5} value={c.x} onChange={(e) => set("x", e.target.value)} className={`mt-0.5 ${inp}`} />
+            <CommitNumberField value={c.x} onCommit={(v) => set("x", v)} inp={inp} />
           </label>
           <label className="block text-xs font-medium text-gray-600">
             Y (in)
-            <input type="number" step={0.5} value={c.y} onChange={(e) => set("y", e.target.value)} className={`mt-0.5 ${inp}`} />
+            <CommitNumberField value={c.y} onCommit={(v) => set("y", v)} inp={inp} />
           </label>
         </div>
         {c.bulge ? (
@@ -4240,7 +4285,8 @@ function Inspector({
             Length (in)
             <CommitNumberField
               value={Math.round(piece.lengthInches * 100) / 100}
-              onCommit={resize}
+              // Blank isn't a length — clearing it leaves the piece as it was.
+              onCommit={(v) => v != null && resize(v)}
               inp={inp}
               title="Moves the joint at this piece's east end. Its neighbour takes up the difference — which is what cutting one longer really does."
             />
@@ -4662,6 +4708,15 @@ function AddTrackMenu({
           <div className={`absolute z-20 mt-1 w-48 rounded-lg border border-gray-200 bg-white p-1 shadow-lg ${align === "left" ? "left-0" : "right-0"}`}>
             <div className="px-2 pt-1 text-[10px] font-semibold uppercase tracking-wide text-gray-400">
               Mainline
+            </div>
+            {/* ⚠️ These do NOT add a track — every module already has a main;
+                it IS the centre-line. Read as "add a single track", they were a
+                silent no-op on a module that was already single (#210). Say
+                what they do, and the header above says the main is already
+                there. */}
+            <div className="px-2 pb-1 text-[10px] leading-snug text-gray-400">
+              Already on the board — it runs the length of the module. These
+              choose how many tracks it is.
             </div>
             <button type="button" className={item} disabled={mainlineLocked} onClick={() => run(() => add.mainline("single"))}>
               <span className="w-3 text-blue-600">{!mainlineDouble ? "●" : "○"}</span> Single track
