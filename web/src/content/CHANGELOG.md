@@ -5,6 +5,15 @@ Headings are `version — date` (YYYY-MM-DD).
 
 ---
 
+## v0.23.1 — 2026-07-26
+
+### Fixed
+- **An industry's car-spot span now follows the track it spots on.** The span was drawn beside the module's centre line at the *nominal* offset for its track's lane number — which is the same place the track is, right up until you bend or redraw the track. After that the track went one way and its highlight stayed where the lane said it should be. On a spur drawn well clear of its lane, the highlight could sit a couple of inches off the track it belongs to, pointing at nothing.
+
+  The span now rides the track's own line, so a curved siding gets a curved car-spot span and a hand-drawn one gets a hand-drawn span. The drag handles and the name follow it too. Nothing to change on your part — the spans just move onto their track.
+
+  The straightened **dispatcher** view is unaffected and stays as it was: it's a topological diagram, so a lane offset is the right answer there.
+
 ## v0.23.0 — 2026-07-26
 
 ### Added

@@ -625,14 +625,11 @@ export function SchematicEditor({
     });
     setSelection({ kind: "cp", id });
   };
-  /** Lane of any track id (mains fixed; extras by their record). */
-  const laneOfTrack = useMemo(() => {
-    const m = new Map<string, number>();
-    m.set(MAIN_TRACK_ID, 0);
-    m.set(MAIN2_TRACK_ID, 1);
-    for (const t of state.extraTracks) m.set(t.id, t.lane);
-    return m;
-  }, [state.extraTracks]);
+  // NB: `laneOfTrack` used to live here — a track id → lane map, whose only
+  // caller was the industry spans. Those ride their track's own path now (#186),
+  // so nothing needs it. Deleted rather than left lying about: it pinned Main 2
+  // to lane 1, which is already wrong on a module with the mains swapped (#131),
+  // so the next caller to reach for it would have inherited that.
   const canvasIndustries = useMemo<CanvasIndustry[]>(
     () =>
       state.industries.flatMap((ind) => {
@@ -656,7 +653,9 @@ export function SchematicEditor({
             id,
             industryId: ind.id,
             editable,
-            lane: laneOfTrack.get(track) ?? 0,
+            // The TRACK, not its lane: the span rides the track's own path, so
+            // a curved or hand-drawn spur takes its industry with it (#186).
+            track,
             fromPos,
             toPos,
             side,
@@ -671,7 +670,7 @@ export function SchematicEditor({
           ),
         ];
       }),
-    [state.industries, laneOfTrack],
+    [state.industries],
   );
   // Track dropdowns show the owner's track name, not the internal id. On a
   // double-track module, Main 2 is a real track — a turnout on it diverges

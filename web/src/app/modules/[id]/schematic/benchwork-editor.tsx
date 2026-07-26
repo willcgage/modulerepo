@@ -269,8 +269,10 @@ export interface CanvasIndustry {
   industryId: string;
   /** Whether this spot's ends are draggable (the primary spot only). */
   editable: boolean;
-  /** Lane of the track it spots on (to offset it beside that track). */
-  lane: number;
+  /** The track this spot is on. The span RIDES that track — it used to be
+   * drawn at the track's lane offset beside the module centre-line, which is
+   * only the same thing while the track is straight (#186). */
+  track: string;
   fromPos: number;
   toPos: number;
   side: "above" | "below";
@@ -1286,25 +1288,43 @@ export function BenchworkEditor({
         : [],
     [centerline, signals],
   );
-  /** Industries — a car-spot span drawn beyond the track it serves, on `side`. */
+  /**
+   * Industries — a car-spot span drawn beyond the track it serves, on `side`.
+   *
+   * The span RIDES ITS TRACK (#186). It used to be sampled along the module's
+   * centre-line and pushed out by the track's lane offset, which is the same
+   * thing only while the track runs straight beside the main — so on a curved
+   * or hand-drawn spur the track curved away and the highlight stayed straight.
+   * Sampling the track's own polyline is the same operation, one level down.
+   */
   const industryShapes = useMemo(() => {
     if (centerline.length < 2) return [];
     return industries.map((ind) => {
+      const host = hostPointsOf(ind.track);
+      const rel = (abs: number) => toHostRel(ind.track, abs);
       const sign = ind.side === "above" ? 1 : -1;
-      // Beyond the track's rails, on the industry's side.
-      const off = laneOffset(ind.lane) + sign * (LANE_SPACING_INCHES * 0.9);
+      const midPos = (ind.fromPos + ind.toPos) / 2;
+      // `sampleAt` hands back the LEFT normal of whatever it walked, so a track
+      // drawn east→west has one pointing the opposite way from the module's —
+      // and "above" would come out below. Settle the direction ONCE, against the
+      // centre-line, so the band can't twist along its own length either.
+      const hostMid = sampleAt(host, rel(midPos));
+      const mainMid = sampleAt(centerline, midPos);
+      const flip = hostMid.nx * mainMid.nx + hostMid.ny * mainMid.ny < 0 ? -1 : 1;
+      // Beyond the track's rails, on the industry's side. No lane term now: the
+      // track's own path already is where the lane put it.
+      const off = sign * flip * (LANE_SPACING_INCHES * 0.9);
+      const at = (abs: number, o: number) => {
+        const p = sampleAt(host, rel(abs));
+        return { x: p.x + p.nx * o, y: p.y + p.ny * o };
+      };
       const a0 = Math.min(ind.fromPos, ind.toPos);
       const b0 = Math.max(ind.fromPos, ind.toPos);
       const path: Pt[] = [];
       const steps = 16;
       for (let s = 0; s <= steps && b0 - a0 > 0.01; s++) {
-        const p = sampleAt(centerline, a0 + ((b0 - a0) * s) / steps);
-        path.push({ x: p.x + p.nx * off, y: p.y + p.ny * off });
+        path.push(at(a0 + ((b0 - a0) * s) / steps, off));
       }
-      const a = sampleAt(centerline, ind.fromPos);
-      const b = sampleAt(centerline, ind.toPos);
-      const mid = sampleAt(centerline, (ind.fromPos + ind.toPos) / 2);
-      const labelOff = off + sign * 2.2;
       return {
         id: ind.id,
         industryId: ind.industryId,
@@ -1314,13 +1334,14 @@ export function BenchworkEditor({
         sub: ind.sub,
         path,
         ends: [
-          { end: "from" as const, x: a.x + a.nx * off, y: a.y + a.ny * off },
-          { end: "to" as const, x: b.x + b.nx * off, y: b.y + b.ny * off },
+          { end: "from" as const, ...at(ind.fromPos, off) },
+          { end: "to" as const, ...at(ind.toPos, off) },
         ],
-        label: { x: mid.x + mid.nx * labelOff, y: mid.y + mid.ny * labelOff },
+        label: at(midPos, off + sign * flip * 2.2),
       };
     });
-  }, [centerline, industries]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [centerline, industries, tracks]);
 
   /** Content bounds in world (module-local) inches — what "Fit" frames to. */
   const bounds = useMemo<ViewBox>(() => {
