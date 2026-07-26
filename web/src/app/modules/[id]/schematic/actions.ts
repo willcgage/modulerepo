@@ -265,7 +265,22 @@ export async function saveModuleSchematic(
       [2, "B"],
     ] as const) {
       const ep = doc.endplates.find((e) => e.id === epId && !e.at);
-      if (!ep) continue; // e.g. a pure turnback loop has no B
+      if (!ep) {
+        // The module doesn't present this face — a pure turnback loop, or an end
+        // of the line / pocket with only one endplate (#184). A leftover row
+        // would be a phantom: the detail page would list an endplate the module
+        // hasn't got, and Free-Dispatcher would offer to couple something to it.
+        // The doc owns this, so the row goes.
+        const stale = epRows?.find((r) => r.endplate_number === n);
+        if (stale) {
+          const { error } = await supabase
+            .from("freemon_endplates")
+            .delete()
+            .eq("id", stale.id);
+          if (error) return { error: error.message };
+        }
+        continue;
+      }
       const cfg = ep.tracks?.[0]?.config === "double" ? "double" : "single";
       const authoredWidth =
         typeof ep.widthInches === "number" && ep.widthInches > 0 ? ep.widthInches : null;

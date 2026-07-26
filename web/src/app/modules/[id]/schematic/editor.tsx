@@ -2588,6 +2588,31 @@ function Inspector({
               </p>
             </>
           )}
+          {/* A module presents one conforming face, or two, or more. The
+              standard governs the faces it OFFERS for joining, never how many it
+              must offer — an end of the line or a pocket has one and the track
+              simply stops (#184). This lives here rather than on endplate B's
+              inspector for a plain reason: once B is gone there is no B to
+              select, so the way back has to be somewhere that always exists. */}
+          {!state.loop && (
+            <label className="flex gap-2 text-xs text-gray-700">
+              <input
+                type="checkbox"
+                className="mt-0.5 shrink-0"
+                checked={state.configB === "none"}
+                onChange={(e) =>
+                  patch((s) => {
+                    s.configB = e.target.checked ? "none" : "single";
+                  })
+                }
+              />
+              <span>
+                <span className="font-medium">Only one endplate</span> — an end of
+                the line or a pocket. End B has no plate and the track just stops
+                there; nothing can couple to that end.
+              </span>
+            </label>
+          )}
           <label className="flex gap-2 text-xs text-gray-700">
             <input
               type="checkbox"

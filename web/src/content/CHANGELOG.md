@@ -5,6 +5,13 @@ Headings are `version — date` (YYYY-MM-DD).
 
 ---
 
+## v0.19.0 — 2026-07-26
+
+### Added
+- **A module can have just one endplate.** *End of the line* and *pocket* modules present a single conforming face and the track simply stops — but there was no way to say so: every module was given two endplates and neither could be removed. Tick **Only one endplate** in the Module panel and end B's plate goes away, along with its endplate record, so nothing offers to couple to an end that isn't there.
+
+  The endplate standard governs the faces your module *offers for joining*; it never required a module to offer two. The setting is in the Module panel rather than on endplate B, for the obvious reason that once B is gone there'd be no B to click to get it back.
+
 ## v0.18.0 — 2026-07-26
 
 ### Changed
