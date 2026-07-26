@@ -13,7 +13,8 @@ import {
   deriveEndplatePoses,
   poseNeedsManual,
   moduleFootprint,
-  endplateTrackOffsetFor,
+  endplateCentreOffsetInches,
+  endplateTrackOffsetInches,
   checkEndplateWidth,
   nextId,
   inchesToScaleFeet,
@@ -268,13 +269,15 @@ export function SchematicEditor({
   const renderTrackOffsets = useMemo(() => {
     // Main 2 sits above Main 1 by default, below when swapped (#131). A double
     // end's plate centre is the midpoint of the two mains, so its default
-    // offset follows Main 2's side. An OWNER-authored offset always wins.
-    const m2Below = state.mainsSwapped === true;
-    const off = (config: "single" | "double" | "none", authored?: number) => {
-      const base = endplateTrackOffsetFor(config, authored);
-      const authoredSet = typeof authored === "number" && Number.isFinite(authored);
-      return config === "double" && !authoredSet && m2Below ? -base : base;
-    };
+    // follows Main 2's side. An OWNER-authored offset always wins. The rule
+    // itself lives in the package, so this view and the read-only one can't
+    // drift apart again (#190).
+    const off = (config: "single" | "double" | "none", authored?: number) =>
+      endplateCentreOffsetInches({
+        config,
+        authoredTrackOffsetInches: authored,
+        main2Below: state.mainsSwapped === true,
+      });
     return {
       A: off(state.configA, state.endplateTrackOffsets.A),
       B: off(state.configB, state.endplateTrackOffsets.B),
@@ -313,6 +316,8 @@ export function SchematicEditor({
       state.sections,
       state.mainPath,
       state.loop,
+      state.configA,
+      state.configB,
       geometry,
     ],
   );
@@ -2929,8 +2934,10 @@ function Inspector({
             step={0.0625}
             value={state.endplateTrackOffsets[id] ?? ""}
             placeholder={String(
-              -endplateTrackOffsetFor(
+              endplateTrackOffsetInches(
+                undefined,
                 id === "A" ? state.configA : id === "B" ? state.configB : "single",
+                state.mainsSwapped === true,
               ),
             )}
             onChange={(e) => setEndplateTrackOffset(id, e.target.value)}
@@ -2946,6 +2953,9 @@ function Inspector({
           widthInches: state.endplateWidths[id],
           config: id === "A" ? state.configA : id === "B" ? state.configB : "single",
           trackOffsetInches: state.endplateTrackOffsets[id],
+          // Which side Main 2 is on decides which track sits nearest a fascia,
+          // and whether the pair straddles the plate at all (#190).
+          main2Below: state.mainsSwapped === true,
         }).map((issue) => (
           <p
             key={issue.code}

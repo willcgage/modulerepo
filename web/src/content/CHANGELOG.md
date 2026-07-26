@@ -5,6 +5,21 @@ Headings are `version — date` (YYYY-MM-DD).
 
 ---
 
+## v0.21.0 — 2026-07-26
+
+### Fixed
+- **A double-track endplate now sits centred on its two tracks.** The standard puts the two mains of a double end **1.125″ apart, straddling the centre of the plate** — 0.5625″ either side — so the plate is centred on the *pair*, not on Main 1. The board drawings on the module page and in the catalog were centring every plate on **Main 1**, which pushed the whole pair 0.5625″ off centre and put Main 2 that much nearer one fascia than the drawing implied. Modules affected included **Harrisonville MoPac Extension**, **ELM Yard**, **Double Track 30 Degree Curve** and **End of passing Siding**; none of them had authored anything wrong, and they now draw correctly with no change on your part.
+
+  The check for **swapped mains** was wrong in the same way — it assumed Main 2 always ran on one particular side, so on a module with the mains swapped it measured the fascia clearance against the wrong track.
+
+### Added
+- **A warning when a double end's two tracks don't straddle its plate.** Off-centre track *is* allowed — the standard relaxed centring to a recommendation, and a transition module often needs it — so this is a note, not an error. It exists because one particular value is almost always an accident: typing **0** in *Main 1 offset from plate centre* means "put Main 1 exactly in the middle", which pushes Main 2 a full 1.125″ off to one side. If you see the warning and didn't intend an offset end, **clear the field** — blank uses the standard's placement. The field's greyed-out placeholder now shows what blank will give you.
+
+## v0.20.2 — 2026-07-26
+
+### Fixed
+- **A module with one endplate no longer shows a second one.** Two leftovers from the same wrong assumption as v0.20.0 below, both found by checking the fix on a real single-ended module: the dispatcher view labelled the far end **"B"**, and the board drawings — on the module page and in the catalog — drew an **endplate face** across the end where the track simply stops. Both were asking "is this a loop?" when they meant "has this module got two ends?", which were the same question until single-ended modules could be authored. There is now one answer to that question and all three places ask it.
+
 ## v0.20.0 — 2026-07-26
 
 ### Fixed

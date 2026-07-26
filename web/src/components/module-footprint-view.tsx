@@ -1,5 +1,6 @@
 import {
   moduleFootprint,
+  endplateCentreOffsetInches,
   type ModuleFootprintInput,
   type ModuleSchematicDoc,
 } from "@willcgage/module-schematic";
@@ -180,6 +181,36 @@ export function footprintInput(
   // its length lives in the doc, not the module record's stored total — using the
   // record here ran the main straight through the loop (#loop).
   const isLoop = (doc as { loop?: boolean } | null)?.loop === true;
+  // Which axial faces the module actually presents. Read from the doc's
+  // endplates rather than a config field: an end of the line or a pocket simply
+  // has no B, and without this the read-only and catalog views drew a plate at
+  // an end the module hasn't got (#184/#191).
+  const configs: ("single" | "double" | "none")[] = [
+    doc?.endplates?.find((e) => e.id === "A")?.tracks?.[0]?.config === "double"
+      ? "double"
+      : "single",
+    doc?.endplates?.some((e) => e.id === "B")
+      ? doc.endplates.find((e) => e.id === "B")?.tracks?.[0]?.config === "double"
+        ? "double"
+        : "single"
+      : "none",
+  ];
+  const main2Below = (doc as { mainsSwapped?: boolean } | null)?.mainsSwapped === true;
+  // Where each plate's CENTRE sits relative to Main 1. The doc stores the
+  // standard's own framing (Main 1's distance FROM the plate centre), so it has
+  // to be turned round — and an end that authored nothing takes §2.0's
+  // placement, which is what this view was missing entirely (#190).
+  const endplateTrackOffsets: Record<string, number> = {};
+  for (const [i, id] of ["A", "B"].entries()) {
+    if (configs[i] === "none") continue;
+    endplateTrackOffsets[id] = endplateCentreOffsetInches({
+      config: configs[i],
+      authoredTrackOffsetInches: (
+        doc?.endplates?.find((e) => e.id === id) as { trackOffsetInches?: number | null } | undefined
+      )?.trackOffsetInches,
+      main2Below,
+    });
+  }
   const len =
     (isLoop && doc?.lengthInches
       ? doc.lengthInches
@@ -206,19 +237,8 @@ export function footprintInput(
     mainPath: (doc as { mainPath?: ModuleSchematicDoc["mainPath"] } | null)?.mainPath ?? null,
     // A loop's centre-line ends at the throat — drop the spurious far endplate face.
     loop: (doc as { loop?: boolean } | null)?.loop === true,
-    // Which axial faces the module actually presents. Read from the doc's
-    // endplates rather than a config field: an end of the line or a pocket
-    // simply has no B, and without this the read-only and catalog views drew a
-    // plate at an end the module hasn't got (#184/#191).
-    endplateConfigs: [
-      doc?.endplates?.find((e) => e.id === "A")?.tracks?.[0]?.config === "double"
-        ? "double"
-        : "single",
-      doc?.endplates?.some((e) => e.id === "B")
-        ? doc.endplates.find((e) => e.id === "B")?.tracks?.[0]?.config === "double"
-          ? "double"
-          : "single"
-        : "none",
-    ],
+    endplateConfigs: configs,
+    mainsSwapped: main2Below,
+    endplateTrackOffsets,
   };
 }
