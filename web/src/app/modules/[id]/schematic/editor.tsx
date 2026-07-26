@@ -1001,22 +1001,24 @@ export function SchematicEditor({
     const id = String.fromCharCode(67 + state.branches.length); // C, D, E…
     patch((s) => {
       const midX = Math.max(1, Math.round(s.lengthInches / 2));
-      // Drop it on the perimeter: snap a far-side point to the nearest outline
-      // edge (facing out). Fallback to a default when there's no board yet.
-      const pose = snapPoseToOutline(s.outline, { x: midX, y: 1000 }) ?? {
-        x: midX,
-        y: 12,
-        heading: 90,
-      };
       s.branches.push({
         label: `Branch ${s.branches.length + 1}`,
         pos: midX,
-        side: pose.heading > 180 ? "down" : "up",
+        side: "up",
         config: "single",
         kind: "branch",
         trackId: null,
       });
-      s.poseOverrides[id] = { x: pose.x, y: pose.y, heading: pose.heading };
+      // ⚠️ NO pose override. This used to write one — `snapPoseToOutline(outline)
+      // ?? { y: 12 }` — which is the exact thing #182 fixed for endplates A and
+      // B: a DERIVED pose silently pinned as if the owner had placed it, so it
+      // then stopped following the board.
+      //
+      // The hard-coded 12 was also only right on a 24″ board, and it became the
+      // live path the moment a new module stopped carrying an authored outline.
+      // `deriveEndplatePoses` now puts a branch plate on the benchwork edge at
+      // the board's real depth, so letting it derive is both correct and
+      // self-maintaining. Dragging the plate writes the override, as it should.
     });
     setSelection({ kind: "endplate", id });
   };
