@@ -1730,10 +1730,24 @@ export function BenchworkEditor({
         if (!loose.has(`${l.turnoutId}|${trackId}`)) out.push(l.divergeJoint);
       }
     }
-    // …and where one length of FLEX meets the next (#193). Same tick: a joint is
-    // a joint, whether the piece on the other side is a turnout or more flex.
-    // Placed the way a turnout on a host is placed, so a jointed spur, a curved
-    // main and a drawn path all get theirs in the right spot.
+    return out;
+  }, [legsByTrack, danglingRailEnds]);
+
+  /**
+   * Where one length of FLEX meets the next (#193) — kept apart from the joints
+   * above because they answer to a different level of detail.
+   *
+   * A turnout's own joints are part detail: below the zoom where its rails
+   * resolve, marking them is grit. Flex joints are the opposite — they're a
+   * COARSE feature of the run, 30″ apart on a 96″ main, and the whole reason
+   * the model exists. Gating them behind `railsVisible` meant a 96″ module
+   * showed none of them at the zoom it opens at.
+   *
+   * Placed the way a turnout on a host is placed, so a jointed spur, a curved
+   * main and a drawn path all get theirs in the right spot.
+   */
+  const flexJoints = useMemo(() => {
+    const out: Joint[] = [];
     for (const [trackId, cuts] of Object.entries(flexCutsByTrack ?? {})) {
       const host = hostPointsOf(trackId);
       if (host.length < 2) continue;
@@ -1745,7 +1759,7 @@ export function BenchworkEditor({
     }
     return out;
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [legsByTrack, danglingRailEnds, flexCutsByTrack, centerline, tracks]);
+  }, [flexCutsByTrack, centerline, tracks]);
 
   /** Where the spur body starts — the turnout's JOIN (the ramp's end, so the
    * spur is continuous with the switch), falling back to the on-main turnout
@@ -2929,6 +2943,30 @@ const ENDPLATE_TAB = 5; // ballast-shoulder band width, inches
               </line>
             );
           })}
+        {/* FLEX JOINTS — where one length of flex meets the next (#193). NOT
+            behind the rail LOD gate: these are 30″ apart, not part detail, and
+            a 96″ module opens at a zoom where the rails don't resolve — so
+            gating them showed none of the thing the model is for. The tick keeps
+            a minimum on-screen length for the same reason. */}
+        {flexJoints.map((j, i) => {
+          const h = Math.max(RAIL_GAUGE_INCHES * 0.85, 3 / scale);
+          return (
+            <line
+              key={`fj${i}`}
+              x1={j.x - j.nx * h}
+              y1={sy(j.y - j.ny * h)}
+              x2={j.x + j.nx * h}
+              y2={sy(j.y + j.ny * h)}
+              stroke="#0f172a"
+              strokeWidth={1.4}
+              strokeLinecap="butt"
+              vectorEffect="non-scaling-stroke"
+              pointerEvents="none"
+            >
+              <title>Rail joint — one length of flex track ends and the next begins</title>
+            </line>
+          );
+        })}
         {/* Turnout rails with nothing joined to them — drag a track end here. */}
         {danglingRailEnds.map((r) => (
           <circle
