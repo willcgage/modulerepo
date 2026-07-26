@@ -75,9 +75,59 @@ export function drawablePartFor(
   return named?.segments?.length ? named : null;
 }
 
-/** Parts that actually carry an outline, so the inspector only offers choices
- * that change what is drawn. Naming a part with no geometry would look like a
- * setting that does nothing. */
-export const DRAWABLE_PARTS: TrackPart[] = PART_LIBRARY.filter(
-  (p) => p.segments?.length,
-);
+/**
+ * The parts an owner can name on a turnout, grouped by manufacturer (#187).
+ *
+ * ⚠️ This replaces `DRAWABLE_PARTS`, which filtered to parts carrying an
+ * imported OUTLINE (`segments`). Only the hand-built dev fixture above has one,
+ * so **exactly one entry was ever offered** — the fixture, not any of the
+ * measured parts. Will: *"I gave you more than 1 turnout with measurements …
+ * but there is still only one that is in the list."*
+ *
+ * That filter was defensible when an outline was all a part contributed. It
+ * isn't any more: a part also supplies its **lead** and its **extent** — where
+ * the moulding stops and the owner's flex track begins (#189) — and those are
+ * what every measured part has. So the test is now "does naming this change
+ * anything that gets drawn", which is still an honest bar: it keeps out a part
+ * that is only a name.
+ *
+ * Takes the LIVE library, not the compiled-in constant. The old export was a
+ * module-level array built from `PART_LIBRARY`, so a part an admin added at
+ * `/admin/track-parts` could never appear in the picker — the whole supply side
+ * was invisible to the consumption side.
+ */
+export function selectableParts(library: TrackPart[] = PART_LIBRARY): TrackPart[] {
+  const affectsDrawing = (p: TrackPart) =>
+    !!p.segments?.length ||
+    !!p.lead ||
+    !!p.pointsOffset ||
+    !!p.frogOffset ||
+    !!p.overallLength ||
+    !!p.outerRadius ||
+    !!p.innerRadius;
+  return library.filter((p) => p.kind !== "flex" && affectsDrawing(p));
+}
+
+/** {@link selectableParts}, grouped for a manufacturer-then-part picker. */
+export function partsByManufacturer(
+  library: TrackPart[] = PART_LIBRARY,
+): { manufacturer: string; parts: TrackPart[] }[] {
+  const groups = new Map<string, TrackPart[]>();
+  for (const p of selectableParts(library)) {
+    const list = groups.get(p.manufacturer) ?? [];
+    list.push(p);
+    groups.set(p.manufacturer, list);
+  }
+  return [...groups.entries()]
+    .map(([manufacturer, parts]) => ({
+      manufacturer,
+      // Frog number ascending, so a manufacturer's range reads in order; parts
+      // without one (curved turnouts) sort last by name.
+      parts: parts.sort(
+        (a, b) =>
+          (a.frogNumber ?? Infinity) - (b.frogNumber ?? Infinity) ||
+          a.name.localeCompare(b.name),
+      ),
+    }))
+    .sort((a, b) => a.manufacturer.localeCompare(b.manufacturer));
+}

@@ -9,6 +9,7 @@ import {
   leadInchesForSize,
   pastFrogInchesForSize,
   partOutlineAtFrog,
+  partExtent,
   partExtentForSize,
   turnoutFacing,
   RAIL_GAUGE_INCHES,
@@ -830,8 +831,16 @@ export function BenchworkEditor({
     // Skipped for a wye (its lead is derived) and for a curved turnout (we
     // stretch that geometry to read as an arc, so a real part's strip wouldn't
     // sit on it).
+    //
+    // A NAMED part answers for itself. Looking the extent up by frog number
+    // picks whichever part in the library carries that number, which is only the
+    // same thing while no two parts share one — so once an owner has said which
+    // switch they're laying, that part's own measurements are the answer (#187).
+    const named = t.partId ? partLibrary.find((p) => p.id === t.partId) : undefined;
     const ext =
-      !t.curved && t.kind !== "wye" ? partExtentForSize(size, partLibrary) : null;
+      !t.curved && t.kind !== "wye"
+        ? (named ? partExtent(named) : partExtentForSize(size, partLibrary))
+        : null;
     const body = ext
       ? (() => {
           const s0 = -ext.behindPoints;

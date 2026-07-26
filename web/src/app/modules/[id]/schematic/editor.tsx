@@ -1,6 +1,6 @@
 "use client";
 
-import { DRAWABLE_PARTS } from "./part-library";
+import { partsByManufacturer } from "./part-library";
 import { Fragment, useCallback, useEffect, useMemo, useRef, useState, useTransition } from "react";
 import Link from "next/link";
 import {
@@ -25,6 +25,7 @@ import {
   resizeFlexPiece,
   turnoutFacing,
   turnoutOccupiedSpan,
+  partExtent,
   partExtentForSize,
   DEFAULT_FLEX_PART_ID,
   type FlexPiece,
@@ -514,9 +515,18 @@ export function SchematicEditor({
       for (const sw of state.turnouts) {
         if (sw.onTrack !== t.id) continue;
         const size = sw.size ?? 6;
+        // A named part answers for itself, exactly as the tie strip does — the
+        // two must agree, or the flex would start somewhere the drawn moulding
+        // doesn't end (#187).
+        const named = sw.partId ? partLibrary.find((p) => p.id === sw.partId) : undefined;
         const span = turnoutOccupiedSpan({
           pos: sw.pos,
-          extent: sw.curved || sw.kind === "wye" ? null : partExtentForSize(size, partLibrary),
+          extent:
+            sw.curved || sw.kind === "wye"
+              ? null
+              : named
+                ? partExtent(named)
+                : partExtentForSize(size, partLibrary),
           facing: turnoutFacing({
             pos: sw.pos,
             divergeFarPos: (() => {
@@ -3375,6 +3385,10 @@ function Inspector({
     const i = state.turnouts.findIndex((t) => t.id === selection.id);
     if (i < 0) return null;
     const t = state.turnouts[i];
+    // The switch this turnout IS, if the owner has named one — and every part
+    // they could name, grouped by manufacturer (#187).
+    const namedPart = t.partId ? (partLibrary.find((p) => p.id === t.partId) ?? null) : null;
+    const partGroups = partsByManufacturer(partLibrary);
     return shell(
       `Turnout · ${t.name || t.id}`,
       <>
@@ -3482,45 +3496,86 @@ function Inspector({
           </label>
           <label className="block text-xs font-medium text-gray-600">
             Turnout # (size)
-            <select
-              value={t.size ?? 6}
-              onChange={(e) => patch((s) => (s.turnouts[i].size = Number(e.target.value)))}
-              className={`mt-0.5 ${inp}`}
-              title="Frog number — governs the diverging angle."
-            >
-              {[4, 5, 6, 7, 8, 10].map((n) => (
-                <option key={n} value={n}>#{n}</option>
-              ))}
-            </select>
+            {/* Derived once a part is named: the part IS a #7, so a second
+                control saying otherwise would be a contradiction you could
+                author. Editable only while no part is chosen (#187). */}
+            {namedPart?.frogNumber != null ? (
+              <div
+                className={`mt-0.5 ${inp} bg-gray-50 text-gray-600`}
+                title="Comes from the part you chose."
+              >
+                #{namedPart.frogNumber}
+              </div>
+            ) : (
+              <select
+                value={t.size ?? 6}
+                onChange={(e) => patch((s) => (s.turnouts[i].size = Number(e.target.value)))}
+                className={`mt-0.5 ${inp}`}
+                title="Frog number — governs the diverging angle."
+              >
+                {/* The stock range, plus whatever this turnout already is — a
+                    part can leave behind a frog number the list doesn't carry
+                    (Atlas's wye is a #2.5), and a select with no matching
+                    option renders blank, which reads as "unset" (#187). */}
+                {[...new Set([4, 5, 6, 7, 8, 10, t.size ?? 6])]
+                  .sort((a, b) => a - b)
+                  .map((n) => (
+                    <option key={n} value={n}>#{n}</option>
+                  ))}
+              </select>
+            )}
           </label>
         </div>
+        {/* THE PART — grouped by manufacturer, from the LIVE library so a part
+            an admin adds shows up here (#187). */}
         <label className="block text-xs font-medium text-gray-600">
           Part
           <select
             value={t.partId ?? ""}
             onChange={(e) =>
-              patch((s) => (s.turnouts[i].partId = e.target.value || undefined))
+              patch((s) => {
+                const id = e.target.value || undefined;
+                s.turnouts[i].partId = id;
+                // The part carries the frog number, so adopt it. Everything
+                // downstream — lead, extent, where the flex begins — is keyed
+                // off `size`, and leaving it stale would draw one part at
+                // another's dimensions.
+                const p = id ? partLibrary.find((x) => x.id === id) : null;
+                if (p?.frogNumber != null) s.turnouts[i].size = p.frogNumber;
+              })
             }
             className={`mt-0.5 ${inp}`}
-            title="Draw this turnout as a specific commercial part, using that part's own outline instead of a shape derived from the frog number."
+            title="The switch you're actually laying. Its own measurements drive how long the turnout is drawn and where your flex track starts."
           >
             <option value="">Not specified — draw from the frog number</option>
-            {DRAWABLE_PARTS.map((p) => (
-              <option key={p.id} value={p.id}>
-                {p.manufacturer} {p.name}
-                {p.frogNumber != null && p.frogNumber !== (t.size ?? 6)
-                  ? ` — #${p.frogNumber}, not this turnout's size`
-                  : ""}
-              </option>
+            {partGroups.map((g) => (
+              <optgroup key={g.manufacturer} label={g.manufacturer}>
+                {g.parts.map((p) => (
+                  <option key={p.id} value={p.id}>
+                    {p.name}
+                    {p.partNumbers
+                      ? ` (${[p.partNumbers.left, p.partNumbers.right, p.partNumbers.single].filter(Boolean).join(" / ")})`
+                      : ""}
+                  </option>
+                ))}
+              </optgroup>
             ))}
           </select>
-          {t.partId ? (
+          {namedPart ? (
             <span className="mt-1 block font-normal text-[11px] text-gray-500">
-              Drawn from the part&apos;s own outline. Its frog should sit on the
-              turnout&apos;s position marker — if it misses, the part&apos;s
-              geometry disagrees with our measurements.
+              {namedPart.segments?.length
+                ? "Drawn from the part’s own outline. Its frog should sit on the turnout’s position marker — if it misses, the part’s geometry disagrees with our measurements."
+                : partExtent(namedPart)
+                  ? "Drawn at this part’s measured length, so the rail joints mark where your own flex track starts."
+                  : "This part has no measured length yet, so the turnout is drawn from its frog number. Adding measurements at Admin → Track parts is what fixes that."}
             </span>
-          ) : null}
+          ) : (
+            <span className="mt-1 block font-normal text-[11px] text-gray-500">
+              Drawn from the frog number alone — a reasoned shape, not a
+              particular product. Name the switch you&rsquo;re laying and it is
+              drawn at that part&rsquo;s own measurements.
+            </span>
+          )}
         </label>
         <label className="flex items-center gap-2 text-xs font-medium text-gray-600">
           <input

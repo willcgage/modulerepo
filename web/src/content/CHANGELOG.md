@@ -5,6 +5,22 @@ Headings are `version — date` (YYYY-MM-DD).
 
 ---
 
+## v0.24.0 — 2026-07-26
+
+### Fixed
+- **The turnout Part list offered exactly one thing. It now offers the real parts, by manufacturer.** The list was filtered down to parts carrying an imported *outline* drawing — and only one internal test record has one — so every measured part we hold was hidden, and the single entry on offer wasn't even one of them. Will: *"I gave you more than 1 turnout with measurements … but there is still only one that is in the list."*
+
+  That filter made sense when an outline was all a part contributed. It isn't any more: a part also supplies its **length** — where the moulding stops and your own flex track begins. So the list now offers every part whose measurements change what's drawn, grouped under its **manufacturer**, with part numbers shown: Atlas Code 55 **#5 (2050/2051)**, **#7 (2052/2053)**, **#10 (2054/2055)**, the **wye (2056)** and the **curved turnout (2058/2059)**.
+
+  It also reads the **live** library, so a part added at Admin → Track parts now appears here. Before, the picker was built once from the compiled-in list and never saw anything an admin added.
+
+### Changed
+- **The frog number now follows from the part.** Name the switch you're laying and the **Turnout #** is read from it, rather than being a second control you could set to disagree with the part. If you don't know the part, leave it unspecified and set the frog number as before — that path is unchanged, and the turnout is drawn from the number alone.
+
+- **A named part answers for itself.** Its own measured length now drives how long the turnout is drawn and where the rail joints fall, instead of us looking up whichever part in the library happens to share its frog number. Those are the same thing today, and won't be once two parts share a number.
+
+  The panel also tells you which of the three you've got: drawn from a real outline, drawn at the part's measured length, or — for a part we hold no measurements for yet — drawn from the frog number, and where to add them.
+
 ## v0.23.1 — 2026-07-26
 
 ### Fixed
