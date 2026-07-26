@@ -508,7 +508,15 @@ export function BenchworkEditor({
     | null
   >(null);
   /** An in-progress pan: pointer origin + the view at grab time. */
-  const panRef = useRef<{ from: Pt; view: ViewBox } | null>(null);
+  /** An in-progress pan. `tentative` marks a press on empty canvas under the
+   * Select tool, which only becomes a pan once the pointer moves — a click that
+   * doesn't move still means "select nothing" (#188). */
+  const panRef = useRef<{
+    from: Pt;
+    view: ViewBox;
+    tentative?: boolean;
+    moved?: boolean;
+  } | null>(null);
   /** Draw-to-create in progress: the throat turnout it diverges from + live end. */
   const placeRef = useRef<{ start: Pt; end: Pt; turnoutId: string } | null>(null);
   const [placePreview, setPlacePreview] = useState<{ start: Pt; end: Pt } | null>(null);
@@ -1454,20 +1462,54 @@ export function BenchworkEditor({
   const zoomButtons = (factor: number) =>
     zoomAbout({ x: vbBox.minX + vbBox.w / 2, y: vbBox.minY + vbBox.h / 2 }, factor);
 
-  // Wheel-to-zoom toward the pointer. React's onWheel is passive (can't
-  // preventDefault the browser's own zoom/scroll), so bind a native listener.
-  // Rebinds when `bounds` changes so the fallback view stays current.
+  /**
+   * Drag the CONTENT by a screen-pixel delta — same sense as grabbing it: +x
+   * moves it right, +y moves it DOWN the screen.
+   *
+   * Signs are worked from the drag-pan above, which is the known-good one:
+   * there it's `minX -= dxWorld`, `minY -= dyWorld`. A screen delta is
+   * `dxWorld = dxPx/k` but `dyWorld = -dyPx/k` — screen y runs down, world y
+   * runs up — so the y term comes out ADDED.
+   */
+  const panBy = (dxPx: number, dyPx: number) =>
+    setView((prev) => {
+      const b = prev ?? bounds;
+      // The view is in inches; the deltas are pixels, so divide by the scale.
+      const k = px.w > 0 && px.h > 0 ? Math.min(px.w / b.w, px.h / b.h) : 1;
+      return { ...b, minX: b.minX - dxPx / k, minY: b.minY + dyPx / k };
+    });
+
+  /**
+   * The wheel PANS; ctrl/⌘ + wheel zooms toward the pointer.
+   *
+   * It used to zoom unconditionally, which is a large part of why the canvas
+   * read as "you can only zoom" (#188): a trackpad's two-finger scroll — the
+   * gesture everyone reaches for first — zoomed instead of panning, so there was
+   * no way to move around without knowing that Space-drag existed. This is the
+   * convention every drawing tool uses, and it comes with pinch-to-zoom for
+   * free: browsers deliver a trackpad pinch as ctrl+wheel.
+   *
+   * React's onWheel is passive (can't preventDefault the browser's own
+   * zoom/scroll), so bind a native listener. Rebinds when `bounds` changes so
+   * the fallback view stays current.
+   */
   useEffect(() => {
     const el = svgRef.current;
     if (!el) return;
     const h = (e: WheelEvent) => {
       e.preventDefault();
-      zoomAbout(toLocal(e), e.deltaY > 0 ? 1.12 : 1 / 1.12);
+      if (e.ctrlKey || e.metaKey) {
+        zoomAbout(toLocal(e), e.deltaY > 0 ? 1.12 : 1 / 1.12);
+        return;
+      }
+      // DOM_DELTA_LINE (a notched mouse wheel) reports lines, not pixels.
+      const k = e.deltaMode === 1 ? 16 : 1;
+      panBy(-e.deltaX * k, -e.deltaY * k);
     };
     el.addEventListener("wheel", h, { passive: false });
     return () => el.removeEventListener("wheel", h);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [bounds]);
+  }, [bounds, px]);
 
   const commit = (next: BenchworkPoint[]) =>
     onChange(
@@ -1965,8 +2007,16 @@ export function BenchworkEditor({
       else onSelect?.(null);
       return;
     }
-    // Only the Benchwork tool draws. Under Select, background means "nothing" —
-    // which is what makes deselecting possible at all.
+    // Under SELECT, dragging empty canvas PANS — nothing is being selected out
+    // there, so the drag was doing nothing, and it's the gesture people reach
+    // for first (#188). A press that never moves is still a click, and a
+    // background click still means "select nothing"; `onUp` decides which.
+    if (tool === "select") {
+      svgRef.current?.setPointerCapture?.(e.pointerId);
+      panRef.current = { from: toLocal(e), view: { ...vbBox }, tentative: true, moved: false };
+      return;
+    }
+    // Every other non-drawing tool: background means "nothing selected".
     if (tool !== "benchwork") {
       onSelect?.(null);
       return;
@@ -2189,10 +2239,19 @@ export function BenchworkEditor({
     const pan = panRef.current;
     if (pan) {
       const now = toLocal(e);
+      const dx = now.x - pan.from.x;
+      const dy = now.y - pan.from.y;
+      // A press on empty canvas under Select is only a MAYBE-pan: it becomes one
+      // once the pointer actually travels, and stays a plain click otherwise, so
+      // clicking background still means "select nothing" (#188).
+      if (pan.tentative && !pan.moved) {
+        if (Math.hypot(dx, dy) * scale < 3) return;
+        pan.moved = true;
+      }
       setView({
         ...pan.view,
-        minX: pan.view.minX - (now.x - pan.from.x),
-        minY: pan.view.minY - (now.y - pan.from.y),
+        minX: pan.view.minX - dx,
+        minY: pan.view.minY - dy,
       });
       return;
     }
@@ -2415,8 +2474,13 @@ export function BenchworkEditor({
       return;
     }
     if (panRef.current) {
+      const { tentative, moved } = panRef.current;
       svgRef.current?.releasePointerCapture?.(e.pointerId);
       panRef.current = null;
+      // A press on empty canvas that never travelled: that's a click, and under
+      // Select a background click means "select nothing" (#188).
+      if (tentative && !moved) onSelect?.(null);
+      return;
     }
     // Releasing a track-end drag: the editor merges the track with any same-lane
     // track it now abuts (the snap made the ends meet exactly) into ONE track,
@@ -2795,14 +2859,23 @@ const ENDPLATE_TAB = 5; // ballast-shoulder band width, inches
         ) : (
           <span className="text-gray-500">
             Click anything to select it · drag a turnout ● or a siding&rsquo;s end ○
-            along the main to position it.
+            along the main to position it · <span className="whitespace-nowrap">drag the background to pan</span>.
           </span>
         )}
         <div className="ml-auto flex items-center gap-1">
-          <button type="button" onClick={() => zoomButtons(1 / 1.25)} className={iconBtn} title="Zoom in">
+          {/* Pan was reachable only by Space-drag or middle-drag, with nothing on
+              screen saying so — which is why it read as "you can only zoom"
+              (#188). The controls now say how to move around. */}
+          <span
+            className="hidden text-gray-400 sm:inline"
+            title="Drag the background, scroll or two-finger swipe to pan · ctrl/⌘ + scroll (or pinch) to zoom · Space-drag and middle-drag pan from any tool"
+          >
+            drag / scroll to pan
+          </span>
+          <button type="button" onClick={() => zoomButtons(1 / 1.25)} className={iconBtn} title="Zoom in (ctrl/⌘ + scroll, or pinch)">
             +
           </button>
-          <button type="button" onClick={() => zoomButtons(1.25)} className={iconBtn} title="Zoom out">
+          <button type="button" onClick={() => zoomButtons(1.25)} className={iconBtn} title="Zoom out (ctrl/⌘ + scroll, or pinch)">
             −
           </button>
           <button
@@ -2844,7 +2917,9 @@ const ENDPLATE_TAB = 5; // ballast-shoulder band width, inches
             ? "cursor-grab"
             : tool === "benchwork" || tool === "industry" || tool === "track" || tool === "turnout" || tool === "signal"
               ? "cursor-crosshair"
-              : ""
+              : // Select: the background is draggable, so say so (#188). Objects
+                // on it set their own cursor, which wins.
+                "cursor-grab"
         }`}
         onPointerDown={onBgDown}
         onPointerMove={onMove}

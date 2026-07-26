@@ -5,6 +5,18 @@ Headings are `version — date` (YYYY-MM-DD).
 
 ---
 
+## v0.25.0 — 2026-07-26
+
+### Fixed
+- **You can pan the drawing now — by dragging it.** Panning was already there, but only if you held **Space** and dragged, or dragged with the middle mouse button, and nothing on screen said so. So it read as zoom-only. Will: *"You can[not] pan in the drawing tool, only zoom."*
+
+  Three ways in now, and you don't have to be told about any of them:
+  - **Drag the background.** With the Select tool, dragging empty canvas moves the board. Clicking it still clears your selection — a drag pans, a click selects nothing.
+  - **Scroll, or two-finger swipe**, to pan in any direction.
+  - **Ctrl/⌘ + scroll — or pinch — to zoom.** The wheel used to zoom on its own, which is why a trackpad's two-finger swipe zoomed instead of panning.
+
+  Space-drag and middle-drag still work from any tool, and the **+ / −** buttons and **Fit** are unchanged. The toolbar now says how to move around.
+
 ## v0.24.0 — 2026-07-26
 
 ### Fixed
