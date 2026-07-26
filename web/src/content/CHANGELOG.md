@@ -5,6 +5,14 @@ Headings are `version — date` (YYYY-MM-DD).
 
 ---
 
+## v0.29.1 — 2026-07-26
+
+### Fixed
+- **Three things were being left behind when you moved or resized a board.** Reorder your boards, or change one's length, and everything placed on them travels along — that was already true for track, turnouts, crossings, signals and industries. But an industry's extra **house-track spots**, a placed **3rd+ endplate**, and your **rail joints** were staying at the inch mark they were on, which after a move is a different board. They come along now.
+
+### Added
+- **Removing a board now tells you what's standing on it.** Every other change to your boards can carry things with it, but a board that's gone has nowhere to send them — so they end up on whichever board takes over those inches. Removing a board you've built on now says how many things are on it and gives you the chance to move them first.
+
 ## v0.29.0 — 2026-07-26
 
 ### Changed

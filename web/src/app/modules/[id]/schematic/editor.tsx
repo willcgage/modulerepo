@@ -779,6 +779,22 @@ export function SchematicEditor({
       for (const ind of s.industries) {
         ind.fromPos = at(ind.fromPos);
         ind.toPos = at(ind.toPos);
+        // A house-track SPOT is a position like any other and was being left
+        // behind — the industry moved with its board and its extra spots didn't
+        // (#195). Each spot rides its own track (#186), but they're all measured
+        // in the same inches from endplate A.
+        for (const sp of ind.spots ?? []) {
+          sp.fromPos = at(sp.fromPos);
+          sp.toPos = at(sp.toPos);
+        }
+      }
+      // A 3rd+ endplate is PLACED at a position along the module (#170), so it
+      // belongs to a board and has to travel with it.
+      for (const b of s.branches) b.pos = at(b.pos);
+      // Rail joints are positions along a run (#193) — an owner's deliberate cut
+      // would otherwise end up on a different board.
+      for (const f of Object.values(s.flexByTrack ?? {})) {
+        if (f.cuts) f.cuts = f.cuts.map(at).sort((x, y) => x - y);
       }
       if (total && total > 0) s.lengthInches = total;
       // Joints are derived from the sections now; a stale authored copy would
@@ -787,6 +803,41 @@ export function SchematicEditor({
     });
     if (total && total > 0) setDims((d) => ({ ...d, length_total_inches: String(total) }));
   };
+
+  /**
+   * How many placed objects stand on a given board (#195).
+   *
+   * Every other section edit is safe — `setSections` reads each position
+   * against the old spans and writes it against the new, so it travels with its
+   * board. REMOVING a board is the exception: there's no new span to write to,
+   * so whatever stood on it keeps a stale absolute and lands on whichever board
+   * takes over those inches. This is what lets the remove button say so.
+   */
+  const countOnSection = useCallback(
+    (sectionId: string) => {
+      const sp = sectionSpansOrWhole({ sections: state.sections }, state.lengthInches).find(
+        (x) => x.id === sectionId,
+      );
+      if (!sp) return 0;
+      const on = (p: number) => p >= sp.fromPos && p < sp.toPos;
+      // A span counts if ANY of it is on this board — a siding that crosses the
+      // joint still loses its footing when the board goes.
+      const spans = (a: number, b: number) =>
+        Math.max(Math.min(a, b), sp.fromPos) < Math.min(Math.max(a, b), sp.toPos);
+      let n = 0;
+      for (const t of state.extraTracks) if (spans(t.fromPos, t.toPos)) n++;
+      for (const t of state.turnouts) if (on(t.pos)) n++;
+      for (const c of state.crossings) if (on(c.pos)) n++;
+      for (const cp of state.controlPoints) for (const sig of cp.signals) if (on(sig.pos)) n++;
+      for (const ind of state.industries) {
+        if (spans(ind.fromPos, ind.toPos)) n++;
+        for (const s of ind.spots ?? []) if (spans(s.fromPos, s.toPos)) n++;
+      }
+      for (const b of state.branches) if (on(b.pos)) n++;
+      return n;
+    },
+    [state],
+  );
 
   /** The section the bench-work tool is editing — the chosen one, else the
    * first. Null when this module doesn't use sections, in which case the
@@ -1902,6 +1953,7 @@ export function SchematicEditor({
             setEndplateWidth={setEndplateWidth}
             setEndplateTrackOffset={setEndplateTrackOffset}
             setSections={setSections}
+            countOnSection={countOnSection}
             onNewDivergeTrack={newDivergeTrack}
             onDivergeToEndplate={divergeToEndplate}
             activeSectionId={activeSectionId ?? state.sections[0]?.id ?? null}
@@ -2240,6 +2292,7 @@ function SectionList({
   sections,
   geometries,
   onChange,
+  onBoard,
   activeId,
   onShape,
   meets,
@@ -2254,6 +2307,9 @@ function SectionList({
     requires_offset_inches: boolean;
   }[];
   onChange: (next: SchematicSection[]) => void;
+  /** How many placed objects stand on this board — so removing it can say so
+   * rather than silently displacing them (#195). */
+  onBoard?: (sectionId: string) => number;
   activeId: string | null;
   onShape: (id: string) => void;
   meets: { a: string; b: string; lengthInches: number }[];
@@ -2331,9 +2387,29 @@ function SectionList({
               >
                 &darr;
               </button>
+              {/* ⚠️ Removing a board is the one section edit the remap CAN'T
+                  rescue: everything else moves with its board, but a board
+                  that's gone has nowhere to send what stood on it, so those
+                  positions keep a stale absolute and quietly land on whatever
+                  board now occupies those inches (#195). Say what's on it. */}
               <button
                 type="button"
-                onClick={() => onChange(sections.filter((_, j) => j !== i))}
+                onClick={() => {
+                  const n = onBoard?.(sec.id) ?? 0;
+                  if (
+                    n > 0 &&
+                    !window.confirm(
+                      `Remove this board?\n\n${n} thing${n === 1 ? "" : "s"} — track, turnouts, ` +
+                        `signals or industries — ${n === 1 ? "is" : "are"} placed on it. ` +
+                        `${n === 1 ? "It" : "They"} won't be removed, but with the board gone ` +
+                        `${n === 1 ? "it has" : "they have"} nowhere to go, so ${n === 1 ? "it" : "they"} ` +
+                        `will end up on whichever board takes over those inches.\n\n` +
+                        `Move ${n === 1 ? "it" : "them"} off this board first if that's not what you want.`,
+                    )
+                  )
+                    return;
+                  onChange(sections.filter((_, j) => j !== i));
+                }}
                 title="Remove this section"
                 className="rounded px-1 text-xs text-red-600 hover:bg-red-50"
               >
@@ -2699,6 +2775,7 @@ function Inspector({
   setEndplateWidth,
   setEndplateTrackOffset,
   setSections,
+  countOnSection,
   onNewDivergeTrack,
   onDivergeToEndplate,
   activeSectionId,
@@ -2744,6 +2821,8 @@ function Inspector({
   setEndplateWidth: (id: string, raw: string) => void;
   setEndplateTrackOffset: (id: string, raw: string) => void;
   setSections: (next: SchematicSection[]) => void;
+  /** How many placed objects stand on a board — the remove guard (#195). */
+  countOnSection: (sectionId: string) => number;
   onNewDivergeTrack: (turnoutId: string, role: "spur" | "siding") => void;
   onDivergeToEndplate: (turnoutId: string, endplateId: string) => void;
   activeSectionId: string | null;
@@ -2889,6 +2968,7 @@ function Inspector({
               sections={state.sections}
               geometries={geometries}
               onChange={setSections}
+              onBoard={countOnSection}
               activeId={activeSectionId}
               onShape={onShapeSection}
               meets={sectionMeets}
