@@ -464,6 +464,32 @@ export function SchematicEditor({
       if (!t) return null;
       return { from: t.fromPos ?? 0, to: t.toPos ?? state.lengthInches };
     };
+    /**
+     * How much track a run actually IS. A DRAWN run is as long as the line the
+     * owner drew — the same number its Objects row reports (#192) — not the
+     * stretch of module its endpoints claim. FMN-0043's Main 2 is drawn 15.2″
+     * but its record says it reaches a turnout at 17.4″, and cutting to the
+     * record put "15.2″ · drawn" next to a 17.4″ piece: two lengths for one
+     * track. The drawn line is the physical truth, so it wins.
+     *
+     * EXCEPT a branch route, which is drawn across the board rather than along
+     * it — its path length is real, but nothing yet maps a position on it back
+     * to the module, so its joints would land in the wrong place. Left alone,
+     * and its panel says so.
+     */
+    const runLengthOf = (id: string, ext: { from: number; to: number }) => {
+      const posExtent = Math.abs(ext.to - ext.from);
+      const et = state.extraTracks.find((x) => x.id === id);
+      if (et?.role === "branch") return posExtent;
+      const drawn =
+        id === MAIN_TRACK_ID
+          ? state.mainPath
+          : id === MAIN2_TRACK_ID
+            ? state.main2Path
+            : et?.path;
+      const len = drawn && drawn.length >= 2 ? pathLengthInches(drawn) : 0;
+      return len > 0 ? len : posExtent;
+    };
     const out: Record<
       string,
       {
@@ -474,7 +500,13 @@ export function SchematicEditor({
       }
     > = {};
     for (const t of tracks) {
-      const ext = extentOf(t.id)!;
+      const claimed = extentOf(t.id)!;
+      // Measured from the run's start, so a drawn run that stops short of what
+      // its record claims is cut to what was actually drawn.
+      const ext = {
+        from: claimed.from,
+        to: claimed.from + runLengthOf(t.id, claimed) * (claimed.to < claimed.from ? -1 : 1),
+      };
       // What this run gives up to parts. A turnout's moulding is only known for
       // a MEASURED part — `turnoutOccupiedSpan` returns null otherwise, and a
       // guessed body would put a rail joint on track nobody has checked (#189).
@@ -522,7 +554,17 @@ export function SchematicEditor({
       };
     }
     return out;
-  }, [doc, state.turnouts, state.crossings, state.flexByTrack, state.lengthInches, partLibrary]);
+  }, [
+    doc,
+    state.turnouts,
+    state.crossings,
+    state.flexByTrack,
+    state.lengthInches,
+    state.extraTracks,
+    state.mainPath,
+    state.main2Path,
+    partLibrary,
+  ]);
 
   /** Just the joint positions, for the canvas to draw a tick at each. */
   const flexCutsByTrack = useMemo(() => {
