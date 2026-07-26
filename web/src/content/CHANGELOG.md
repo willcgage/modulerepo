@@ -22,6 +22,8 @@ Headings are `version — date` (YYYY-MM-DD).
 
   Drag the **track**, never the turnout: a turnout is positioned by its frog, so it stays where you put it and the track comes to meet it. Nothing you authored has been moved or deleted — positions, lengths and capacities are all exactly as you left them, and the dispatcher view is unaffected, so operations keep working while you catch up.
 
+  **This includes routes to a third endplate.** A junction route used to be held against its turnout automatically (see v0.15.50 below); it is now ordinary track like everything else, so it starts where you put it and snaps to the switch the same way. If you move a turnout, its route stays put rather than being dragged along — connect them up again by dragging the route's end back onto the rail.
+
 ## v0.16.0 — 2026-07-25
 
 ### Added

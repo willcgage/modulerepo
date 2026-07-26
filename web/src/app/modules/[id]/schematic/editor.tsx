@@ -36,7 +36,7 @@ import {
   endplateLead,
   type SchematicSection,
 } from "@/lib/module-schematic";
-import { snapPoseToOutline, sampleAt, pinBranchStart } from "@/lib/physical-track";
+import { snapPoseToOutline, sampleAt } from "@/lib/physical-track";
 import { partLibraryWith } from "./part-library";
 import type { StoredTrackPart } from "@willcgage/module-schematic";
 import {
@@ -838,40 +838,21 @@ export function SchematicEditor({
     setSelection({ kind: "track", id });
   };
 
-  /** Keep every endplate-bound branch route starting at the turnout that feeds
-   * it. A route can only leave the main at a switch, so moving the switch has to
-   * carry the route with it — nothing did, and the stored path drifted out of
-   * step while the canvas re-pinned it on render and hid the fact. FMN-0068 ended
-   * up with its switch at 27.8″ and its route starting 11.4″ away (#181).
+  /**
+   * Move a turnout — from the canvas drag OR the inspector's position field.
+   * Both go through one handler so the two can't drift apart.
    *
-   * Mutates the draft in place; call after ANY change to a turnout's pos. Only
-   * the far end is anchored to the endplate face, so the route stretches rather
-   * than sliding — which is what a real branch does when its switch moves.
-   *
-   * A return loop is `role:"branch"` too, but is bound to no endplate, so its
-   * closed ring is deliberately left alone. */
-  const pinBranchRoutes = (s: EditorState) => {
-    const center = footprint.centerline;
-    for (const sw of s.turnouts) {
-      if (!sw.divergeTrack) continue;
-      const t = s.extraTracks.find((x) => x.id === sw.divergeTrack && x.role === "branch");
-      if (!t || !s.branches.some((b) => b.trackId === t.id)) continue;
-      const next = pinBranchStart(t.path, center, sw.pos);
-      if (next) t.path = next;
-      t.fromPos = sw.pos;
-      t.toPos = sw.pos;
-    }
-  };
-
-  /** Move a turnout — from the canvas drag OR the inspector's position field.
-   * Both go through here so a branch route can't follow the switch in one and
-   * be left behind in the other (#181). */
+   * ⚠️ This used to drag every endplate-bound branch route along with the switch
+   * (#181). It doesn't any more (#189): a branch is ordinary track, so it stays
+   * where its owner put it and SNAPS to the turnout's diverging rail when they
+   * bring it near. Moving a turnout away from its route now leaves a visible
+   * gap, marked by a ring — which is the truth, where the old auto-pin was the
+   * renderer asserting a connection the layout didn't have.
+   */
   const moveTurnout = (id: string, pos: number) =>
     patch((s) => {
       const t = s.turnouts.find((x) => x.id === id);
-      if (!t) return;
-      t.pos = pos;
-      pinBranchRoutes(s);
+      if (t) t.pos = pos;
     });
 
   /** Draw a branch route from a turnout on the main out to a placed endplate

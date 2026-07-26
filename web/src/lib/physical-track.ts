@@ -71,32 +71,14 @@ export function laneOffset(lane: number): number {
   return (lane ?? 0) * LANE_SPACING_INCHES;
 }
 
-/**
- * A branch route's path with its first point pinned to the turnout that feeds
- * it, or null when it already is (so callers can skip a no-op write).
- *
- * A route can only leave the main at a switch, so `path[0]` is NOT authored
- * data — `divergeToEndplate` generates it from the turnout, and the builder
- * canvas re-pins it on every render (`frogPinnedPath`). Nothing kept the STORED
- * point in step, so moving a turnout left the route behind: FMN-0068 ended up
- * with its switch at 27.8″ and its route starting 11.4″ away, which the builder
- * hid and every raw-path reader drew detached (#181).
- *
- * ⚠️ Callers must only pass a turnout pos for an ENDPLATE-BOUND branch. A return
- * loop is `role:"branch"` too, and its ring is closed by construction — moving
- * its first point alone would tear it open.
- */
-export function pinBranchStart(
-  path: readonly { x: number; y: number; bulge?: number }[] | undefined | null,
-  center: Pt[],
-  turnoutPos: number | null | undefined,
-): { x: number; y: number; bulge?: number }[] | null {
-  if (!path || path.length < 2 || turnoutPos == null || center.length < 2) return null;
-  const p = sampleAt(center, turnoutPos);
-  if (Math.abs(path[0].x - p.x) < 1e-3 && Math.abs(path[0].y - p.y) < 1e-3) return null;
-  const r = (v: number) => Math.round(v * 1000) / 1000;
-  return [{ ...path[0], x: r(p.x), y: r(p.y) }, ...path.slice(1)];
-}
+// NB: `pinBranchStart` used to live here — it moved a branch route's first point
+// onto the turnout that fed it, both on read and whenever the turnout moved
+// (#181). It has been removed (#189). A branch is track like any other now: it
+// starts where its owner put it, it SNAPS to the turnout's diverging rail when
+// dragged near, and an unconnected rail says so with a ring. Pinning it made the
+// connection something the renderer asserted rather than something the layout
+// actually had — and it aimed at the turnout's point on the CENTRE LINE, which
+// isn't even where the rail ends now that turnouts are drawn their true length.
 
 /**
  * The inverse of sampleAt: project an arbitrary point onto the centre-line and
@@ -421,16 +403,9 @@ export function physicalSchematic(
   //     model that can't express a 90° exit. -------------------------------
   for (const t of doc.tracks ?? []) {
     if (t.role !== "branch" || !t.path || t.path.length < 2) continue;
-    // Pin the route to its switch. A stored path can be stale — the builder
-    // re-pins on render, so a drifted start stayed invisible there while this
-    // view drew the route detached from the turnout feeding it. Only for a
-    // route bound to an endplate: a return loop is role:"branch" too, and its
-    // ring must stay closed (#181).
-    const boundToEndplate = (doc.endplates ?? []).some((e) => e.trackId === t.id);
-    const sw = boundToEndplate
-      ? (doc.turnouts ?? []).find((x) => x.divergeTrack === t.id)
-      : undefined;
-    const pts = samplePath(pinBranchStart(t.path, center, sw?.pos) ?? t.path);
+    // Drawn exactly as authored — no pinning to the turnout (#189). If it starts
+    // clear of the switch, that gap is real, and the builder marks it.
+    const pts = samplePath(t.path);
     if (pts.length >= 2) tracks.push({ id: t.id, pts, role: "branch" });
   }
 
