@@ -279,6 +279,10 @@ export function SchematicEditor({
         // A balloon/return loop turns back on itself — one endplate (A), no
         // spurious far B at the throat where the loop closes (#loop).
         loop: state.loop,
+        // How deep the board is, so a BRANCH endplate lands on the benchwork
+        // edge rather than on the centre line — a side-facing plate buried
+        // mid-board is a place no train can leave from.
+        endplateWidths: state.endplateWidths,
         poseOverrides: state.poseOverrides,
       }),
     [state, geometry],
@@ -1693,7 +1697,6 @@ export function SchematicEditor({
     if (state.outline.length > 0 || state.sections.length > 0 || state.lengthInches <= 0) return;
     seeded.current = true;
     const L = state.lengthInches;
-    const d = 24;
     // Defer out of the effect body: this is a persisted edit (autosave picks it
     // up), not render-synchronous state React should batch.
     queueMicrotask(() =>
@@ -1709,12 +1712,13 @@ export function SchematicEditor({
             ...(geometry.offset ? { geometryOffsetInches: geometry.offset } : {}),
           },
         ];
-        s.outline = [
-          { x: 0, y: -d / 2 },
-          { x: L, y: -d / 2 },
-          { x: L, y: d / 2 },
-          { x: 0, y: d / 2 },
-        ];
+        // ⚠️ NO module-level outline. It used to seed a rectangle here, which
+        // went STALE the moment a second board was added: the module grew to
+        // 72″ while its authored board polygon stayed at the 48″ it was created
+        // with. On a sections-first module the BOARDS are the shape, so a
+        // module outline is a second source of it that can only disagree.
+        // Without one the derived band draws, which is a real board on screen.
+        // "Shape this board" still gives any board its own polygon.
       }),
     );
     // eslint-disable-next-line react-hooks/exhaustive-deps

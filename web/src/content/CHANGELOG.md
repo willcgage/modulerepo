@@ -5,6 +5,15 @@ Headings are `version — date` (YYYY-MM-DD).
 
 ---
 
+## v0.30.1 — 2026-07-26
+
+### Fixed
+- **A junction endplate now sits on the edge of the board, where it belongs.** Place a 3rd endplate on the side of a module and it was being put on the module's **centre line** — buried in the middle of the board, so any track drawn to it stopped in the middle of nowhere. It's an endplate: it's where a train leaves the module, so it belongs on the benchwork border.
+
+  It now lands on the board's own edge, and follows the board's depth — so on a module whose two ends differ in width, a junction partway along sits at the right depth for that point. If you'd already dragged one into place by hand, your position is still used.
+
+- **A new module no longer gets a board outline that goes stale.** Creating a module drew a rectangle at whatever length you first entered, and that rectangle didn't grow when you added a second board — so the module could be 72″ while its drawn board stayed 48″. The boards themselves are the shape now. **Shape this board** still gives any board its own outline when you want to draw one.
+
 ## v0.30.0 — 2026-07-26
 
 ### Added
