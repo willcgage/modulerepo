@@ -5,6 +5,11 @@ Headings are `version — date` (YYYY-MM-DD).
 
 ---
 
+## v0.20.0 — 2026-07-26
+
+### Fixed
+- **A module with one endplate is no longer mistaken for a loop.** Ticking *Only one endplate* — new yesterday — had the side effect of making the module read as a **balloon loop**: the dispatcher view drew a turnback bulb, endplate A was relabelled "Entry", and positions past the far end were treated as being inside a loop that doesn't exist. The cause was an old shortcut that assumed one endplate could only mean a turnback, which stopped being true the moment *end of the line* and *pocket* modules could be authored. A loop is now only ever a loop because you ticked **Loop module**. Nothing you authored is affected, and genuine loops are unchanged.
+
 ## v0.19.2 — 2026-07-26
 
 ### Added
