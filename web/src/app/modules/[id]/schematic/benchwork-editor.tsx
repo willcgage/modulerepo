@@ -10,6 +10,7 @@ import {
   pastFrogInchesForSize,
   partOutlineAtFrog,
   partExtentForSize,
+  turnoutFacing,
   RAIL_GAUGE_INCHES,
   TIE_HALF_LENGTH_INCHES,
   MAIN_TRACK_ID,
@@ -343,6 +344,7 @@ export function BenchworkEditor({
   onTurnoutDrop,
   turnoutSize = 6,
   onTurnoutSizeChange,
+  flexCutsByTrack,
   selection = null,
   onSelect,
   tool = "select",
@@ -471,6 +473,11 @@ export function BenchworkEditor({
   /** The frog number the Turnout tool drops (governs the diverging angle). */
   turnoutSize?: number;
   onTurnoutSizeChange?: (size: number) => void;
+  /** Where the flex track is jointed on each run — ABSOLUTE inches along the
+   * module, by track id (#193). The editor works these out (it owns the pieces
+   * and the parts they're cut from); the canvas only has to place them, which
+   * it does exactly as it places a turnout on its host. */
+  flexCutsByTrack?: Record<string, number[]>;
   /** Selection is owned by the editor, which renders the inspector for it. */
   selection?: CanvasSelection | null;
   onSelect?: (s: CanvasSelection | null) => void;
@@ -685,8 +692,17 @@ export function BenchworkEditor({
     // walks the opposite direction from the throat. The geometric guess above
     // reads where the diverging TRACK went, which can't be right for a siding
     // pinned at a module end — the flip is the owner's override.
-    const toward =
-      (Math.sign((far.x - m.x) * tx + (far.y - m.y) * ty) || 1) * (t.flipped ? -1 : 1);
+    //
+    // The rule itself lives in the package: the flex solver needs the same
+    // answer to know which side of `pos` the moulding extends, and a turnout's
+    // body isn't symmetric about its points (#193). What's measured here is the
+    // 2-D projection of the real far end; the editor measures the same thing
+    // from the authored extent. One rule, two precisions.
+    const toward = turnoutFacing({
+      pos: 0,
+      divergeFarPos: (far.x - m.x) * tx + (far.y - m.y) * ty,
+      flipped: t.flipped,
+    });
     // HAND decides the side, not the lane the diverging track happens to sit
     // on. A right-hand turnout throws right whichever lane its siding was
     // assigned — deriving the side from the track's position made hand a no-op
@@ -1714,8 +1730,22 @@ export function BenchworkEditor({
         if (!loose.has(`${l.turnoutId}|${trackId}`)) out.push(l.divergeJoint);
       }
     }
+    // …and where one length of FLEX meets the next (#193). Same tick: a joint is
+    // a joint, whether the piece on the other side is a turnout or more flex.
+    // Placed the way a turnout on a host is placed, so a jointed spur, a curved
+    // main and a drawn path all get theirs in the right spot.
+    for (const [trackId, cuts] of Object.entries(flexCutsByTrack ?? {})) {
+      const host = hostPointsOf(trackId);
+      if (host.length < 2) continue;
+      for (const abs of cuts) {
+        const p = sampleAt(host, toHostRel(trackId, abs));
+        if (Number.isFinite(p.x) && Number.isFinite(p.y))
+          out.push({ x: p.x, y: p.y, nx: p.nx, ny: p.ny });
+      }
+    }
     return out;
-  }, [legsByTrack, danglingRailEnds]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [legsByTrack, danglingRailEnds, flexCutsByTrack, centerline, tracks]);
 
   /** Where the spur body starts — the turnout's JOIN (the ramp's end, so the
    * spur is continuous with the switch), falling back to the on-main turnout

@@ -17,6 +17,18 @@ import {
   endplateTrackOffsetInches,
   pathLengthInches,
   checkEndplateWidth,
+  flexPieces,
+  flexUsage,
+  flexParts,
+  flexPartFor,
+  maxFlexPieceInches,
+  resizeFlexPiece,
+  turnoutFacing,
+  turnoutOccupiedSpan,
+  partExtentForSize,
+  DEFAULT_FLEX_PART_ID,
+  type FlexPiece,
+  type TrackPart,
   nextId,
   inchesToScaleFeet,
   carCapacity,
@@ -91,7 +103,10 @@ const KIND_OPTIONS: { value: TurnoutKind; label: string }[] = [
 type Selection =
   | CanvasSelection
   | { kind: "crossing"; id: string }
-  | { kind: "cp"; id: string };
+  | { kind: "cp"; id: string }
+  // A length of flex track (#193) — identified by its run and its place along
+  // it, because that IS what a piece is: the stretch between two joints.
+  | { kind: "flex"; id: string; index: number };
 
 const isCanvasSel = (s: Selection | null): s is CanvasSelection =>
   s !== null &&
@@ -429,6 +444,99 @@ export function SchematicEditor({
     }
     return rows;
   }, [doc, isDouble, mainDrawn, state.mainPath, state.main2Path, state.lengthInches]);
+  /**
+   * Every run cut into lengths of flex track (#193).
+   *
+   * Everything that isn't a turnout or a crossing is flex, and flex comes in
+   * pieces with a maximum — 30″ Atlas, 36″ Micro Engineering. So a 96″ main is
+   * four lengths with three rail joints in it, and this is what says where they
+   * fall and how much to buy.
+   *
+   * Derived until the owner touches one, which is what lets every module that
+   * already exists arrive already cut up without anyone re-authoring a thing.
+   */
+  const flexByTrack = useMemo(() => {
+    const tracks = doc.tracks ?? [];
+    // Where each track ends up, for the facing rule — the end of a diverging
+    // track furthest from its turnout is the way that turnout points.
+    const extentOf = (id: string) => {
+      const t = tracks.find((x) => x.id === id);
+      if (!t) return null;
+      return { from: t.fromPos ?? 0, to: t.toPos ?? state.lengthInches };
+    };
+    const out: Record<
+      string,
+      {
+        pieces: ReturnType<typeof flexPieces>;
+        partId: string;
+        authored: boolean;
+        runInches: number;
+      }
+    > = {};
+    for (const t of tracks) {
+      const ext = extentOf(t.id)!;
+      // What this run gives up to parts. A turnout's moulding is only known for
+      // a MEASURED part — `turnoutOccupiedSpan` returns null otherwise, and a
+      // guessed body would put a rail joint on track nobody has checked (#189).
+      const occupied: { fromPos: number; toPos: number }[] = [];
+      for (const sw of state.turnouts) {
+        if (sw.onTrack !== t.id) continue;
+        const size = sw.size ?? 6;
+        const span = turnoutOccupiedSpan({
+          pos: sw.pos,
+          extent: sw.curved || sw.kind === "wye" ? null : partExtentForSize(size, partLibrary),
+          facing: turnoutFacing({
+            pos: sw.pos,
+            divergeFarPos: (() => {
+              const d = sw.divergeTrack ? extentOf(sw.divergeTrack) : null;
+              if (!d) return null;
+              return Math.abs(d.to - sw.pos) >= Math.abs(d.from - sw.pos) ? d.to : d.from;
+            })(),
+            flipped: sw.flipped,
+          }),
+        });
+        if (span) occupied.push(span);
+      }
+      // A crossing breaks the run at a point whose extent nobody has measured —
+      // a zero-length span, so it joints the track without eating any of it.
+      for (const x of state.crossings)
+        if (x.trackA === t.id || x.trackB === t.id)
+          occupied.push({ fromPos: x.pos, toPos: x.pos });
+
+      const f = state.flexByTrack?.[t.id];
+      const partId = f?.partId ?? DEFAULT_FLEX_PART_ID;
+      out[t.id] = {
+        partId,
+        authored: f?.cuts != null,
+        // A branch route (#170) is authored purely by its drawn PATH and has no
+        // along-module extent, so there's nothing here to cut. Recorded rather
+        // than left to read as "this run needs no track".
+        runInches: Math.abs(ext.to - ext.from),
+        pieces: flexPieces({
+          fromPos: ext.from,
+          toPos: ext.to,
+          maxPieceInches: maxFlexPieceInches(partId, partLibrary),
+          occupied,
+          cuts: f?.cuts ?? null,
+        }),
+      };
+    }
+    return out;
+  }, [doc, state.turnouts, state.crossings, state.flexByTrack, state.lengthInches, partLibrary]);
+
+  /** Just the joint positions, for the canvas to draw a tick at each. */
+  const flexCutsByTrack = useMemo(() => {
+    const out: Record<string, number[]> = {};
+    for (const [id, f] of Object.entries(flexByTrack)) {
+      // Only the joints BETWEEN two pieces of flex — where a piece meets a
+      // turnout or a crossing the part already draws its own (#189), and where
+      // it meets the end of the run there's an endplate, not a joint.
+      const cuts = f.pieces.filter((p) => p.toEnd === "piece").map((p) => p.toPos);
+      if (cuts.length) out[id] = cuts;
+    }
+    return out;
+  }, [flexByTrack]);
+
   const canvasTurnouts = useMemo(
     () =>
       state.turnouts.map((t) => ({
@@ -1652,6 +1760,7 @@ export function SchematicEditor({
                 onDropTurnout={onDropTurnout}
                 onDropCrossover={onDropCrossover}
                 onDropSignal={onDropSignal}
+                flexCutsByTrack={flexCutsByTrack}
                 onTrackEndDrop={mergeAbutting}
                 onTurnoutDrop={onTurnoutDrop}
                 turnoutSize={turnoutSize}
@@ -1690,6 +1799,8 @@ export function SchematicEditor({
             patch={patch}
             onTurnoutPos={moveTurnout}
             mains={mainRows}
+            flex={flexByTrack}
+            partLibrary={partLibrary}
             dims={dims}
             setDim={setDim}
             geometries={geometries}
@@ -1728,6 +1839,7 @@ export function SchematicEditor({
               endplate: addEndplate,
             }}
             mains={mainRows}
+            flex={flexByTrack}
             mainlineDouble={isDouble}
             mainlineLocked={lockedConfigs.a || lockedConfigs.b}
             endplates={poses.map((p) => ({ id: p.id, config: p.trackConfig }))}
@@ -1770,6 +1882,54 @@ const TOOL_GROUPS: RailTool[][] = [
 function sectionLengths(breaks: number[], lengthInches: number): number[] {
   const edges = [0, ...breaks, lengthInches];
   return edges.slice(1).map((e, i) => e - edges[i]);
+}
+
+/**
+ * A number field that COMMITS ON BLUR (or Enter), not per keystroke.
+ *
+ * The same lesson as the section length fields below: when the committed value
+ * is clamped against a neighbour, committing mid-typing shrinks the headroom
+ * under you — typing "18" applies 1 first, the neighbour absorbs 29, and by the
+ * time you type the 8 there's nothing left to give. Holding a draft until blur
+ * means what you type is what gets applied. Used by the flex piece length (#193).
+ */
+function CommitNumberField({
+  value,
+  onCommit,
+  inp,
+  title,
+  step = 0.5,
+}: {
+  value: number;
+  onCommit: (n: number) => void;
+  inp: string;
+  title?: string;
+  step?: number;
+}) {
+  const [draft, setDraft] = useState<string | null>(null);
+  const commit = () => {
+    if (draft === null) return;
+    const n = Number(draft);
+    setDraft(null);
+    if (Number.isFinite(n)) onCommit(n);
+  };
+  return (
+    <input
+      type="number"
+      step={step}
+      value={draft ?? value}
+      title={title}
+      onChange={(e) => setDraft(e.target.value)}
+      onBlur={commit}
+      onKeyDown={(e) => {
+        if (e.key === "Enter") {
+          e.preventDefault();
+          (e.target as HTMLInputElement).blur();
+        }
+      }}
+      className={`mt-0.5 ${inp}`}
+    />
+  );
 }
 
 /** Re-derive the joints after retyping ONE section's length (#96 phase 1).
@@ -2412,6 +2572,8 @@ function Inspector({
   patch,
   onTurnoutPos,
   mains,
+  flex,
+  partLibrary,
   dims,
   setDim,
   geometries,
@@ -2451,6 +2613,12 @@ function Inspector({
     toPos: number;
     sub: string;
   }[];
+  /** Each run cut into lengths of flex track, by track id (#193). */
+  flex: Record<
+    string,
+    { pieces: FlexPiece[]; partId: string; authored: boolean; runInches: number }
+  >;
+  partLibrary: TrackPart[];
   dims: ModuleDimensions;
   setDim: (p: Partial<ModuleDimensions>) => void;
   geometries: { value: string; display_label: string; requires_degrees: boolean; requires_offset_inches: boolean }[];
@@ -3787,6 +3955,159 @@ function Inspector({
     );
   }
 
+  /**
+   * What a run is laid with, and what that costs (#193). Shown on every track's
+   * panel — a main, a siding, a spur: they're all flex between the parts.
+   */
+  const flexBlock = (trackId: string) => {
+    const f = flex[trackId];
+    if (!f) return null;
+    const u = flexUsage(f.pieces);
+    const part = flexPartFor(f.partId, partLibrary);
+    return (
+      <div className="space-y-1 border-t border-gray-100 pt-2">
+        <label className="block text-xs font-medium text-gray-600">
+          Flex track
+          <select
+            value={f.partId}
+            onChange={(e) =>
+              patch((s) => {
+                const next = { ...(s.flexByTrack[trackId] ?? {}) };
+                next.partId = e.target.value;
+                // Changing the product changes the maximum piece, so cuts made
+                // for the OLD one are no longer the owner's answer to this
+                // question — drop them and re-derive rather than leave lengths
+                // that the new product can't supply.
+                delete next.cuts;
+                s.flexByTrack[trackId] = next;
+              })
+            }
+            className={`mt-0.5 ${inp}`}
+          >
+            {flexParts(partLibrary).map((p) => (
+              <option key={p.id} value={p.id}>
+                {p.manufacturer} {p.line} — {p.overallLength?.inches ?? "?"}″ lengths
+              </option>
+            ))}
+          </select>
+        </label>
+        <p className="text-xs text-gray-500">
+          {f.runInches < 0.01 ? (
+            // A branch route is authored by its drawn path, not by a stretch of
+            // the module, so there's no run here to cut into lengths yet.
+            "This route is drawn as a path rather than measured along the module, so its lengths aren't worked out yet."
+          ) : u.pieces === 0 ? (
+            "No flex on this run — the parts fill it."
+          ) : (
+            <>
+              <span className="font-medium text-gray-700">
+                {u.pieces} piece{u.pieces === 1 ? "" : "s"}
+              </span>{" "}
+              · {Math.round(u.totalInches * 10) / 10}″ of flex
+              {f.authored ? " · cut by hand" : " · cut automatically"}
+            </>
+          )}
+        </p>
+        {u.overlong > 0 && (
+          <p className="rounded-md bg-amber-50 px-2 py-1 text-xs text-amber-800" role="status">
+            ⚠ {u.overlong} piece{u.overlong === 1 ? " is" : "s are"} longer than a{" "}
+            {part?.overallLength?.inches}″ length of {part?.manufacturer} flex. Add a joint, or
+            pick a product that comes longer.
+          </p>
+        )}
+        {f.authored && (
+          <button
+            type="button"
+            onClick={() =>
+              patch((s) => {
+                const next = { ...(s.flexByTrack[trackId] ?? {}) };
+                delete next.cuts;
+                if (!next.partId) delete s.flexByTrack[trackId];
+                else s.flexByTrack[trackId] = next;
+              })
+            }
+            className={`${addBtn} w-full`}
+          >
+            Re-cut automatically
+          </button>
+        )}
+      </div>
+    );
+  };
+
+  // ---- A length of flex track (#193) ---------------------------------------
+  // Each piece is a real object: it has a length you can change, and ends that
+  // meet its neighbours, the parts, and the endplates.
+  if (selection.kind === "flex") {
+    const f = flex[selection.id];
+    const piece = f?.pieces[selection.index];
+    if (!f || !piece) return null;
+    const part = flexPartFor(f.partId, partLibrary);
+    const max = maxFlexPieceInches(f.partId, partLibrary);
+    const trackName =
+      mains.find((m) => m.id === selection.id)?.label ??
+      (() => {
+        const i = state.extraTracks.findIndex((t) => t.id === selection.id);
+        return i >= 0 ? trackLabel(state.extraTracks[i], i) : selection.id;
+      })();
+    const meets = (e: FlexPiece["fromEnd"]) =>
+      e === "piece" ? "the next piece" : e === "part" ? "a turnout or crossing" : "the end of the run";
+    /** Move the joint at this piece's far end. Its neighbour gives up (or gains)
+     * exactly what this piece takes — which is what cutting really does. The
+     * rule (and the clamp that stops a too-long value reordering the joints)
+     * lives in the package, with `resizeSection`'s lesson already learnt. */
+    const resize = (want: number) => {
+      const next = resizeFlexPiece(f.pieces, selection.index, want);
+      if (!next) return;
+      patch((s) => {
+        // The first edit turns the whole run's derived cuts into the owner's
+        // own, so moving one joint doesn't leave the rest free to re-derive
+        // around it.
+        s.flexByTrack[selection.id] = { ...(s.flexByTrack[selection.id] ?? {}), cuts: next };
+      });
+    };
+    return shell(
+      `${trackName} · Piece ${selection.index + 1}`,
+      <>
+        <p className="text-xs text-gray-500">
+          A length of {part?.manufacturer} {part?.line} flex. It runs from{" "}
+          {Math.round(piece.fromPos * 10) / 10}″ to {Math.round(piece.toPos * 10) / 10}″ along{" "}
+          {trackName}.
+        </p>
+        <dl className="grid grid-cols-[auto_1fr] gap-x-3 gap-y-1 text-xs">
+          <dt className="text-gray-500">Meets</dt>
+          <dd className="text-gray-800">
+            {meets(piece.fromEnd)} at the west end, {meets(piece.toEnd)} at the east
+          </dd>
+          <dt className="text-gray-500">Longest</dt>
+          <dd className="text-gray-800">{max}″ for this product</dd>
+        </dl>
+        {piece.toEnd === "piece" ? (
+          <label className="block text-xs font-medium text-gray-600">
+            Length (in)
+            <CommitNumberField
+              value={Math.round(piece.lengthInches * 100) / 100}
+              onCommit={resize}
+              inp={inp}
+              title="Moves the joint at this piece's east end. Its neighbour takes up the difference — which is what cutting one longer really does."
+            />
+          </label>
+        ) : (
+          <p className="text-xs text-gray-400">
+            {Math.round(piece.lengthInches * 100) / 100}″ — this piece runs to{" "}
+            {meets(piece.toEnd)}, so its length is set by what it meets. Resize the piece before it,
+            or move what it butts against.
+          </p>
+        )}
+        {piece.overlong && (
+          <p className="rounded-md bg-amber-50 px-2 py-1 text-xs text-amber-800" role="status">
+            ⚠ Longer than a {max}″ length — this piece can&rsquo;t be laid in one.
+          </p>
+        )}
+      </>,
+    );
+  }
+
   // ---- The mains (Main 1 / Main 2) ----------------------------------------
   // Neither is an `extraTrack` — the main IS the module's centre-line — so both
   // are handled here rather than falling through to the track panel below. #185
@@ -3870,6 +4191,7 @@ function Inspector({
             {isMain2 ? "Straighten (back to parallel)" : "Straighten (back to derived)"}
           </button>
         )}
+        {flexBlock(main.id)}
       </>,
     );
   }
@@ -4050,6 +4372,7 @@ function Inspector({
           </span>
         </label>
       )}
+      {flexBlock(t.id)}
     </>,
     {
       fn: () =>
@@ -4240,6 +4563,7 @@ function ObjectsList({
   setTool,
   add,
   mains,
+  flex,
   mainlineDouble,
   mainlineLocked,
   endplates,
@@ -4261,30 +4585,65 @@ function ObjectsList({
   };
   /** The mains as rows — they aren't `extraTracks`, so they're passed in (#192). */
   mains: { id: string; label: string; sub: string }[];
+  /** Each run cut into lengths of flex track, by track id (#193). */
+  flex: Record<
+    string,
+    { pieces: FlexPiece[]; partId: string; authored: boolean; runInches: number }
+  >;
   mainlineDouble: boolean;
   mainlineLocked: boolean;
   endplates: { id: string; config?: string }[];
 }) {
-  /** Corners are keyed by index, everything else by id — compare accordingly. */
+  /** Corners are keyed by index, everything else by id — compare accordingly.
+   * A flex piece needs BOTH: several pieces share one track id (#193). */
   const on = (s: Selection) => {
     if (selection === null || selection.kind !== s.kind) return false;
     if (selection.kind === "corner" && s.kind === "corner") return selection.i === s.i;
+    if (selection.kind === "flex" && s.kind === "flex")
+      return selection.id === s.id && selection.index === s.index;
     return "id" in selection && "id" in s && selection.id === s.id;
   };
 
-  const row = (key: string, label: string, sel: Selection, sub?: string) => (
+  const row = (
+    key: string,
+    label: string,
+    sel: Selection,
+    sub?: string,
+    opts?: { indent?: boolean; warn?: boolean },
+  ) => (
     <button
       key={key}
       type="button"
       onClick={() => select(sel)}
-      className={`flex w-full items-center gap-2 rounded px-2 py-1 text-left text-xs ${
-        on(sel) ? "bg-blue-50 font-medium text-blue-900" : "text-gray-700 hover:bg-gray-50"
-      }`}
+      className={`flex w-full items-center gap-2 rounded py-1 pr-2 text-left text-xs ${
+        opts?.indent ? "pl-5" : "pl-2"
+      } ${on(sel) ? "bg-blue-50 font-medium text-blue-900" : "text-gray-700 hover:bg-gray-50"}`}
     >
       <span className="truncate">{label}</span>
-      {sub && <span className="ml-auto shrink-0 text-gray-400">{sub}</span>}
+      {sub && (
+        <span className={`ml-auto shrink-0 ${opts?.warn ? "text-amber-600" : "text-gray-400"}`}>
+          {sub}
+        </span>
+      )}
     </button>
   );
+
+  /** A run's rows: the track itself, then the lengths of flex it's made of. */
+  const trackRows = (id: string, label: string, sel: Selection, sub?: string) => {
+    const f = flex[id];
+    return [
+      row(id, label, sel, sub),
+      ...(f?.pieces ?? []).map((p) =>
+        row(
+          `${id}#${p.index}`,
+          `Piece ${p.index + 1}`,
+          { kind: "flex" as const, id, index: p.index },
+          `${Math.round(p.lengthInches * 10) / 10}″${p.overlong ? " ⚠" : ""}`,
+          { indent: true, warn: p.overlong },
+        ),
+      ),
+    ];
+  };
 
   const canCrossover =
     !state.loop && (state.configA === "double" || state.configB === "double");
@@ -4353,10 +4712,10 @@ function ObjectsList({
             now ordinary rows: they select like a siding, and selecting one is
             what arms its handles (#192). They aren't `extraTracks` because the
             main IS the module's centre-line, so they're listed explicitly. */}
-        {mains.map((m) => row(m.id, m.label, { kind: "track", id: m.id }, m.sub))}
+        {mains.map((m) => trackRows(m.id, m.label, { kind: "track", id: m.id }, m.sub))}
         {state.extraTracks.map((t, i) =>
           // Round to 0.1″ — raw float math read as 18.800000000000004″.
-          row(t.id, trackLabel(t, i), { kind: "track", id: t.id }, `${Math.round(Math.abs(t.toPos - t.fromPos) * 10) / 10}″`),
+          trackRows(t.id, trackLabel(t, i), { kind: "track", id: t.id }, `${Math.round(Math.abs(t.toPos - t.fromPos) * 10) / 10}″`),
         )}
       </Group>
 

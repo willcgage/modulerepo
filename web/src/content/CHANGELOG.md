@@ -5,6 +5,24 @@ Headings are `version — date` (YYYY-MM-DD).
 
 ---
 
+## v0.23.0 — 2026-07-26
+
+### Added
+- **Your track is now made of real lengths of flex, with the joints marked.** Everything that isn't a turnout or a crossing is flex track, and flex comes in pieces you can actually buy — **30″** for Atlas Code 55, **36″** for Micro Engineering. So a 96″ main isn't one piece of track: it's four lengths with three rail joints in it. Each length is listed in **Objects** under the track it belongs to, and each joint is marked on the board with the same tick a turnout's joint gets — because it's the same thing.
+
+  **Nothing to do.** Your modules are cut up automatically the first time you open them, using full lengths off the roll with the remainder at the end, exactly how you'd lay it. The flex goes *around* the turnouts we have measured, so a switch in the middle of a run gives you a joint on each side of it rather than a piece of track drawn straight through a part.
+
+- **Pick the product per track.** A track's panel now has a **Flex track** chooser and tells you what that run costs: how many pieces and how many inches. Your mains can be Atlas and a siding Micro Engineering if that's what's on the bench.
+
+- **Resize a piece.** Where you cut is the builder's call, so select a length and retype it — the joint moves and the next piece takes up the difference, which is what cutting one longer really does. Once you've moved one, that run's joints are **yours**: they stay put when something else on the module changes, and they're saved with it. **Re-cut automatically** puts them back.
+
+  A piece too long for the product to supply is flagged in amber rather than quietly re-cut, so a run that grew after you set its joints tells you instead of undoing your decision.
+
+### Notes
+- A piece that butts a turnout, a crossing or an endplate has no length field: what it meets is what sets it. Resize the piece before it, or move what it butts against.
+- A **branch route** is drawn as a path rather than measured along the module, so its lengths aren't worked out yet — its panel says so instead of showing you a zero.
+- A **crossing** breaks the run and gives you a joint, but doesn't take any length off it: we haven't measured a crossing part, and claiming an extent for one would be inventing it.
+
 ## v0.22.0 — 2026-07-26
 
 ### Added
