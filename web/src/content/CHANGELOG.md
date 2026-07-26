@@ -5,6 +5,15 @@ Headings are `version — date` (YYYY-MM-DD).
 
 ---
 
+## v0.18.0 — 2026-07-26
+
+### Changed
+- **A third endplate is an end of your module, and the dispatcher view now draws it as one.** An endplate is an endplate whatever letter it carries — it's the standardised face where your module joins another, and a module may present two of them, or three, or one. The operations view didn't see it that way: endplates A and B ended the diagram and were labelled, while C and up were drawn as a short stub hanging off the side.
+
+  A route to endplate C now **runs to the edge of the module and finishes at an endplate face carrying its letter**, exactly as the mains to A and B do. It's drawn well clear of the other tracks, with a lane's gap, so that a route running the full width can't be mistaken for another main running alongside — it's an *exit*, not a parallel track.
+
+  The **letter** is your module's own fact, so it's shown. Where that route actually goes is not: that depends on which module is physically coupled to that endplate on the day, so Free-Dispatcher works the destination out from the assembled layout rather than the Repository guessing at it.
+
 ## v0.17.2 — 2026-07-26
 
 ### Added

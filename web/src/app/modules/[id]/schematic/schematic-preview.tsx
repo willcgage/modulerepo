@@ -329,20 +329,23 @@ export function SchematicPreview({
           );
         })}
 
-        {/* Branch routes — a main leaving the module at a third endplate (#181).
-            It diverges from its host main at 45° like every other diverge, then
-            runs its OWN length on a lane of its own and ends at an endplate face.
-            No "to X" label here: the destination depends on which module is
-            physically attached at the junction, so Free-Dispatcher derives the
-            panel label at runtime; the schematic just shows the route exiting. */}
+        {/* Routes to a third endplate. An endplate is an endplate whatever
+            letter it carries (#183), so this is drawn the way A and B are: it
+            diverges from its host main at 45°, runs to the EDGE of the module,
+            and terminates in an endplate face carrying its letter.
+            It sits a clear lane's gap beyond everything else — running the full
+            width, it would otherwise read as one more parallel main, which is
+            precisely the confusion a dispatcher must not have.
+            The LETTER is the module's own fact. The DESTINATION is not: which
+            railroad lies beyond that plate depends on what's physically attached,
+            so Free-Dispatcher derives that at runtime. */}
         {f.branchConnectors.map((b) => {
           const x0 = px(b.posFrac);
           const xe = px(b.endFrac);
           const y0 = laneY(b.fromLane); // a branch need not leave Main 1
           const yl = laneY(b.lane);
           const dir = xe >= x0 ? 1 : -1;
-          // 45°, and never longer than the run itself (#173) — a branch shorter
-          // than the lane drop draws steeper rather than doubling back.
+          // 45°, and never longer than the run itself (#173).
           const thr = Math.min(Math.abs(yl - y0), Math.abs(xe - x0));
           const isMain = b.kind === "main";
           const tick = 5; // the endplate face it ends at
@@ -362,9 +365,19 @@ export function SchematicPreview({
                 x2={xe}
                 y2={yl + tick}
                 stroke="#94a3b8"
-                strokeWidth={1.4}
+                strokeWidth={1.6}
                 strokeLinecap="round"
               />
+              {/* Its letter, drawn like A and B are at their ends. */}
+              <text
+                x={dir > 0 ? xe - 3 : xe + 3}
+                y={yl - tick - 3}
+                fontSize="7"
+                fill="#94a3b8"
+                textAnchor={dir > 0 ? "end" : "start"}
+              >
+                {b.id}
+              </text>
               <title>
                 {`${b.name || (isMain ? "Main" : "Branch")} — ${
                   isMain ? "a main" : "a branch"
