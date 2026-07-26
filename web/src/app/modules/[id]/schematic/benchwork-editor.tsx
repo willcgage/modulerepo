@@ -2773,11 +2773,16 @@ const ENDPLATE_TAB = 5; // ballast-shoulder band width, inches
             key={`dangle${r.turnoutId}-${r.trackId}`}
             cx={r.at.x}
             cy={sy(r.at.y)}
-            r={world(5)}
+            r={world(6)}
             fill="none"
             stroke="#d97706"
-            strokeWidth={world(1.6)}
-            strokeDasharray={`${world(3)} ${world(2)}`}
+            // ⚠️ PLAIN PIXELS, not world(). `non-scaling-stroke` already takes
+            // its width in screen units, so passing world() converts twice and
+            // leaves a 0.08px hairline — invisible, which for a marker whose
+            // whole job is to be noticed is the same as not drawing it.
+            // The RADIUS is different: that's geometry, so it stays in world().
+            strokeWidth={2}
+            strokeDasharray="4 3"
             vectorEffect="non-scaling-stroke"
             pointerEvents="none"
           >
