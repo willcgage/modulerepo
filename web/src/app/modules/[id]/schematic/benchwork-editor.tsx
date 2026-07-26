@@ -43,6 +43,15 @@ const CAR_INCHES = 3.3;
  * otherwise zooming in made rails ever finer instead of resolving into rail. */
 const RAILHEAD_INCHES = 0.03;
 
+/** A rail joint — where one piece of track ends and the next begins. `nx`/`ny`
+ * is the unit normal, so the tick draws ACROSS the rails. */
+interface Joint {
+  x: number;
+  y: number;
+  nx: number;
+  ny: number;
+}
+
 /** Round a raw span up to a friendly grid increment (inches). */
 function niceStep(raw: number): number {
   const steps = [0.25, 0.5, 1, 2, 3, 6, 12, 24, 48, 96];
@@ -634,6 +643,13 @@ export function BenchworkEditor({
     /** The measured part's tie strip, or null when the library has no part for
      * this frog number — see the note where it's built (#part-vs-track). */
     body: Pt[] | null;
+    /** Rail joints where the part meets flex track ON THE THROUGH ROUTE — the
+     * two ends of the moulding. Empty unless the part was measured, since
+     * otherwise we don't know where it stops (#189). */
+    throughJoints: Joint[];
+    /** The joint at the end of the diverging rail. Drawn only when something is
+     * actually connected there; otherwise that spot gets a dangling ring. */
+    divergeJoint: Joint;
   } | null => {
     const dt = tracks.find((x) => x.id === t.divergeTrack);
     if (!dt) return null;
@@ -819,11 +835,37 @@ export function BenchworkEditor({
           return [...near, ...far.reverse()];
         })()
       : null;
+    // WHERE THE RAIL JOINTS ARE. A joint is where one piece of track ends and
+    // the next begins, which is exactly what became visible once turnouts
+    // stopped being drawn out to meet the track they feed (#189).
+    //
+    // On the through route those are the two ends of the moulding, so they're
+    // known only for a measured part — the same condition that draws the tie
+    // strip. Guessing here would put a joint on a piece of track whose length
+    // nobody has checked.
+    const jointAt = (s: number): Joint => {
+      const p = sampleAt(host, Math.max(0, relThroat + toward * s));
+      return { x: p.x, y: p.y, nx: p.nx, ny: p.ny };
+    };
+    const throughJoints: Joint[] = ext
+      ? [jointAt(-ext.behindPoints), jointAt(Math.min(ext.aheadOfPoints, span))]
+      : [];
+    // The diverging rail's own end. Its normal comes from the leg's closing
+    // direction, not the host's — the leg leaves at the frog angle, so a host
+    // normal would draw the tick skewed across it.
+    const divergeJoint: Joint = (() => {
+      const b = leg[leg.length - 1];
+      const a = leg[Math.max(0, leg.length - 2)];
+      const d = Math.hypot(b.x - a.x, b.y - a.y) || 1;
+      return { x: b.x, y: b.y, nx: -(b.y - a.y) / d, ny: (b.x - a.x) / d };
+    })();
     return {
       leg,
       frog,
       outline,
       body,
+      throughJoints,
+      divergeJoint,
       frogV: [
         { x: frog.x + dHost.x * vLen, y: frog.y + dHost.y * vLen },
         { x: frog.x + dLeg.x * vLen, y: frog.y + dLeg.y * vLen },
@@ -856,7 +898,7 @@ export function BenchworkEditor({
     // the ramp's end — they aren't any more (#173).
     const map = new Map<
       string,
-      { throat: Pt; frog: Pt; frogV: [Pt, Pt]; join: Pt; leg: Pt[]; outline: Pt[][] | null; body: Pt[] | null; turnoutId: string }[]
+      { throat: Pt; frog: Pt; frogV: [Pt, Pt]; join: Pt; leg: Pt[]; outline: Pt[][] | null; body: Pt[] | null; throughJoints: Joint[]; divergeJoint: Joint; turnoutId: string }[]
     >();
     if (centerline.length >= 2) {
       for (const t of turnouts) {
@@ -870,6 +912,8 @@ export function BenchworkEditor({
           frogV: r.frogV,
           outline: r.outline,
           body: r.body,
+          throughJoints: r.throughJoints,
+          divergeJoint: r.divergeJoint,
           join: r.leg[r.leg.length - 1],
           leg: r.leg,
           turnoutId: t.id,
@@ -884,7 +928,7 @@ export function BenchworkEditor({
   const switchByTrack = useMemo(() => {
     const map = new Map<
       string,
-      { throat: Pt; frog: Pt; frogV: [Pt, Pt]; join: Pt; leg: Pt[]; outline: Pt[][] | null; body: Pt[] | null; turnoutId: string }
+      { throat: Pt; frog: Pt; frogV: [Pt, Pt]; join: Pt; leg: Pt[]; outline: Pt[][] | null; body: Pt[] | null; throughJoints: Joint[]; divergeJoint: Joint; turnoutId: string }
     >();
     for (const [id, legs] of legsByTrack) map.set(id, legs[0]);
     return map;
@@ -1623,6 +1667,26 @@ export function BenchworkEditor({
         !ends.some((e) => Math.hypot(e.x - r.at.x, e.y - r.at.y) <= RAIL_SNAP_INCHES),
     );
   }, [turnoutRailEnds, trackPaths]);
+
+  /**
+   * Every rail joint to draw — where a piece of track ends and the next begins.
+   *
+   * A joint and a dangling ring are the two answers to the same question, so
+   * they're mutually exclusive by construction: if nothing is connected to a
+   * turnout's diverging rail you get the ring telling you to bring track to it,
+   * and once you have, you get the joint saying the two pieces meet here.
+   */
+  const trackJoints = useMemo(() => {
+    const loose = new Set(danglingRailEnds.map((r) => `${r.turnoutId}|${r.trackId}`));
+    const out: Joint[] = [];
+    for (const [trackId, legs] of legsByTrack) {
+      for (const l of legs) {
+        out.push(...l.throughJoints);
+        if (!loose.has(`${l.turnoutId}|${trackId}`)) out.push(l.divergeJoint);
+      }
+    }
+    return out;
+  }, [legsByTrack, danglingRailEnds]);
 
   /** Where the spur body starts — the turnout's JOIN (the ramp's end, so the
    * spur is continuous with the switch), falling back to the on-main turnout
@@ -2767,6 +2831,31 @@ const ENDPLATE_TAB = 5; // ballast-shoulder band width, inches
             ) : null,
           )}
         {trackLines.map(renderTrackRails)}
+        {/* RAIL JOINTS — a tick across the rails where one piece of track ends
+            and the next begins. Same LOD gate as the rails: below it the whole
+            turnout is a few pixels and joint marks would only be grit. */}
+        {railsVisible &&
+          trackJoints.map((j, i) => {
+            const h = RAIL_GAUGE_INCHES * 0.85; // just past the railheads
+            return (
+              <line
+                key={`jt${i}`}
+                x1={j.x - j.nx * h}
+                y1={sy(j.y - j.ny * h)}
+                x2={j.x + j.nx * h}
+                y2={sy(j.y + j.ny * h)}
+                stroke="#0f172a"
+                // Plain pixels: non-scaling-stroke takes screen units, and a
+                // world() value here would come out a sub-pixel hairline (#189).
+                strokeWidth={1.4}
+                strokeLinecap="butt"
+                vectorEffect="non-scaling-stroke"
+                pointerEvents="none"
+              >
+                <title>Rail joint — one piece of track ends and the next begins</title>
+              </line>
+            );
+          })}
         {/* Turnout rails with nothing joined to them — drag a track end here. */}
         {danglingRailEnds.map((r) => (
           <circle

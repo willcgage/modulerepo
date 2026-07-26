@@ -5,6 +5,11 @@ Headings are `version — date` (YYYY-MM-DD).
 
 ---
 
+## v0.17.2 — 2026-07-26
+
+### Added
+- **Rail joints are marked.** Now that a turnout is drawn its real length, you can see where the part ends and your own track begins — a small tick across the rails marks each joint: at both ends of the turnout along the through route, and at the end of the diverging rail once track is connected to it. A rail with nothing connected still shows the amber ring instead, so the two never appear together: the ring means "bring track here", the tick means "these two pieces meet here". Joints appear on the through route only for turnouts whose part we have measured — for anything else we don't know where the moulding stops, and would rather mark nothing than mark the wrong place.
+
 ## v0.17.0 — 2026-07-25
 
 ### Changed
