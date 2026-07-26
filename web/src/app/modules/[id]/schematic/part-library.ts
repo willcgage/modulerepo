@@ -99,6 +99,12 @@ export function drawablePartFor(
 export function selectableParts(library: TrackPart[] = PART_LIBRARY): TrackPart[] {
   const affectsDrawing = (p: TrackPart) =>
     !!p.segments?.length ||
+    // A FROG NUMBER counts. Naming a part adopts its frog number (#187), and
+    // that drives the drawn angle, the lead and where the flex begins — so a
+    // part identified only by its number is still a real choice. The Atlas 2057
+    // wye is exactly that: we know it's a #3.5 and nothing else yet, and
+    // excluding it would hide a part an owner is holding.
+    p.frogNumber != null ||
     !!p.lead ||
     !!p.pointsOffset ||
     !!p.frogOffset ||

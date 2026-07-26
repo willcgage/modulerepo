@@ -5,6 +5,16 @@ Headings are `version — date` (YYYY-MM-DD).
 
 ---
 
+## v0.26.0 — 2026-07-26
+
+### Added
+- **The Atlas 2057 wye is in the library — it's a #3.5.** The two Atlas Code 55 wyes are different frog numbers, not a left-hand and right-hand pair of the same part (a wye has no hand — both legs diverge). So there are now two to choose between: **#2.5 (2056)** and **#3.5 (2057)**.
+
+  Neither has been measured yet, so both are still drawn from their frog number rather than at a real length. They're in the parts list so you can say which one you're laying.
+
+### Fixed
+- **A part known only by its number was being hidden from the Part list.** The list showed parts that carry a measurement, which meant a part we can identify but haven't measured — the new 2057 wye exactly — wouldn't have appeared at all. Since choosing a part now sets the turnout's frog number, knowing which part it is *does* change the drawing, so it belongs on the list.
+
 ## v0.25.1 — 2026-07-26
 
 ### Added
