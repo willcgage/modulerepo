@@ -1195,19 +1195,29 @@ export function BenchworkEditor({
             // a crossover connector has a turnout on BOTH ends, and drawing the
             // shared frog from both doubled the circles at the far end.
             const sw = t.divergeTrack ? switchByTrack.get(t.divergeTrack) : undefined;
+            // THIS turnout's own leg. `switchByTrack` keeps only the FIRST leg
+            // reaching a track, which is right for the frog marker (a passing
+            // siding's two turnouts once shared a leg and drew doubled circles,
+            // #81) but wrong for the part BODY: each turnout is a separate
+            // physical switch and draws its own moulding. Without this, a
+            // passing siding's second turnout showed rail joints at a tie strip
+            // that was never drawn.
+            const mine = t.divergeTrack
+              ? legsByTrack.get(t.divergeTrack)?.find((l) => l.turnoutId === t.id)
+              : undefined;
             return {
               id: t.id,
               x: m.x,
               y: m.y,
               frog: sw && sw.turnoutId === t.id ? sw.frog : null,
               outline: sw && sw.turnoutId === t.id ? sw.outline : null,
-              body: sw && sw.turnoutId === t.id ? sw.body : null,
+              body: mine?.body ?? null,
               frogV: sw && sw.turnoutId === t.id ? sw.frogV : null,
             };
           })
         : [],
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [centerline, turnouts, tracks, switchByTrack, lengthInches],
+    [centerline, turnouts, tracks, switchByTrack, legsByTrack, lengthInches],
   );
   /** Draggable end handles for sidings/spurs (not the derived Main 2). */
   const trackEnds = useMemo(() => {
