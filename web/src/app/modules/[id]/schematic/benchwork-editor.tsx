@@ -13,6 +13,7 @@ import {
   partExtentForSize,
   turnoutFacing,
   RAIL_GAUGE_INCHES,
+  FREEMO_TRACK_SPACING_INCHES,
   TIE_HALF_LENGTH_INCHES,
   MAIN_TRACK_ID,
   MAIN2_TRACK_ID,
@@ -2798,11 +2799,23 @@ export function BenchworkEditor({
    * offers OPEN joints, which is how an owner is stopped from stacking a third
    * rail end on a junction rather than being told off for it afterwards.
    */
+  /**
+   * How near counts as "meant it".
+   *
+   * ⚠️⚠️ CAPPED AT HALF THE FREE-MON TRACK SPACING, and that cap is the whole
+   * point on a double-track module. Its two mains are 1.125″ apart — closer
+   * than 14 screen pixels at any sensible zoom — so laying Main 2 beside Main 1
+   * SNAPPED IT ONTO MAIN 1, and the module came out with one main and a warning
+   * instead of two mains. Past half the spacing you are nearer the other track
+   * than the one you meant, so the snap must not reach there.
+   */
+  const grabInches = Math.min(world(14), FREEMO_TRACK_SPACING_INCHES / 2);
+
   const layPiece = (partId: string, at: Pt) => {
     if (!onPiecesChange) return;
     const part = partLibrary.find((p) => p.id === partId);
     const fresh = newPiece(partId, at, pieces, part);
-    const snapped = snapPiece(fresh, pieces, partLibrary, world(14));
+    const snapped = snapPiece(fresh, pieces, partLibrary, grabInches);
     onPiecesChange([...pieces, snapped?.piece ?? fresh], { commit: true });
     onSelect?.({ kind: "piece", id: fresh.id });
   };
@@ -2868,7 +2881,7 @@ export function BenchworkEditor({
     if ((pd?.kind === "piece" || pd?.kind === "pieceHandle") && onPiecesChange) {
       const moved = pieces.find((p) => p.id === pd.id);
       if (moved && pd.kind !== "pieceHandle") {
-        const snap = snapPiece(moved, pieces.filter((p) => p.id !== moved.id), partLibrary, world(14));
+        const snap = snapPiece(moved, pieces.filter((p) => p.id !== moved.id), partLibrary, grabInches);
         if (snap) putPiece(snap.piece, true);
       }
     }

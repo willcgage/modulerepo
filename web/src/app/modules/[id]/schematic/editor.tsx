@@ -62,7 +62,7 @@ import {
 } from "@/lib/module-schematic";
 import { snapPoseToOutline, sampleAt } from "@/lib/physical-track";
 import { partLibraryWith } from "./part-library";
-import { startJointFor } from "./piece-layer";
+import { endplateTrackPoints, startJointsFor } from "./piece-layer";
 import type { StoredTrackPart } from "@willcgage/module-schematic";
 import {
   returnLoop,
@@ -764,10 +764,13 @@ export function SchematicEditor({
       // as unreachable — which is what "the first piece laid" gives you the
       // moment a second piece is snapped onto its back.
       const a = poses.find((p) => p.id === "A");
-      const startAt = startJointFor(next, partLibrary, a ? { x: a.x, y: a.y } : null);
+      // ⭐ Both starts come from the ENDPLATE'S TRACK POINTS: a double end has
+      // two, and the run meeting the second one is Main 2. Nothing for an owner
+      // to declare, and nothing that can contradict what they drew.
+      const starts = startJointsFor(next, partLibrary, a ? endplateTrackPoints(a) : []);
       return {
         ...prev,
-        graph: next.length && startAt ? { pieces: next, startAt } : undefined,
+        graph: next.length && starts ? { pieces: next, ...starts } : undefined,
       };
     });
   };
@@ -779,10 +782,13 @@ export function SchematicEditor({
   const graphReadout = useMemo(() => {
     const pieces = state.graph?.pieces ?? [];
     if (!pieces.length) return null;
-    const startAt = state.graph!.startAt;
+    const { startAt, start2 } = state.graph!;
     if (!pieces.some((p) => p.id === startAt.piece)) return null;
-
-    const { doc: derived, walk, warnings } = graphToDoc(pieces, { startAt, library: partLibrary });
+    const { doc: derived, walk, warnings } = graphToDoc(pieces, {
+      startAt,
+      start2,
+      library: partLibrary,
+    });
     return { derived, walk, warnings };
   }, [state.graph, partLibrary]);
 

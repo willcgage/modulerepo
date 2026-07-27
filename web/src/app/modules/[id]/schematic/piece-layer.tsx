@@ -167,35 +167,82 @@ export function offAxis(piece: TrackPiece, pt: Pt): number {
 }
 
 /**
- * Where the walk should START: the open end nearest endplate A.
+ * Where the walks should START: the open end nearest each of endplate A's track
+ * points — the first is the main, the second (a double-track end) is Main 2.
  *
- * ⚠️ NOT "the first piece laid". The walk runs ONE WAY from its start joint, so
- * starting in the MIDDLE of a run leaves everything on the other side reported
- * as unreachable — which is exactly what happened the first time a second piece
- * was snapped onto the back of the first. An end of the layout is the only
- * honest place to begin, and endplate A is where a module's track measures from
- * (`pos` is inches from A), so of the open ends it is the nearest one.
+ * ⭐ THE TRACK POINTS ARE THE QUESTION. A module's mains are the runs that meet
+ * the endplate, so which run is Main 2 is not something an owner should have to
+ * declare: it is the one arriving at the plate's second track. Nothing to
+ * author, nothing to get wrong.
+ *
+ * ⚠️ NOT "the first piece laid". A walk runs ONE WAY from its start joint, so
+ * starting in the MIDDLE of a run leaves everything behind it reported as
+ * unreachable — exactly what happened the first time a second piece was snapped
+ * onto the back of the first. An end of the layout is the only honest place to
+ * begin.
  *
  * Derived rather than remembered, so it keeps being right as track is laid.
  */
-export function startJointFor(
+export function startJointsFor(
   pieces: TrackPiece[],
   library: TrackPart[],
-  endplateA?: Pt | null,
-): { piece: string; joint: string } | null {
+  trackPoints: Pt[],
+): { startAt: { piece: string; joint: string }; start2?: { piece: string; joint: string } } | null {
   if (!pieces.length) return null;
   const graph = buildTrackGraph(pieces, library);
   const taken = new Set(graph.connections.flatMap((c) => [c.a, c.b]));
   const open = graph.joints.filter((j) => !taken.has(j.key));
-  const from = endplateA ?? { x: 0, y: 0 };
-  let best: { piece: string; joint: string; d: number } | null = null;
-  for (const j of open) {
-    const d = Math.hypot(j.x - from.x, j.y - from.y);
-    if (!best || d < best.d) best = { piece: j.piece, joint: j.joint, d };
-  }
+  const from = trackPoints.length ? trackPoints : [{ x: 0, y: 0 }];
+  const used = new Set<string>();
+  const nearest = (at: Pt) => {
+    let best: { key: string; piece: string; joint: string; d: number } | null = null;
+    for (const j of open) {
+      if (used.has(j.key)) continue; // one end cannot be both mains
+      const d = Math.hypot(j.x - at.x, j.y - at.y);
+      if (!best || d < best.d) best = { key: j.key, piece: j.piece, joint: j.joint, d };
+    }
+    if (best) used.add(best.key);
+    return best;
+  };
+  const first = nearest(from[0]);
   // Every joint taken means a closed loop — there is no end to start from, so
   // any joint will do and the walk's own cycle guard stops it.
-  return best ?? { piece: pieces[0].id, joint: graph.joints[0]?.joint ?? "a" };
+  if (!first)
+    return { startAt: { piece: pieces[0].id, joint: graph.joints[0]?.joint ?? "a" } };
+  const second = from.length > 1 ? nearest(from[1]) : null;
+  return {
+    startAt: { piece: first.piece, joint: first.joint },
+    ...(second ? { start2: { piece: second.piece, joint: second.joint } } : {}),
+  };
+}
+
+/**
+ * Endplate A's track points — where its one or two tracks actually cross it,
+ * ordered so the first is the one the document calls MAIN 1.
+ *
+ * ⚠️ THE STORED OFFSETS ARE IN THE PLATE'S OWN FRAME, and which way that points
+ * depends on the plate's heading — endplate A faces west, so its "first" offset
+ * came out as the UPPER track and the module was born with its mains swapped.
+ * Sorted by module +y instead, which is the axis the document's own default is
+ * written in: Main 2 sits above Main 1.
+ *
+ * ⏳ That is a DEFAULT, not a fact. Which physical track is the primary main is
+ * an operating decision (a real module in the catalogue runs its through main on
+ * the upper track — the case `mainsSwapped` exists for), and there is no way to
+ * say so here yet. Worth offering once someone needs it.
+ */
+export function endplateTrackPoints(pose: {
+  x: number;
+  y: number;
+  heading: number;
+  trackOffsets?: number[];
+}): Pt[] {
+  const offsets = pose.trackOffsets?.length ? pose.trackOffsets : [0];
+  // The face runs across the outward normal, so the offsets lie along heading+90.
+  const rad = ((pose.heading + 90) * Math.PI) / 180;
+  return offsets
+    .map((o) => ({ x: pose.x + o * Math.cos(rad), y: pose.y + o * Math.sin(rad) }))
+    .sort((a, b) => a.y - b.y);
 }
 
 /** A new piece of `partId`, laid flat at `pt`. */
