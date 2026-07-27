@@ -234,6 +234,12 @@ export interface CanvasTrack {
   /** Authored 2-D path (module-local inches). When set, the track draws along
    * it instead of the lane-offset path. */
   path?: BenchworkPoint[];
+  /** What kind of track this is. The canvas only needs it to spot a crossover
+   * (#180) — everything else about a track is already in the fields above. */
+  role?: string;
+  /** `role: "crossover"` only — the product it was built from. Its track
+   * spacing is what pinches the pair (#180). */
+  crossoverPartId?: string;
 }
 export interface CanvasTurnout {
   id: string;

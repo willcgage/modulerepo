@@ -392,6 +392,13 @@ export function SchematicEditor({
           // authored 2-D path when drawn (#2d-track stage C).
           throatPos: throatOf.get(t.id),
           path: et?.path,
+          // The canvas needs BOTH to work out a crossover pinch (#180): the role
+          // says which tracks are crossovers, and the part says what spacing it
+          // was built to. Dropping either here is silent — `crossoverPinches`
+          // simply finds nothing and the pair draws parallel, which is
+          // indistinguishable from an owner who hasn't named a product.
+          role: t.role,
+          crossoverPartId: et?.crossoverPartId ?? t.crossoverPartId ?? undefined,
         };
       });
   }, [doc, state.lengthInches, state.extraTracks, state.turnouts]);
