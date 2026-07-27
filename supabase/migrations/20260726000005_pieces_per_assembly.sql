@@ -1,0 +1,24 @@
+-- A crossover fixture builds ONE HALF — modulerepo#180.
+--
+-- Will Gage, 2026-07-26: "crossovers are two pieces. the pdf shows half, then
+-- you would duplicate this same piece and flip it 180 and butt it up to the
+-- through and X." Fast Tracks agree: "Crossovers are constructed by building
+-- two symmetrical halves of a crossover in the Assembly Fixture and then
+-- joining them to form a complete double crossover."
+--
+-- So the 10.07" and 13.61" already recorded for those parts are the HALF, not
+-- the finished crossover — which is how @willcgage/module-schematic 0.81.0 had
+-- described them, and 0.82.0 corrects.
+--
+--   pieces_per_assembly  how many identical pieces built on this fixture make
+--                        ONE finished part. ⚠️ When set, overall_length_inches
+--                        and minimum_length_inches describe ONE PIECE, not the
+--                        finished item. NULL or 1 means the fixture builds the
+--                        whole part in one go — true of every turnout and wye.
+--
+-- The finished length is not published by Fast Tracks and is deliberately not
+-- stored anywhere: the halves are related by a 180-degree rotation about the
+-- diamond so they cover the same span, but inferring the assembly's length from
+-- that is a reconstruction, not a reading.
+alter table track_parts
+  add column if not exists pieces_per_assembly integer;

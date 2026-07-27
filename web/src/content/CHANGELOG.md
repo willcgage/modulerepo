@@ -5,6 +5,22 @@ Headings are `version — date` (YYYY-MM-DD).
 
 ---
 
+## v0.34.0 — 2026-07-26
+
+### Fixed
+- **Correction to yesterday's crossover figures: those lengths are one HALF, not the whole crossover.** v0.33.0 listed the #6 at 10.07″ and the #8 at 13.61″ and called them the finished crossover. They aren't.
+
+  A Fast Tracks crossover fixture builds **one symmetrical half**. You build that piece, build it again, turn the second one 180°, and butt the two together at the through routes and at the X. Fast Tracks' own figure is "the length of the turnout on the QuickSticks" — the piece in the jig.
+
+  These also make a **double (scissors) crossover**, not a single one: four turnouts, two diagonals and the diamond where they cross. A half carries one full frog and *half* the diamond, so it isn't usable on its own. They're renamed "#N Double Crossover" to match.
+
+  **The finished length isn't published, and we haven't guessed one.** The two halves are mirror images about the diamond so they cover the same span, which suggests the finished crossover is also about 10.07″ — but that's reasoning, not a measurement, and this library has been wrong four times by exactly that route. If you've built one, measure it and we'll record it.
+
+  The track spacing finding is unaffected: still 1.09″ against Free-moN's 1.125″.
+
+### Added
+- **Admins can record that a part is built in several identical pieces**, which flags that its lengths describe one piece rather than the finished item.
+
 ## v0.33.0 — 2026-07-26
 
 ### Added

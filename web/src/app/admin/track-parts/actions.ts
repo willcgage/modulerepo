@@ -56,6 +56,7 @@ function readPart(formData: FormData) {
   const minimum = number(formData, "minimum_length_inches");
   const buildable = formData.get("buildable") != null;
   const spacing = number(formData, "track_spacing_inches");
+  const pieces = number(formData, "pieces_per_assembly");
 
   // The database enforces these too; checking here turns a constraint violation
   // into a sentence that says which landmark is wrong.
@@ -76,6 +77,19 @@ function readPart(formData: FormData) {
       "Track spacing is the centre-to-centre distance of the two parallel " +
         "tracks a CROSSOVER joins — set the kind to Crossover, or leave it blank.",
     );
+
+  // ⚠️ Pieces-per-assembly CHANGES WHAT THE LENGTHS ABOVE MEAN, so it only
+  // makes sense on something you build, and more than one piece is the whole
+  // point of recording it.
+  if (pieces != null && pieces !== 1) {
+    if (!buildable)
+      fail(
+        "“Built in N pieces” only applies to a part you BUILD — tick “built " +
+          "from a fixture”, or leave it blank.",
+      );
+    if (pieces < 2 || !Number.isInteger(pieces))
+      fail("Pieces per assembly must be a whole number of 2 or more, or blank.");
+  }
 
   // A minimum length only means anything on a fixture, and it has to be a
   // floor: a part that can't be built shorter than its default has no range.
@@ -141,6 +155,7 @@ function readPart(formData: FormData) {
     track_spacing_source: source(formData, "track_spacing_source"),
     secondary_frog_angle_deg: number(formData, "secondary_frog_angle_deg"),
     secondary_frog_angle_source: source(formData, "secondary_frog_angle_source"),
+    pieces_per_assembly: pieces,
     buildable,
     lead_inches: number(formData, "lead_inches"),
     lead_source: source(formData, "lead_source"),

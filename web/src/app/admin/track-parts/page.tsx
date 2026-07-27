@@ -150,7 +150,18 @@ function PartFields({ row }: { row?: TrackPartRow }) {
           <SelectField label="…source" name="track_spacing_source" defaultValue={row?.track_spacing_source ?? ""} options={SOURCE_OPTIONS} required={false} />
           <NumberField label="Second frog angle (degrees)" name="secondary_frog_angle_deg" defaultValue={n(row?.secondary_frog_angle_deg)} required={false} step="any" min={0} />
           <SelectField label="…source" name="secondary_frog_angle_source" defaultValue={row?.secondary_frog_angle_source ?? ""} options={SOURCE_OPTIONS} required={false} />
+          <NumberField label="Built in how many identical pieces?" name="pieces_per_assembly" defaultValue={n(row?.pieces_per_assembly)} required={false} step={1} min={2} />
         </div>
+        <p className="mt-1 text-xs text-gray-500">
+          ⚠️ If a part is built in pieces,{" "}
+          <span className="font-medium">
+            the lengths above describe ONE PIECE
+          </span>
+          , not the finished item. A Fast Tracks crossover fixture builds one
+          symmetrical half: you build it twice, turn the second 180° and butt
+          them together at the through routes and the X. Its 10.07″ is the half.
+          Leave blank for anything built in one go.
+        </p>
         <p className="mt-1 text-xs text-gray-500">
           A crossover fixture is machined for{" "}
           <span className="font-medium">one</span> track spacing and can&apos;t be
