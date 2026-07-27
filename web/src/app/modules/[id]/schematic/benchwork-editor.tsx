@@ -865,7 +865,34 @@ export function BenchworkEditor({
     // reasoned interpolation is the honest floor. That is a different claim from
     // `partExtent`, which refuses to guess — the tie strip (which asserts "this
     // part stops HERE") is still only drawn where a part was actually measured.
-    const span = lead + pastFrogInchesForSize(effN, partLibrary) * stretch;
+    const bodySpan = lead + pastFrogInchesForSize(effN, partLibrary) * stretch;
+    /**
+     * ⚠️ A CROSSOVER LEG STOPS WHERE IT MEETS ITS PARTNER (#196).
+     *
+     * Every other leg runs the turnout's whole body, which is right: a turnout
+     * is as long as the turnout is (#189). But a crossover has a turnout facing
+     * it across the gap, and each body reaches 0.607″ laterally on a #6 while
+     * only half the 1.09″ gap — 0.545″ — is available before the other one
+     * arrives. Two full bodies want 1.208″ of a 1.09″ gap, so they OVERSHOOT
+     * each other and the band bridging them slopes backwards: the diagonal went
+     * up past centre and then came back down.
+     *
+     * Past the frog the closure is straight at 1/N, so the distance at which it
+     * has reached a given offset is exact, not fitted: `lead + (offset − gauge)
+     * × N`. Capping there makes both legs arrive at the midpoint together and
+     * the diagonal hold one angle.
+     *
+     * Never LENGTHENS a leg — `Math.min` — so a turnout whose body is already
+     * shorter than the meeting point is untouched, and nothing else on the board
+     * changes.
+     */
+    const span = (() => {
+      if (!crossoverLeg) return bodySpan;
+      const gap = Math.abs((far.x - m.x) * m.nx + (far.y - m.y) * m.ny);
+      const half = gap / 2;
+      if (!(half > RAIL_GAUGE_INCHES)) return bodySpan;
+      return Math.min(bodySpan, lead + (half - RAIL_GAUGE_INCHES) * effN);
+    })();
     const leg: Pt[] = [];
     for (let i = 0; i <= steps; i++) leg.push(at((span * i) / steps));
     // The frog — `pos` marks it (#132), and the closure is built so the rails
