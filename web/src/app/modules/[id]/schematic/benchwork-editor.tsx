@@ -109,7 +109,9 @@ function specForPalette(k: PaletteKind): { kind: TurnoutKind; curved: boolean } 
 }
 
 /** A crossover glyph → its spec: the hand (which way the single diagonal throws,
- * facing endplate B) or double (a scissors). Null for non-crossover kinds. */
+ * facing endplate B) or double. ⚠️ A DOUBLE CROSSOVER *CONTAINS* A SCISSORS —
+ * the X where its two opposite diverging routes meet and cross — it is not
+ * itself "a scissors". Null for non-crossover kinds. */
 function crossoverSpecForPalette(
   k: PaletteKind,
 ): { hand?: "left" | "right"; double?: boolean } | null {
@@ -456,7 +458,8 @@ export function BenchworkEditor({
   ) => void;
   /** Crossover glyphs (#turnout-palette): drop a self-contained crossover on the
    * main — a turnout on each of the two parallel lanes plus the diagonal
-   * connector(s) between them (double = scissors). The canvas computes the
+   * connector(s) between them (a double crossover has two, which cross at the
+   * scissors). The canvas computes the
    * geometry (module-local inches); the editor builds/reuses the tracks. */
   onDropCrossover?: (p: {
     hand?: "left" | "right";

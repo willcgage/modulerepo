@@ -1284,7 +1284,8 @@ export function SchematicEditor({
   };
   /** Crossover drop (#turnout-palette): a self-contained element between the
    * main and a parallel lane — a turnout on each end + the diagonal connector(s)
-   * (double = scissors). A plain parallel track already covering the span on
+   * (a double crossover has two, crossing at the scissors). A plain parallel
+   * track already covering the span on
    * that side is reused (a siding, say); otherwise a short parallel stub is
    * created for the owner to draw out to length. The connector carries an
    * authored 2-pt path (host end → parallel end) so the canvas renders the

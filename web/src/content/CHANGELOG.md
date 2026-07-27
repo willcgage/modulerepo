@@ -5,6 +5,13 @@ Headings are `version — date` (YYYY-MM-DD).
 
 ---
 
+## v0.36.0 — 2026-07-26
+
+### Fixed
+- **Naming: a double crossover *contains* a scissors — it isn't one.** We'd been using "scissors crossover" as another name for the whole assembly. It isn't. The assembly is a **double crossover**; the **scissors** is the X inside it, where the two opposite diverging routes meet and cross.
+
+  The palette already said "Double crossover", so nothing you click has changed — this corrects the wording everywhere else, and stops calling that crossing a "diamond". A diamond here means two tracks crossing with **no** route choice; the scissors carries routes and belongs to the crossover.
+
 ## v0.35.0 — 2026-07-26
 
 ### Added
@@ -23,7 +30,7 @@ Headings are `version — date` (YYYY-MM-DD).
 
   A Fast Tracks crossover fixture builds **one symmetrical half**. You build that piece, build it again, turn the second one 180°, and butt the two together at the through routes and at the X. Fast Tracks' own figure is "the length of the turnout on the QuickSticks" — the piece in the jig.
 
-  These also make a **double (scissors) crossover**, not a single one: four turnouts, two diagonals and the diamond where they cross. A half carries one full frog and *half* the diamond, so it isn't usable on its own. They're renamed "#N Double Crossover" to match.
+  These also make a **double crossover**, not a single one: four turnouts, two diagonals, and the **scissors** where the two opposite diverging routes meet and cross in an X. A half carries one full frog and *half* the scissors, so it isn't usable on its own. They're renamed "#N Double Crossover" to match.
 
   **The finished length isn't published, and we haven't guessed one.** The two halves are mirror images about the diamond so they cover the same span, which suggests the finished crossover is also about 10.07″ — but that's reasoning, not a measurement, and this library has been wrong four times by exactly that route. If you've built one, measure it and we'll record it.
 
