@@ -747,7 +747,20 @@ export function BenchworkEditor({
     // longitudinal (toward) and lateral (side) sense — host-agnostic. A wye's
     // mirror leg forces the opposite side.
     const far = (() => {
-      if (dt.path && dt.path.length >= 2) return dt.path[dt.path.length - 1];
+      if (dt.path && dt.path.length >= 2) {
+        // ⚠️ WHICHEVER END IS FURTHER FROM THIS TURNOUT — not simply the last
+        // point. A crossover connector has a turnout at BOTH ends, so the one
+        // sitting on the path's last point was being told its far end was its
+        // own position: the direction came out degenerate and its leg drew
+        // backwards, away from the pair (#180). Same rule the geometric
+        // fallback below already used; it just wasn't applied to authored
+        // paths, where only spurs — turnouts at one end — had exercised it.
+        const a = dt.path[0];
+        const b = dt.path[dt.path.length - 1];
+        const da = (a.x - m.x) ** 2 + (a.y - m.y) ** 2;
+        const db = (b.x - m.x) ** 2 + (b.y - m.y) ** 2;
+        return db >= da ? b : a;
+      }
       // The diverging track's OWN far end — whichever of its ends is further
       // from this turnout — laid on the main at its lane. The old fallback
       // stepped a fixed +tangent, so every spur diverged EAST no matter which
@@ -973,10 +986,22 @@ export function BenchworkEditor({
     const host = hostPointsOf(t.onTrack);
     if (!dt || host.length < 2) return 1;
     const m = sampleAt(host, toHostRel(t.onTrack, t.pos));
+    // Same "further end, not last end" rule as `frogLegOf` (#180): a crossover
+    // connector has a turnout at BOTH ends, and the one standing on the path's
+    // last point measured its far end as its own position — `Math.sign(0)` is 0,
+    // so the side fell through to the +1 default and its leg drew away from the
+    // pair instead of across it.
+    const farEnd = (() => {
+      if (!dt.path || dt.path.length < 2) return null;
+      const a = dt.path[0];
+      const b = dt.path[dt.path.length - 1];
+      const da = (a.x - m.x) ** 2 + (a.y - m.y) ** 2;
+      const db = (b.x - m.x) ** 2 + (b.y - m.y) ** 2;
+      return db >= da ? b : a;
+    })();
     const far =
-      dt.path && dt.path.length >= 2
-        ? dt.path[dt.path.length - 1]
-        : { x: m.x + m.nx * (laneOffset(dt.lane) || LANE_SPACING_INCHES), y: m.y + m.ny * (laneOffset(dt.lane) || LANE_SPACING_INCHES) };
+      farEnd ??
+      { x: m.x + m.nx * (laneOffset(dt.lane) || LANE_SPACING_INCHES), y: m.y + m.ny * (laneOffset(dt.lane) || LANE_SPACING_INCHES) };
     return (Math.sign((far.x - m.x) * m.nx + (far.y - m.y) * m.ny) || 1) as 1 | -1;
   };
   /** spur/siding id → its throat's curved diverging leg + endpoints, so a drawn
@@ -1042,7 +1067,39 @@ export function BenchworkEditor({
    * The owner closes the gap by dragging the TRACK's end onto the turnout's
    * rail, where it snaps. The turnout doesn't move: it's positioned by its frog.
    */
-  const authoredTrackPath = (t: CanvasTrack): BenchworkPoint[] => t.path ?? [];
+  /**
+   * An authored path, as authored — except that a CROSSOVER's ends are re-laid
+   * onto the lanes as they actually run (#180).
+   *
+   * A connector's two points were computed at DROP time from the standard lane
+   * offsets and then stored. Once the pair pinches, those stored ends no longer
+   * sit on the rails they connect: the diagonal stops 0.035″ short of the track
+   * it is supposed to meet. Sub-pixel, but it is a drawn claim that two rails
+   * join where they don't, and the whole point of this feature is drawing the
+   * geometry the module really has.
+   *
+   * Re-laying only the ENDS keeps any bend the owner put in the middle. Nothing
+   * else is touched: every other authored path draws exactly as authored (#189).
+   */
+  const authoredTrackPath = (t: CanvasTrack): BenchworkPoint[] => {
+    const path = t.path ?? [];
+    if (t.role !== "crossover" || path.length < 2 || !pinches.length) return path;
+    if (centerline.length < 2) return path;
+    const relay = (p: BenchworkPoint): BenchworkPoint => {
+      const { pos } = projectToCenterline(centerline, p);
+      const c = sampleAt(centerline, pos);
+      const off = (p.x - c.x) * c.nx + (p.y - c.y) * c.ny;
+      // Which lane is this end on? The nearest one by its standard offset —
+      // the stored point predates the pinch, so it is still at lane spacing.
+      const lane = Math.round(off / LANE_SPACING_INCHES);
+      const want = laneOffsetAt(lane, pos, pinches);
+      return { ...p, x: c.x + c.nx * want, y: c.y + c.ny * want };
+    };
+    const out = [...path];
+    out[0] = relay(out[0]);
+    out[out.length - 1] = relay(out[out.length - 1]);
+    return out;
+  };
 
   /** A stub spur's diverging route, angled away like the prototype (Option 1):
    * the throat→frog leg (already at the frog angle) CONTINUES straight along the
