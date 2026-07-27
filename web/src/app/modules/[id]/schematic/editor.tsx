@@ -68,6 +68,7 @@ import {
   returnLoop,
   type ReturnLoopShape,
   FREEMO_ENDPLATE_WIDTH_RECOMMENDED_INCHES,
+  FREEMO_MAIN_MIN_RADIUS_INCHES,
 } from "@/lib/module-schematic";
 import { SchematicPreview } from "./schematic-preview";
 import {
@@ -4155,20 +4156,50 @@ function Inspector({
       <>
         <p className="text-xs text-gray-500">
           {isFlex
-            ? "Flex track is the one piece you cut. Drag the square handle to length; drag the piece to move it, and the round handle to turn it."
+            ? "Flex track is the one piece you cut. Drag the square handle to length, the ◇ in the middle to bend it, the round handle to turn it — or drag the piece itself to move it."
             : "A part is the shape it is built to — it can only be moved and turned. Its ends snap to any open joint."}
         </p>
         {isFlex && (
-          <label className="block text-xs font-medium text-gray-600">
-            Length (in)
-            <CommitNumberField
-              step={0.25}
-              value={r2(piece.lengthInches ?? 0)}
-              onCommit={(v) => editPiece({ lengthInches: Math.max(1, v ?? 1) })}
-              inp={inp}
-            />
-          </label>
+          <div className="grid grid-cols-2 gap-2">
+            <label className="block text-xs font-medium text-gray-600">
+              Length (in)
+              <CommitNumberField
+                step={0.25}
+                value={r2(piece.lengthInches ?? 0)}
+                onCommit={(v) => editPiece({ lengthInches: Math.max(1, v ?? 1) })}
+                inp={inp}
+              />
+            </label>
+            {/* ⚠️ The radius is SIGNED — the sign is which way it bends, so a
+                blank field is a straight run and not a radius of nothing. The
+                length stays the ARC: bending a piece of flex does not shorten
+                the rail, it only changes where the far end ends up. */}
+            <label className="block text-xs font-medium text-gray-600" title="Blank = straight. Negative bends the other way.">
+              Radius (in)
+              <CommitNumberField
+                step={1}
+                value={piece.radiusInches != null ? r2(piece.radiusInches) : null}
+                placeholder="straight"
+                onCommit={(v) => editPiece({ radiusInches: v == null || v === 0 ? undefined : v })}
+                inp={inp}
+              />
+            </label>
+          </div>
         )}
+        {/* ⭐ FLAGGED, NEVER CORRECTED — the house rule for everything the
+            standard has an opinion about (#190's off-centre plate, #193's
+            over-long piece, #194's capacity). And it says MAIN LINE, because
+            the standard does: a spur or a yard lead may legitimately be
+            tighter, and calling that an error would teach owners to ignore
+            these notes. */}
+        {isFlex && piece.radiusInches != null &&
+          Math.abs(piece.radiusInches) < FREEMO_MAIN_MIN_RADIUS_INCHES && (
+            <p className="rounded-md border border-amber-200 bg-amber-50 p-2 text-[11px] text-amber-800">
+              {Math.abs(piece.radiusInches).toFixed(1)}″ is tighter than Free-moN&rsquo;s{" "}
+              {FREEMO_MAIN_MIN_RADIUS_INCHES}″ minimum <strong>main-line</strong> radius. Fine on a
+              spur or a yard lead; not on the main.
+            </p>
+          )}
         <div className="grid grid-cols-3 gap-2">
           <label className="block text-xs font-medium text-gray-600">
             X (in)

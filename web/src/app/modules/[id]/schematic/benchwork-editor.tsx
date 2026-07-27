@@ -32,6 +32,8 @@ import {
   PiecePalette,
   flexLengthFor,
   newPiece,
+  offAxis,
+  radiusForBend,
   rotationFor,
 } from "./piece-layer";
 import {
@@ -547,7 +549,7 @@ export function BenchworkEditor({
      * origin, so it doesn't jump to the pointer), or working one of its
      * handles. */
     | { kind: "piece"; id: string; grab: Pt }
-    | { kind: "pieceHandle"; id: string; handle: "rotate" | "flex" }
+    | { kind: "pieceHandle"; id: string; handle: "rotate" | "flex" | "bend" }
     | null
   >(null);
   /** ADR 0001 — the part armed in the Pieces palette, and a drag ghost while one
@@ -2584,6 +2586,12 @@ export function BenchworkEditor({
       if (d.handle === "rotate") {
         putPiece({ ...piece, rotationDeg: rotationFor(piece, p) });
         setReadout(`${fmt(rotationFor(piece, p))}°`);
+      } else if (d.handle === "bend") {
+        const r = radiusForBend(piece.lengthInches ?? 0, offAxis(piece, p));
+        putPiece({ ...piece, radiusInches: r });
+        // The RADIUS is the number a modeller thinks in and the one the
+        // standards are written in — not the offset that was dragged.
+        setReadout(r ? `${fmt(Math.abs(r))}″ radius` : "straight");
       } else {
         const len = flexLengthFor(piece, p);
         putPiece({ ...piece, lengthInches: len });

@@ -4,6 +4,7 @@ import { Fragment } from "react";
 import {
   RAIL_GAUGE_INCHES,
   buildTrackGraph,
+  flexRunEnd,
   partGeometry,
   partsPlaceable,
   pieceRoutePaths,
@@ -108,8 +109,61 @@ export function rotateHandleAt(piece: TrackPiece, library: TrackPart[], outInche
       ? (piece.lengthInches ?? 6)
       : Math.max(...(geo?.joints ?? [{ x: 6 }]).map((j) => j.x), 1);
   const rad = (piece.rotationDeg * Math.PI) / 180;
+  // Along the piece's own axis, clear of a bent run's far end rather than on
+  // top of it — turning and bending are different gestures and must not share
+  // a handle.
   const d = span + outInches;
   return { x: piece.x + d * Math.cos(rad), y: piece.y + d * Math.sin(rad) };
+}
+
+/** A point in the piece's own frame, put on the board. */
+function place(piece: TrackPiece, x: number, y: number): Pt {
+  const rad = (piece.rotationDeg * Math.PI) / 180;
+  const ly = piece.flipped ? -y : y;
+  return {
+    x: piece.x + x * Math.cos(rad) - ly * Math.sin(rad),
+    y: piece.y + x * Math.sin(rad) + ly * Math.cos(rad),
+  };
+}
+
+/** Where the BEND handle sits: the middle of the run, on the rail. */
+export function bendHandleAt(piece: TrackPiece): Pt {
+  const mid = flexRunEnd((piece.lengthInches ?? 0) / 2, piece.radiusInches);
+  return place(piece, mid.x, mid.y);
+}
+
+/**
+ * The radius a bend-drag means: how far the pointer has pulled the middle of
+ * the run off its own axis.
+ *
+ * ⭐ SOLVED AGAINST THE PACKAGE'S OWN `flexRunEnd`, not against a formula
+ * written here. A sagitta identity would be a second definition of the arc, and
+ * the handle would drift away from the rail it is supposed to be dragging.
+ *
+ * Offset and radius run opposite ways — pull further, bend tighter — so this
+ * bisects rather than inverting anything.
+ */
+export function radiusForBend(lengthInches: number, offsetInches: number): number | undefined {
+  const want = Math.abs(offsetInches);
+  // Under a rail's width of pull, the owner means "straight" — and straight has
+  // no radius at all, rather than an enormous one.
+  if (want < 0.15 || !(lengthInches > 0)) return undefined;
+  let tight = lengthInches / (2 * Math.PI); // any tighter closes the circle
+  let slack = 100000;
+  for (let i = 0; i < 60; i++) {
+    const mid = (tight + slack) / 2;
+    if (flexRunEnd(lengthInches / 2, mid).y > want) tight = mid;
+    else slack = mid;
+  }
+  return Math.sign(offsetInches) * ((tight + slack) / 2);
+}
+
+/** How far a point lies off a piece's own axis — signed, left positive. */
+export function offAxis(piece: TrackPiece, pt: Pt): number {
+  const rad = (piece.rotationDeg * Math.PI) / 180;
+  const d = { x: pt.x - piece.x, y: pt.y - piece.y };
+  const perp = -d.x * Math.sin(rad) + d.y * Math.cos(rad);
+  return piece.flipped ? -perp : perp;
 }
 
 /**
@@ -258,7 +312,7 @@ export function PieceLayer({
   laying?: boolean;
   onSelect?: (id: string | null) => void;
   onPieceDown?: (id: string, e: React.PointerEvent) => void;
-  onHandleDown?: (id: string, handle: "rotate" | "flex", e: React.PointerEvent) => void;
+  onHandleDown?: (id: string, handle: "rotate" | "flex" | "bend", e: React.PointerEvent) => void;
 }) {
   const world = (px: number) => px / scale;
   const graph = buildTrackGraph(pieces, library);
@@ -379,6 +433,36 @@ export function PieceLayer({
               >
                 <title>Turn this piece</title>
               </circle>
+              {/* BEND — a diamond in the middle of the run, the same handle the
+                  benchwork edges use to bow into an arc. Pull it off the axis
+                  and the run curves; push it back and it is straight again. */}
+              {part?.kind === "flex" && (p.lengthInches ?? 0) > 0 && (() => {
+                const b = bendHandleAt(p);
+                const k = world(4.5);
+                return (
+                  <rect
+                    x={b.x - k}
+                    y={sy(b.y) - k}
+                    width={k * 2}
+                    height={k * 2}
+                    transform={`rotate(45 ${b.x} ${sy(b.y)})`}
+                    fill={p.radiusInches ? "#f59e0b" : "#ffffff"}
+                    stroke="#d97706"
+                    strokeWidth={world(1.5)}
+                    style={{ cursor: "grab" }}
+                    onPointerDown={(e) => {
+                      e.stopPropagation();
+                      onHandleDown?.(p.id, "bend", e);
+                    }}
+                  >
+                    <title>
+                      {p.radiusInches
+                        ? `Bent to ${Math.abs(p.radiusInches).toFixed(1)}″ radius — drag to change, push flat for straight`
+                        : "Drag to bend this run into a curve"}
+                    </title>
+                  </rect>
+                );
+              })()}
               {part?.kind === "flex" && end && (
                 <rect
                   x={end.x - world(4)}
