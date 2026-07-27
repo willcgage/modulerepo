@@ -11,6 +11,8 @@ import {
   buildCrossover,
   isTransitionTurnout,
   deriveEndplatePoses,
+  endplateEdgePose,
+  type EndplatePose,
   poseNeedsManual,
   moduleFootprint,
   endplateCentreOffsetInches,
@@ -284,6 +286,12 @@ export function SchematicEditor({
         // edge rather than on the centre line — a side-facing plate buried
         // mid-board is a place no train can leave from.
         endplateWidths: state.endplateWidths,
+        // ⭐ An endplate BOUND TO A BENCHWORK EDGE (ADR 0001) reads its position,
+        // heading and width off the board, so they cannot drift apart from it.
+        // Wins over a pose, and — unlike a pose — keeps following the board when
+        // its shape changes.
+        endplateEdges: state.endplateEdges,
+        outline: state.outline,
         poseOverrides: state.poseOverrides,
       }),
     [state, geometry],
@@ -2922,7 +2930,7 @@ function Inspector({
   geometries: { value: string; display_label: string; requires_degrees: boolean; requires_offset_inches: boolean }[];
   geoSpec?: { requires_degrees: boolean; requires_offset_inches: boolean };
   lockedConfigs: { a: boolean; b: boolean };
-  derivedPoses: { id: string; x: number; y: number; heading: number }[];
+  derivedPoses: EndplatePose[];
   wantsManualPose: boolean;
   setEndplateWidth: (id: string, raw: string) => void;
   setEndplateTrackOffset: (id: string, raw: string) => void;
@@ -3347,6 +3355,24 @@ function Inspector({
     const bi = id.charCodeAt(0) - 67;
     const branch = bi >= 0 ? state.branches[bi] : undefined;
     const locked = (id === "A" && lockedConfigs.a) || (id === "B" && lockedConfigs.b && !state.loop);
+    // The benchwork's edges, as things an endplate can BE (ADR 0001). A curved
+    // edge is offered but disabled rather than hidden, so it is clear why it
+    // can't be chosen instead of leaving someone hunting for a missing option.
+    const bound = state.endplateEdges?.[id];
+    const edgeChoices = (state.outline ?? []).map((p0, i, arr) => {
+      const p1 = arr[(i + 1) % arr.length];
+      const len = Math.round(Math.hypot(p1.x - p0.x, p1.y - p0.y) * 10) / 10;
+      const e = endplateEdgePose(state.outline, { index: i });
+      const compass = (deg: number) =>
+        ["east", "north", "west", "south"][Math.round(((deg % 360) + 360) % 360 / 90) % 4];
+      return {
+        index: i,
+        usable: !!e,
+        label: e
+          ? `Edge ${i + 1} — ${len}″, faces ${compass(e.heading)}`
+          : `Edge ${i + 1} — ${len}″, curved (an endplate face must be straight)`,
+      };
+    });
 
     return shell(
       `Endplate ${id}`,
@@ -3513,6 +3539,65 @@ function Inspector({
             ⚠ {issue.message}
           </p>
         ))}
+
+        {/* ⭐ THE ENDPLATE'S EDGE OF THE BENCHWORK (ADR 0001). Above the pose
+            because it supersedes it: bound, the plate reads its place, facing
+            and WIDTH off the board and keeps following it. */}
+        <div className="rounded-md border border-gray-200 p-2">
+          <label className="block text-xs font-medium text-gray-600">
+            Which edge of the benchwork is this?
+            <select
+              value={bound ? String(bound.index) : ""}
+              onChange={(e) =>
+                patch((s) => {
+                  const v = e.target.value;
+                  if (!s.endplateEdges) s.endplateEdges = {};
+                  if (v === "") delete s.endplateEdges[id];
+                  else {
+                    s.endplateEdges[id] = { index: Number(v) };
+                    // A binding replaces a hand-placed pose — keeping both would
+                    // leave the plate pinned to a point it no longer sits on.
+                    delete s.poseOverrides[id];
+                  }
+                })
+              }
+              className={`mt-0.5 ${inp}`}
+              disabled={!edgeChoices.length}
+            >
+              <option value="">Not on an edge — placed by hand</option>
+              {edgeChoices.map((c) => (
+                <option key={c.index} value={c.index} disabled={!c.usable}>
+                  {c.label}
+                </option>
+              ))}
+            </select>
+          </label>
+          {!edgeChoices.length ? (
+            <p className="mt-1 text-xs text-gray-500">
+              Draw the benchwork first and this endplate can sit on one of its
+              edges — then its width and facing come from the board itself.
+            </p>
+          ) : bound && pose.boundToEdge ? (
+            <p className="mt-1 text-xs text-gray-600">
+              On the board&apos;s edge, <span className="font-medium">{Math.round((pose.widthInches ?? 0) * 10) / 10}″</span> wide,
+              facing {Math.round(pose.heading)}°. Reshape the benchwork and this
+              endplate moves with it — its width is the edge&apos;s own, so the
+              two can&apos;t disagree.
+            </p>
+          ) : bound ? (
+            <p className="mt-1 text-xs text-amber-700">
+              ⚠ That edge isn&apos;t usable any more — the board may have been
+              reshaped, or the edge is curved. An endplate face has to be
+              straight (Free-moN §2.0 wants the track square and level across
+              it), so this is falling back to the derived position.
+            </p>
+          ) : (
+            <p className="mt-1 text-xs text-gray-500">
+              Pick an edge and this endplate becomes part of the benchwork: its
+              position, facing and width all come from the board.
+            </p>
+          )}
+        </div>
 
         {/* Pose (#175 phase 1b) — the layout map's geometry. */}
         <details open={wantsManualPose} className="rounded-md border border-gray-200 p-2">

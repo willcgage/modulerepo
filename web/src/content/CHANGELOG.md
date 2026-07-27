@@ -5,6 +5,17 @@ Headings are `version — date` (YYYY-MM-DD).
 
 ---
 
+## v0.38.0 — 2026-07-26
+
+### Added
+- **An endplate can now BE an edge of your benchwork, instead of a point floating beside it.** Select an endplate and there's a new question at the top of its panel: *which edge of the benchwork is this?* Pick one, and the endplate's position, facing **and width** all come from the board itself.
+
+  That means they can't disagree any more. Reshape the benchwork and the endplate moves with it — no re-placing, no width to keep in step by hand. On a board whose ends differ in depth, the face follows the real edge instead of being flush only in the middle.
+
+  Curved edges are listed but can't be chosen, and the panel says why: Free-moN wants the track square and level across an endplate, so an endplate face has to be straight.
+
+  **Nothing changes for endplates you've already placed.** They keep the positions you gave them; this is an option, not a conversion. If you do bind one to an edge, that replaces the hand-placed position — keeping both would leave the plate pinned to a spot it no longer sits on.
+
 ## v0.37.0 — 2026-07-26
 
 ### Fixed
