@@ -17,6 +17,9 @@ import {
   MAIN_TRACK_ID,
   MAIN2_TRACK_ID,
   type BenchworkPoint,
+  crossoverPinches,
+  laneOffsetAt,
+  PINCH_EASE_INCHES,
   type EndplatePose,
   type TrackPart,
   type TurnoutKind,
@@ -595,6 +598,56 @@ export function BenchworkEditor({
     [outlineInner],
   );
 
+  // A crossover built to a spacing other than Free-moN's pulls its lane IN
+  // across its own length, and back out either side (#180). Derived once here
+  // and threaded through every `lanePath` call, because that function is the one
+  // funnel all derived lane geometry goes through — do it there and the bands,
+  // the hosts turnouts sit on, and the connector's own ends all follow the same
+  // curve rather than each having to agree with the others.
+  //
+  // Empty for every module that hasn't named a crossover product, which is all
+  // of them until an owner says what they built — so nothing moves by default.
+  const pinches = useMemo(
+    () => crossoverPinches(tracks, partLibrary),
+    [tracks, partLibrary],
+  );
+
+  /**
+   * Where each pinch is, and how to say so.
+   *
+   * ⚠️ THE DEVIATION IS TOO SMALL TO SEE ON ITS OWN. 0.035″ is a fifth of a
+   * pixel at a normal zoom and about 1.4 px even zoomed right in — geometrically
+   * true and visually nothing. So the pinch is DRAWN truly (that's `lanePath`)
+   * and then LABELLED and its extent highlighted, because "show the pinch" is
+   * not satisfied by a sub-pixel wobble no one can see. The label carries the
+   * real number; the highlight says where it applies.
+   */
+  const pinchMarks = useMemo(() => {
+    if (!pinches.length || centerline.length < 2) return [];
+    const ptAt = (pos: number, lane: number) => {
+      const c = sampleAt(centerline, pos);
+      const o = laneOffsetAt(lane, pos, pinches);
+      return { x: c.x + c.nx * o, y: c.y + c.ny * o, nx: c.nx, ny: c.ny };
+    };
+    return pinches.map((p) => {
+      const mid = (p.fromPos + p.toPos) / 2;
+      const near = ptAt(mid, 0);
+      const far = ptAt(mid, p.lane);
+      const span: Pt[] = [];
+      const a = p.fromPos - PINCH_EASE_INCHES;
+      const b = p.toPos + PINCH_EASE_INCHES;
+      for (let s = 0; s <= 48; s++) span.push(ptAt(a + ((b - a) * s) / 48, p.lane));
+      return {
+        key: `${p.lane}:${p.fromPos}:${p.toPos}`,
+        near,
+        far,
+        span,
+        spacing: p.spacingInches,
+        delta: Math.abs(p.lane) * LANE_SPACING_INCHES - p.spacingInches,
+      };
+    });
+  }, [pinches, centerline]);
+
   // Track context. A track with an authored 2-D path draws along it; otherwise
   // it's laid onto the main centre-line, offset to its lane (#2d-track).
   // The polyline a turnout/track sits on: the main centre-line, or a spur's own
@@ -605,7 +658,7 @@ export function BenchworkEditor({
     if (!host) return centerline;
     return host.path && host.path.length >= 2
       ? samplePath(host.path)
-      : lanePath(centerline, host.fromPos, host.toPos, host.lane);
+      : lanePath(centerline, host.fromPos, host.toPos, host.lane, 24, pinches);
   };
   /** Turnout positions are ABSOLUTE (inches from A — what the inspector and the
    * operations view read). Sampling along a non-main host's polyline needs them
@@ -1086,7 +1139,8 @@ export function BenchworkEditor({
     // authored, and it has no draggable end (see `trackEnds`). Leaving it
     // detached would show the owner a gap they have no way to close. It stays
     // joined because they never positioned it in the first place.
-    if (t.id !== MAIN2_TRACK_ID) return lanePath(centerline, t.fromPos, t.toPos, t.lane);
+    if (t.id !== MAIN2_TRACK_ID)
+      return lanePath(centerline, t.fromPos, t.toPos, t.lane, 24, pinches);
     let from = t.fromPos;
     let to = t.toPos;
     for (const l of legsByTrack.get(t.id) ?? []) {
@@ -1094,7 +1148,7 @@ export function BenchworkEditor({
       if (Math.abs(from - jp) <= Math.abs(to - jp)) from = jp;
       else to = jp;
     }
-    return lanePath(centerline, from, to, t.lane);
+    return lanePath(centerline, from, to, t.lane, 24, pinches);
   };
 
   /** A wye's mirrored second route — the leg forced to the opposite side, then
@@ -1180,7 +1234,8 @@ export function BenchworkEditor({
     // track. The swap already flips Main 2 (its doc lane); this makes the
     // realistic view honour it for Main 1 too, instead of stacking both on
     // lane 0 (#131).
-    const mainAt = (s: number, e: number) => lanePath(centerline, s, e, mainLane);
+    const mainAt = (s: number, e: number) =>
+      lanePath(centerline, s, e, mainLane, 24, pinches);
     if (clips.length === 0) return [mainAt(0, lengthInches)];
     clips.sort((a, b) => a[0] - b[0]);
     const merged: [number, number][] = [];
@@ -1197,7 +1252,7 @@ export function BenchworkEditor({
     }
     if (cur < lengthInches) keeps.push([cur, lengthInches]);
     return keeps.map(([s, e]) => mainAt(s, e)).filter((p) => p.length >= 2);
-  }, [turnouts, tracks, centerline, lengthInches, mainLane]);
+  }, [turnouts, tracks, centerline, lengthInches, mainLane, pinches]);
 
   const trackPaths = useMemo(
     () =>
@@ -3794,6 +3849,64 @@ const ENDPLATE_TAB = 5; // ballast-shoulder band width, inches
             })()}
           </g>
         )}
+
+        {/* A crossover built to a spacing the standard doesn't use (#180). The
+            track really is drawn at 1.09″ here — but that is 0.2 px, so the
+            callout is what actually shows it. */}
+        {pinchMarks.map((m) => {
+          const ux = m.far.nx;
+          const uy = m.far.ny;
+          const lx = m.far.x + ux * world(22);
+          const ly = m.far.y + uy * world(22);
+          return (
+            <g key={`pinch-${m.key}`} pointerEvents="none">
+              <polyline
+                points={m.span.map((p) => `${p.x},${sy(p.y)}`).join(" ")}
+                fill="none"
+                stroke="#b45309"
+                strokeWidth={world(2.5)}
+                strokeOpacity={0.28}
+                strokeLinecap="round"
+              />
+              <line
+                x1={m.near.x}
+                y1={sy(m.near.y)}
+                x2={lx}
+                y2={sy(ly)}
+                stroke="#b45309"
+                strokeWidth={world(0.6)}
+              />
+              {[m.near, m.far].map((p, i) => (
+                <line
+                  key={i}
+                  x1={p.x - uy * world(3)}
+                  y1={sy(p.y - ux * world(3))}
+                  x2={p.x + uy * world(3)}
+                  y2={sy(p.y + ux * world(3))}
+                  stroke="#b45309"
+                  strokeWidth={world(0.8)}
+                />
+              ))}
+              <text
+                x={lx + ux * world(3)}
+                y={sy(ly + uy * world(3))}
+                textAnchor={ux >= 0 ? "start" : "end"}
+                fontSize={world(9)}
+                fill="#b45309"
+                fontWeight={600}
+              >
+                {m.spacing}″ crossover
+                <tspan
+                  x={lx + ux * world(3)}
+                  dy={world(10)}
+                  fontWeight={400}
+                >
+                  {m.delta.toFixed(3)}″ tighter than Free-moN
+                </tspan>
+              </text>
+            </g>
+          );
+        })}
       </svg>
 
       {/* Status bar — board size, zoom, grid, pointer. */}

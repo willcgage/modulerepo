@@ -124,6 +124,21 @@ export function selectableParts(library: TrackPart[] = PART_LIBRARY): TrackPart[
   );
 }
 
+/**
+ * The crossover products a connector can name — the assemblies deliberately
+ * kept out of {@link selectableParts}, which answers "which switch is this?".
+ *
+ * A crossover names its product on the CONNECTOR because the fixture that set
+ * its angle also set its track spacing, and that spacing belongs to the pair of
+ * tracks rather than to either turnout. Naming one is what lets the physical
+ * view draw the pair at the spacing it was really built to (#180).
+ */
+export function crossoverParts(library: TrackPart[] = PART_LIBRARY): TrackPart[] {
+  return library
+    .filter((p) => p.kind === "crossover")
+    .sort((a, b) => (a.frogNumber ?? 0) - (b.frogNumber ?? 0));
+}
+
 /** {@link selectableParts}, grouped for a manufacturer-then-part picker. */
 export function partsByManufacturer(
   library: TrackPart[] = PART_LIBRARY,

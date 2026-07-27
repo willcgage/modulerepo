@@ -5,6 +5,17 @@ Headings are `version — date` (YYYY-MM-DD).
 
 ---
 
+## v0.35.0 — 2026-07-26
+
+### Added
+- **A crossover is now drawn at the spacing it was actually built to, pinch and all.** Tell a crossover what you built it on — there's a new **Built from** picker on the crossover in the track inspector — and the board draws the two tracks as they really run.
+
+  A crossover fixture is cut for **one** track spacing and can't be built to another. The Fast Tracks N crossovers are 1.09″ where Free-moN wants 1.125″, so the pair genuinely closes up by 0.035″ across the crossover and eases back out either side, because your endplates hold the standard spacing at both ends.
+
+  That deviation is about a fifth of a pixel on screen, so drawing it truthfully isn't enough to *see* it. The pinched stretch is highlighted and labelled with the real spacing, so you can tell it's there and by how much.
+
+  **Nothing changes unless you say what you built.** Leave the picker on "Not said" and both tracks stay a standard 1.125″ apart, exactly as before — guessing you'd used a particular fixture would be inventing a fact about your module.
+
 ## v0.34.0 — 2026-07-26
 
 ### Fixed

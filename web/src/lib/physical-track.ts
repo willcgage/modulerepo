@@ -11,6 +11,8 @@ export interface Pt {
 
 import {
   FREEMO_TRACK_SPACING_INCHES,
+  laneOffsetAt,
+  type LanePinch,
   moduleFeatures,
   samplePath,
   type ModuleSchematicDoc,
@@ -203,15 +205,24 @@ export function lanePath(
   toPos: number,
   lane: number,
   steps = 24,
+  pinches?: LanePinch[] | null,
 ): Pt[] {
   if (center.length < 2) return [];
-  const off = laneOffset(lane);
   const a = Math.min(fromPos, toPos);
   const b = Math.max(fromPos, toPos);
   if (b - a < 0.01) return [];
+  // ⚠️ The offset is sampled PER STEP, not once. A crossover built to a spacing
+  // other than the standard pulls its lane in across its own length (#180), so
+  // the pair genuinely isn't parallel there — and this is the single funnel all
+  // derived lane geometry goes through, so the bands, the hosts a turnout sits
+  // on, and the crossover connector's own endpoints all follow the same curve
+  // instead of having to agree with each other separately.
+  const steps_ = pinches?.length ? Math.max(steps, 96) : steps;
   const out: Pt[] = [];
-  for (let s = 0; s <= steps; s++) {
-    const p = sampleAt(center, a + ((b - a) * s) / steps);
+  for (let s = 0; s <= steps_; s++) {
+    const pos = a + ((b - a) * s) / steps_;
+    const off = laneOffsetAt(lane, pos, pinches);
+    const p = sampleAt(center, pos);
     out.push({ x: p.x + p.nx * off, y: p.y + p.ny * off });
   }
   return out;

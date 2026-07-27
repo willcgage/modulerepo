@@ -1,6 +1,6 @@
 "use client";
 
-import { partsByManufacturer } from "./part-library";
+import { partsByManufacturer, crossoverParts } from "./part-library";
 import { Fragment, useCallback, useEffect, useMemo, useRef, useState, useTransition } from "react";
 import Link from "next/link";
 import {
@@ -29,6 +29,7 @@ import {
   assessSectionEnd,
   assessSectionJoint,
   usableCapacity,
+  FREEMO_TRACK_SPACING_INCHES,
   partExtent,
   partExtentForSize,
   DEFAULT_FLEX_PART_ID,
@@ -4353,6 +4354,72 @@ function Inspector({
    * What a run is laid with, and what that costs (#193). Shown on every track's
    * panel — a main, a siding, a spur: they're all flex between the parts.
    */
+  /** A crossover connector's product, and what its spacing does to the pair.
+   *
+   * The spacing is the reason this picker exists. A crossover fixture is
+   * machined for ONE track spacing and can't be built to another, so naming the
+   * product is what lets the board draw the pair as it really runs — the Fast
+   * Tracks N crossovers are 1.09″ against Free-moN's 1.125″ (#180). */
+  const crossoverBlock = (i: number) => {
+    const t = state.extraTracks[i];
+    if (!t || t.role !== "crossover") return null;
+    const options = crossoverParts(partLibrary);
+    if (!options.length) return null;
+    const part = options.find((p) => p.id === t.crossoverPartId) ?? null;
+    const spacing = part?.trackSpacing?.inches ?? null;
+    const off = spacing == null ? 0 : spacing - FREEMO_TRACK_SPACING_INCHES;
+    return (
+      <div className="rounded-md bg-gray-50 px-2 py-1.5">
+        <label className="block text-xs font-medium text-gray-600">
+          Built from
+          <select
+            value={t.crossoverPartId ?? ""}
+            onChange={(e) =>
+              patch((s) => {
+                const v = e.target.value;
+                if (v) s.extraTracks[i].crossoverPartId = v;
+                else delete s.extraTracks[i].crossoverPartId;
+              })
+            }
+            className={`mt-0.5 ${inp}`}
+          >
+            <option value="">Not said</option>
+            {options.map((p) => (
+              <option key={p.id} value={p.id}>
+                {p.manufacturer} {p.name}
+              </option>
+            ))}
+          </select>
+        </label>
+        {part ? (
+          <p className="mt-1 text-xs text-gray-600">
+            {spacing != null && Math.abs(off) > 1e-9 ? (
+              <>
+                Built to <span className="font-medium">{spacing}″</span> track
+                spacing, where Free-moN wants{" "}
+                {FREEMO_TRACK_SPACING_INCHES}″ — so the two tracks are{" "}
+                <span className="font-medium">
+                  {Math.abs(off).toFixed(3)}″ {off < 0 ? "closer" : "further apart"}
+                </span>{" "}
+                across the crossover, and ease back out either side. The board
+                draws that pinch. A crossover fixture is cut for one spacing and
+                can&apos;t be built to another.
+              </>
+            ) : (
+              <>Built to Free-moN&apos;s {FREEMO_TRACK_SPACING_INCHES}″ spacing — the pair stays parallel.</>
+            )}
+          </p>
+        ) : (
+          <p className="mt-1 text-xs text-gray-500">
+            Say what you built it on and the board can draw the pair at its real
+            spacing. Left unsaid, both tracks stay a standard{" "}
+            {FREEMO_TRACK_SPACING_INCHES}″ apart.
+          </p>
+        )}
+      </div>
+    );
+  };
+
   const flexBlock = (trackId: string) => {
     const f = flex[trackId];
     if (!f) return null;
@@ -4826,6 +4893,7 @@ function Inspector({
           </span>
         </label>
       )}
+      {crossoverBlock(i)}
       {flexBlock(t.id)}
     </>,
     {
