@@ -1,7 +1,8 @@
 # ADR 0001 — Author track as a graph of pieces, derive the topology
 
-- **Status:** Proposed
-- **Date:** 2026-07-26
+- **Status:** **Accepted**
+- **Date:** 2026-07-26 (proposed and accepted same day)
+- **Accepted by:** Will Gage
 - **Issue:** [#179](https://github.com/willcgage/modulerepo/issues/179)
 - **Supersedes:** the 2026-07-16 verdict *"do NOT rewrite the model to 2-D. Not yet, maybe never."* and its 2026-07-18 partial reversal (*"physical view only"*)
 

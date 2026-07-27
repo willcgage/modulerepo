@@ -9,4 +9,4 @@ than a code comment and older than the code.
 
 | # | Decision | Status |
 |---|---|---|
-| [0001](0001-piece-graph-authoring.md) | Author track as a graph of pieces, derive the topology | Proposed |
+| [0001](0001-piece-graph-authoring.md) | Author track as a graph of pieces, derive the topology | **Accepted** 2026-07-26 |
