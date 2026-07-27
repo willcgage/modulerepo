@@ -5,6 +5,15 @@ Headings are `version — date` (YYYY-MM-DD).
 
 ---
 
+## v0.36.1 — 2026-07-26
+
+### Fixed
+- **A double crossover now draws as two diagonals, not six.** On the board, each of the four turnouts was drawing its own diverging route *on top of* the connector between them, and the two turnouts on the second main threw their routes **away** from the pair — off toward the edge of the module, connected to nothing. The dispatcher view was always right; this was the physical view only.
+
+  A crossover now works the way every other track already does: the turnout draws its own diverging rails, and the track it feeds starts where those end. And a crossover's route no longer takes its direction from the turnout's hand — the connector already says where the diagonal goes, which is the other end of it on the other track.
+
+  You should now see what a double crossover actually looks like: two through routes, two diagonals, and the scissors where they cross.
+
 ## v0.36.0 — 2026-07-26
 
 ### Fixed
