@@ -10,6 +10,8 @@ export const TRACK_PART_COLUMNS =
   "frog_offset_inches, frog_offset_source, " +
   "overall_length_inches, overall_length_source, " +
   "diverging_length_inches, diverging_length_source, " +
+  "minimum_length_inches, minimum_length_source, " +
+  "substitution_radius_inches, substitution_radius_source, buildable, " +
   "lead_inches, lead_source, " +
   "outer_radius_inches, inner_radius_inches, radius_source, " +
   "actual_angle_deg, actual_angle_source, " +
@@ -35,6 +37,11 @@ export interface TrackPartRow {
   overall_length_source: string | null;
   diverging_length_inches: number | string | null;
   diverging_length_source: string | null;
+  minimum_length_inches: number | string | null;
+  minimum_length_source: string | null;
+  substitution_radius_inches: number | string | null;
+  substitution_radius_source: string | null;
+  buildable: boolean | null;
   lead_inches: number | string | null;
   lead_source: string | null;
   outer_radius_inches: number | string | null;
@@ -75,6 +82,11 @@ export function rowToStoredPart(r: TrackPartRow): StoredTrackPart {
     overallLengthSource: r.overall_length_source,
     divergingLengthInches: num(r.diverging_length_inches),
     divergingLengthSource: r.diverging_length_source,
+    minimumLengthInches: num(r.minimum_length_inches),
+    minimumLengthSource: r.minimum_length_source,
+    substitutionRadiusInches: num(r.substitution_radius_inches),
+    substitutionRadiusSource: r.substitution_radius_source,
+    buildable: r.buildable,
     leadInches: num(r.lead_inches),
     leadSource: r.lead_source,
     outerRadiusInches: num(r.outer_radius_inches),

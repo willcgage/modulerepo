@@ -5,6 +5,20 @@ Headings are `version — date` (YYYY-MM-DD).
 
 ---
 
+## v0.32.0 — 2026-07-26
+
+### Added
+- **Fast Tracks turnouts are in the part picker — 14 of them.** If you hand-build your turnouts on a Fast Tracks fixture, you can now say so instead of picking the nearest Atlas part. Nine straight sizes (#4, #4.5, #5, #6, #7, #8, #9, #10, #12) and five wyes (#4, #5, #6, #8, #10), each carrying the diverging-route angle, diverging radius, default and minimum length, and substitution radius that Fast Tracks publish.
+
+  **This fills the #6 gap.** Most turnouts on most modules are a #6, and until now there wasn't a #6 in the library at all — one was interpolated between the measured #5 and #7.
+
+- **Different manufacturers publish different numbers, and the app now keeps both.** Fast Tracks state an angle, two radii and two lengths; Atlas state three landmarks and one length. Neither list contains the other. Rather than flatten them to whatever they share, each part carries what its maker actually says — and blanks stay blank, because a blank is honest and a guess isn't.
+
+  One consequence worth knowing: a Fast Tracks part is a *fixture*, so it has no fixed length — you cut the rail. Its length shows as the maker's **default** with a **minimum**, and because Fast Tracks don't publish where the points and frog sit, these turnouts don't yet draw at a real body length the way the measured Atlas ones do. If you measure your own build, you can enter it and the form will check it for you.
+
+### Fixed
+- **A turnout size shared by two manufacturers no longer loses its shape.** Atlas and Fast Tracks both make a #5 and a #7. Picking a part by frog number alone could land on whichever was listed first, so a fixture with no measured landmarks could displace the measured Atlas part — and a turnout with no measurements is drawn as if it has no body, letting flex track run straight through it. Ties now go to the part that can actually be drawn.
+
 ## v0.31.0 — 2026-07-26
 
 ### Added

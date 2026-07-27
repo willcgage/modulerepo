@@ -6,6 +6,7 @@ import {
   NumberField,
   TextAreaField,
   SelectField,
+  CheckboxField,
   SubmitButton,
 } from "@/components/form-fields";
 import {
@@ -120,6 +121,32 @@ function PartFields({ row }: { row?: TrackPartRow }) {
           <NumberField label="Frog → end of the diverging rail (along the rail)" name="diverging_length_inches" defaultValue={n(row?.diverging_length_inches)} required={false} step="any" min={0} />
           <SelectField label="…source" name="diverging_length_source" defaultValue={row?.diverging_length_source ?? ""} options={SOURCE_OPTIONS} required={false} />
         </div>
+        <div className="mt-3">
+          <CheckboxField
+            label="Built from a fixture or template (Fast Tracks and the like)"
+            name="buildable"
+            defaultChecked={row?.buildable ?? false}
+          />
+          <p className="-mt-3 mb-4 text-xs text-gray-500">
+            Tick this and the overall length above stops being a property of the
+            part and becomes the maker&apos;s{" "}
+            <span className="font-medium">default</span> — the modeller cuts the
+            rail, so their turnout is whatever they built. Nothing infers where
+            such a turnout stops from these numbers.
+          </p>
+          <div className="grid gap-x-4 sm:grid-cols-2">
+            <NumberField label="Minimum built length" name="minimum_length_inches" defaultValue={n(row?.minimum_length_inches)} required={false} step="any" min={0} />
+            <SelectField label="…source" name="minimum_length_source" defaultValue={row?.minimum_length_source ?? ""} options={SOURCE_OPTIONS} required={false} />
+            <NumberField label="Substitution radius (curve it can stand in for)" name="substitution_radius_inches" defaultValue={n(row?.substitution_radius_inches)} required={false} step="any" min={0} />
+            <SelectField label="…source" name="substitution_radius_source" defaultValue={row?.substitution_radius_source ?? ""} options={SOURCE_OPTIONS} required={false} />
+          </div>
+        </div>
+        <p className="mt-1 text-xs text-gray-500">
+          Not every manufacturer publishes the same numbers — Fast Tracks give an
+          angle, two radii and two lengths and no landmarks at all, where Atlas
+          give three landmarks and one length. Leave blank whatever this maker
+          doesn&apos;t state; a blank is honest, a guess is not.
+        </p>
         <p className="mt-1 text-xs text-gray-500">
           The diverging rail is a <span className="font-medium">cross-check</span>,
           not a drawing input. Measure it along the angled rail and the form will
