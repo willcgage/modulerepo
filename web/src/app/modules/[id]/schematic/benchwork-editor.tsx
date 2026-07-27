@@ -2274,18 +2274,34 @@ export function BenchworkEditor({
     onDropTurnout?.(spec, onTrack, pos);
   };
 
-  /** Place a crossover from the palette. The span follows the prototype: the
-   * diagonal clears one track-spacing at the frog angle atan(1/#), so its run
-   * along the main = # × spacing (tt-n-c-*). Centred on the drop point; the
-   * side you drop on picks where the parallel lane goes. The editor reuses a
-   * covering parallel track there or creates a stub the owner draws out. */
+  /**
+   * Place a crossover from the palette. Centred on the drop point; the side you
+   * drop on picks where the parallel lane goes. The editor reuses a covering
+   * parallel track there or creates a stub the owner draws out.
+   *
+   * ⚠️ THE SPAN IS FROG TO FROG, NOT CENTRE TO CENTRE (#197). It used to be
+   * `size × spacing` — the run needed to cross a full track spacing at the frog
+   * angle. That is the right idea measured from the wrong landmark: `posA`/
+   * `posB` are turnout positions, and a turnout's `pos` marks its FROG (#132),
+   * which already sits ONE GAUGE off its own centre-line.
+   *
+   * So between the two frogs the route only has to rise `spacing − 2 × gauge`,
+   * not the whole spacing — 0.417″ of a 1.125″ pair, not 1.125″. At 1:N that is
+   * `(spacing − 2 × gauge) × size`: 2.5″ for a #6, where the old formula said
+   * 6.75″. Placed 6.75″ apart the diagonal ran about 1:17.7 between the frogs
+   * instead of 1:6, which drew as a steep leg, a long flat, and a steep leg.
+   *
+   * Only NEW crossovers move: this decides `posA`/`posB` at drop time and those
+   * are then stored, so anything already on a module keeps the positions its
+   * owner has.
+   */
   const dropCrossoverAt = (
     spec: { hand?: "left" | "right"; double?: boolean },
     pt: Pt,
   ) => {
     if (!onDropCrossover || centerline.length < 2) return;
     const size = turnoutSize > 0 ? turnoutSize : 6;
-    const span = size * LANE_SPACING_INCHES;
+    const span = (LANE_SPACING_INCHES - 2 * RAIL_GAUGE_INCHES) * size;
     if (lengthInches < span + 2) {
       setDropWarn("Not enough room for a crossover at this frog number.");
       return;

@@ -5,6 +5,15 @@ Headings are `version — date` (YYYY-MM-DD).
 
 ---
 
+## v0.37.0 — 2026-07-26
+
+### Fixed
+- **A new crossover's two turnouts are now the right distance apart.** They were being spaced by the run needed to cross a full track spacing at the frog angle — but a turnout's position marks its **frog**, and a frog already sits half a track-width off its own centre line. So the diagonal between them only has to cover the bit in the middle, and the turnouts were being placed nearly three times too far apart. A #6 was 6.75″ between frogs; it should be 2.5″.
+
+  On the board that showed up as a diagonal that started steep, went nearly flat across the middle, then turned steep again, instead of holding one clean angle.
+
+  **Crossovers already on your modules are untouched** — this only decides where the turnouts go when you drop a new one, and your existing positions are yours.
+
 ## v0.36.3 — 2026-07-26
 
 ### Fixed
