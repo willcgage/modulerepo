@@ -5,6 +5,13 @@ Headings are `version — date` (YYYY-MM-DD).
 
 ---
 
+## v0.36.3 — 2026-07-26
+
+### Fixed
+- **A crossover's diverging routes no longer overshoot each other.** Each turnout was drawing its full body length into the crossover, but on a #6 that reaches further than half the gap between the two tracks — so the two routes crossed *past* one another and the track joining them had to slope back the other way. Zoom in and each diagonal had a visible kink in it.
+
+  A crossover route now stops where it meets the one coming the other way. Only crossovers are affected; every other turnout still draws its full length.
+
 ## v0.36.1 — 2026-07-26
 
 ### Fixed
