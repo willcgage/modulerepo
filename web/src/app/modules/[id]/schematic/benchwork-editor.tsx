@@ -3901,7 +3901,7 @@ const ENDPLATE_TAB = 5; // ballast-shoulder band width, inches
                 fill="#b45309"
                 fontWeight={600}
               >
-                {m.spacing}″ crossover
+                Crossover {m.spacing}″
                 <tspan
                   x={lx + ux * world(3)}
                   dy={world(10)}
