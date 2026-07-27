@@ -583,11 +583,25 @@ export function BenchworkEditor({
     return flip ? { px: -px, py: -py } : { px, py };
   };
 
+  /**
+   * Half an endplate's face width.
+   *
+   * ⚠️ A plate BOUND TO A BENCHWORK EDGE (ADR 0001) takes its width from the
+   * edge, not from the stored `endplateWidths` — that stored number is exactly
+   * what a binding exists to stop disagreeing with the board. One definition,
+   * because two would be the #120 trap: the anchors and the drawn face would
+   * quietly use different widths.
+   */
+  const halfWidthOf = (p: EndplatePose): number =>
+    (p.boundToEdge && p.widthInches && p.widthInches > 0
+      ? p.widthInches
+      : (endplateWidths?.[p.id] ?? 24)) / 2;
+
   // Endplate face corners — the anchors a board corner should meet.
   const anchors = useMemo(() => {
     const out: { x: number; y: number; id: string }[] = [];
     for (const p of poses) {
-      const hw = (endplateWidths?.[p.id] ?? 24) / 2;
+      const hw = halfWidthOf(p);
       const { px, py } = faceAxis(p);
       // Corners follow the drawn face, which a double end offsets off the track
       // point so the plate centres on its pair of tracks (#93).
@@ -3566,7 +3580,7 @@ const ENDPLATE_TAB = 5; // ballast-shoulder band width, inches
           );
         })}
         {poses.map((p) => {
-          const hw = (endplateWidths?.[p.id] ?? 24) / 2;
+          const hw = halfWidthOf(p);
           // Along the face (perpendicular to the track), oriented to the
           // centre-line normal so both ends offset the same way.
           const { px: fx, py: fy } = faceAxis(p);
