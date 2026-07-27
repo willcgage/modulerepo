@@ -5,6 +5,27 @@ Headings are `version — date` (YYYY-MM-DD).
 
 ---
 
+## v0.33.0 — 2026-07-26
+
+### Added
+- **Fast Tracks crossovers are in the parts library — with a spacing warning worth reading.**
+
+  | crossover | angle | 2nd frog | default length | minimum | track spacing |
+  |---|---|---|---|---|---|
+  | #6 | 9.46° | 19° | 10.07″ | 9.31″ | **1.09″** |
+  | #8 | 7.13° | 14.3° | 13.61″ | 13.07″ | **1.09″** |
+
+  ⚠️ **Free-moN requires double track to be spaced 1.125″, and these fixtures build to 1.09″.** A crossover fixture is machined for one spacing and can't be built to another, so a crossover made on either one puts the second track 0.035″ closer than the standard. Your endplates hold 1.125″ at both ends, so the two tracks pinch together through the crossover and open back out.
+
+  It's 0.9 mm and most people will absorb it without thinking about it. It's recorded because it's a real property of the part, not a tolerance, and it's the sort of thing worth knowing *before* you buy a fixture for a double-track module. Nothing warns you or stops you.
+
+  **No Atlas crossovers yet** — we have no figures for them.
+
+- **Admins can record crossover dimensions.** New "Crossover" kind, plus track spacing and second frog angle, with the Free-moN comparison shown on the form.
+
+### Fixed
+- **A crossover is no longer offered as an answer to "which switch is this?"** It's an assembly — two turnouts and the diagonal between them — so naming a single turnout as one would have handed that turnout the length of the whole crossover.
+
 ## v0.32.0 — 2026-07-26
 
 ### Added

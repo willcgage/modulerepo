@@ -28,6 +28,7 @@ const KIND_OPTIONS = [
   { value: "turnout", label: "Turnout" },
   { value: "wye", label: "Wye" },
   { value: "curved-turnout", label: "Curved turnout" },
+  { value: "crossover", label: "Crossover — two turnouts and the diagonal" },
   { value: "crossing", label: "Crossing" },
 ];
 
@@ -141,6 +142,24 @@ function PartFields({ row }: { row?: TrackPartRow }) {
             <SelectField label="…source" name="substitution_radius_source" defaultValue={row?.substitution_radius_source ?? ""} options={SOURCE_OPTIONS} required={false} />
           </div>
         </div>
+        <p className="mt-3 mb-2 text-xs font-medium text-gray-700">
+          Crossovers only — an assembly, not a single turnout
+        </p>
+        <div className="grid gap-x-4 sm:grid-cols-2">
+          <NumberField label="Track spacing (centre to centre)" name="track_spacing_inches" defaultValue={n(row?.track_spacing_inches)} required={false} step="any" min={0} />
+          <SelectField label="…source" name="track_spacing_source" defaultValue={row?.track_spacing_source ?? ""} options={SOURCE_OPTIONS} required={false} />
+          <NumberField label="Second frog angle (degrees)" name="secondary_frog_angle_deg" defaultValue={n(row?.secondary_frog_angle_deg)} required={false} step="any" min={0} />
+          <SelectField label="…source" name="secondary_frog_angle_source" defaultValue={row?.secondary_frog_angle_source ?? ""} options={SOURCE_OPTIONS} required={false} />
+        </div>
+        <p className="mt-1 text-xs text-gray-500">
+          A crossover fixture is machined for{" "}
+          <span className="font-medium">one</span> track spacing and can&apos;t be
+          built to another, so this decides whether the part suits a standard at
+          all. <span className="font-medium">Free-moN §2.0 requires 1.125″</span>
+          {" "}— the Fast Tracks N crossovers build to 1.09″, which is 0.035″
+          tighter. Record what the maker states; don&apos;t round it toward the
+          standard.
+        </p>
         <p className="mt-1 text-xs text-gray-500">
           Not every manufacturer publishes the same numbers — Fast Tracks give an
           angle, two radii and two lengths and no landmarks at all, where Atlas

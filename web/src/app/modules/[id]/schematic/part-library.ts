@@ -112,7 +112,16 @@ export function selectableParts(library: TrackPart[] = PART_LIBRARY): TrackPart[
     !!p.overallLength ||
     !!p.outerRadius ||
     !!p.innerRadius;
-  return library.filter((p) => p.kind !== "flex" && affectsDrawing(p));
+  // ⚠️ CROSSOVERS ARE EXCLUDED, and not as an oversight. This picker sets
+  // `partId` on ONE turnout, and a crossover is an ASSEMBLY — two turnouts plus
+  // the diagonal, sold as a single fixture. Offering it here would let a lone
+  // turnout claim the 10.07″ length of the whole crossover and read, in a field
+  // asking "which switch is this?", as an answer that isn't a switch. The parts
+  // are in the library for the canvas's own crossover tool to use; they just
+  // aren't a single turnout's identity.
+  return library.filter(
+    (p) => p.kind !== "flex" && p.kind !== "crossover" && affectsDrawing(p),
+  );
 }
 
 /** {@link selectableParts}, grouped for a manufacturer-then-part picker. */

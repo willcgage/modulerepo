@@ -55,6 +55,7 @@ function readPart(formData: FormData) {
   const diverging = number(formData, "diverging_length_inches");
   const minimum = number(formData, "minimum_length_inches");
   const buildable = formData.get("buildable") != null;
+  const spacing = number(formData, "track_spacing_inches");
 
   // The database enforces these too; checking here turns a constraint violation
   // into a sentence that says which landmark is wrong.
@@ -66,6 +67,15 @@ function readPart(formData: FormData) {
     );
   if (frog != null && overall != null && frog >= overall)
     fail("The frog must sit inside the part — check which end you measured from.");
+
+  // Track spacing belongs to an assembly that joins two parallel tracks. On a
+  // single turnout it has nothing to describe, and recording one there would
+  // invent a second track the part doesn't have.
+  if (spacing != null && text(formData, "kind") !== "crossover")
+    fail(
+      "Track spacing is the centre-to-centre distance of the two parallel " +
+        "tracks a CROSSOVER joins — set the kind to Crossover, or leave it blank.",
+    );
 
   // A minimum length only means anything on a fixture, and it has to be a
   // floor: a part that can't be built shorter than its default has no range.
@@ -127,6 +137,10 @@ function readPart(formData: FormData) {
     minimum_length_source: source(formData, "minimum_length_source"),
     substitution_radius_inches: number(formData, "substitution_radius_inches"),
     substitution_radius_source: source(formData, "substitution_radius_source"),
+    track_spacing_inches: spacing,
+    track_spacing_source: source(formData, "track_spacing_source"),
+    secondary_frog_angle_deg: number(formData, "secondary_frog_angle_deg"),
+    secondary_frog_angle_source: source(formData, "secondary_frog_angle_source"),
     buildable,
     lead_inches: number(formData, "lead_inches"),
     lead_source: source(formData, "lead_source"),
