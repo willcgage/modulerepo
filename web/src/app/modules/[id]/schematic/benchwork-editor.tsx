@@ -795,10 +795,21 @@ export function BenchworkEditor({
     // on the board (it already drives the dispatcher view). Geometry is only
     // the fallback for a wye or an unset hand, which have no side to state.
     const handSide = divergeSideForHand(t.kind, toward, t.flipped);
+    const geoSide = Math.sign((far.x - m.x) * m.nx + (far.y - m.y) * m.ny) || 1;
+    // ⚠️ A CROSSOVER LEG HAS NO FREE CHOICE OF SIDE, so hand does not get a vote
+    // (#196). Every other turnout throws to its hand — a right-hand turnout
+    // throws right whichever lane its siding sits on, which is the rule above.
+    // But a crossover connector already says where its diagonal goes: at the
+    // other end of it, on the other track. A leg that obeyed its hand instead
+    // pointed AWAY from the pair — the two turnouts on the parallel main drew
+    // legs off the top of the module, connected to nothing.
+    //
+    // This is the same exemption the comment above grants a wye: a side that is
+    // determined has nothing for hand to state. The hand is still right and
+    // still drives the dispatcher view; it just isn't what decides this.
+    const crossoverLeg = dt.role === "crossover";
     const side =
-      forceSide ??
-      (handSide || undefined) ??
-      (Math.sign((far.x - m.x) * m.nx + (far.y - m.y) * m.ny) || 1);
+      forceSide ?? (crossoverLeg ? geoSide : ((handSide || undefined) ?? geoSide));
     const size = t.size && t.size > 0 ? t.size : 6;
     // A curved turnout sweeps over a LONGER leg so its diverging route reads as a
     // pronounced arc (carrying the curve well past a bare frog, per the curved-
@@ -1104,6 +1115,37 @@ export function BenchworkEditor({
     return out;
   };
 
+  /**
+   * A crossover connector's band: BETWEEN THE TWO TURNOUTS' JOINS, not between
+   * the two mains (#196).
+   *
+   * Its authored path runs main centre-line to main centre-line, which is the
+   * ground the two turnouts' own diverging legs already cover — so the diagonal
+   * was drawn twice, once by the connector and once by each leg, and a double
+   * crossover came out as six diagonals instead of two.
+   *
+   * Every other track already splits this way: the turnout owns its diverging
+   * rails, and the track it feeds begins where they end (#189). A siding's
+   * authored path simply starts after the leg; a connector's didn't, because it
+   * was generated from the two mains at drop time. Deriving it from the joins
+   * makes leg → band → leg one continuous route, and lands its ends on the
+   * PINCHED rails for free, since the legs are walked from the hosts and those
+   * follow `lanePath` (#180).
+   *
+   * Null unless exactly two turnouts reach it — one at each end is what makes a
+   * crossover a crossover, and anything else is data we shouldn't guess about.
+   */
+  const crossoverBody = (t: CanvasTrack): Pt[] | null => {
+    if (t.role !== "crossover") return null;
+    const legs = legsByTrack.get(t.id);
+    if (!legs || legs.length !== 2) return null;
+    const [a, b] = legs;
+    const d = Math.hypot(a.join.x - b.join.x, a.join.y - b.join.y);
+    // Legs that already meet leave nothing to bridge; drawing a zero-length
+    // band would just add a blob at the joint.
+    return d < 0.05 ? null : [a.join, b.join];
+  };
+
   /** A stub spur's diverging route, angled away like the prototype (Option 1):
    * the throat→frog leg (already at the frog angle) CONTINUES straight along the
    * frog tangent, instead of bending back to run parallel to the main. So a
@@ -1331,9 +1373,12 @@ export function BenchworkEditor({
                 // with no throat→frog leg prepended (#131).
                 // Any authored path draws AS AUTHORED — Main 2 always did; every
                 // other drawn track does now too (#189).
-                t.path && t.path.length >= 2
+                // A crossover's band is derived from its turnouts' joins, not
+                // from the stored main-to-main path — see `crossoverBody`.
+                crossoverBody(t) ??
+                (t.path && t.path.length >= 2
                   ? samplePath(authoredTrackPath(t))
-                  : (divergingStubPath(t) ?? passingSidingBody(t) ?? laneBody(t)),
+                  : (divergingStubPath(t) ?? passingSidingBody(t) ?? laneBody(t))),
             }))
             .filter((t) => t.pts.length > 1)
         : [],
