@@ -7,6 +7,8 @@ import {
   MAIN_TRACK_ID,
   MAIN2_TRACK_ID,
   stateToDoc,
+  graphToDoc,
+  type TrackPiece,
   buildTransition,
   buildCrossover,
   isTransitionTurnout,
@@ -60,6 +62,7 @@ import {
 } from "@/lib/module-schematic";
 import { snapPoseToOutline, sampleAt } from "@/lib/physical-track";
 import { partLibraryWith } from "./part-library";
+import { startJointFor } from "./piece-layer";
 import type { StoredTrackPart } from "@willcgage/module-schematic";
 import {
   returnLoop,
@@ -124,7 +127,8 @@ const isCanvasSel = (s: Selection | null): s is CanvasSelection =>
     s.kind === "track" ||
     s.kind === "endplate" ||
     s.kind === "industry" ||
-    s.kind === "cp");
+    s.kind === "cp" ||
+    s.kind === "piece");
 
 export function SchematicEditor({
   moduleId,
@@ -737,6 +741,49 @@ export function SchematicEditor({
       return next;
     });
   };
+
+  /**
+   * Lay out the pieces (ADR 0001).
+   *
+   * ⚠️ `commit` false is a MID-DRAG frame: it must not take an undo snapshot,
+   * or one Ctrl+Z rewinds a single pixel of a drag. `patch` coalesces rapid
+   * edits, but a drag emits far more than that window forgives.
+   *
+   * The pieces are stored and nothing else on the module is touched — the
+   * derivation that turns them into tracks is a separate, explicit step
+   * (`deriveGraphDoc`), so laying a piece can never quietly rewrite the
+   * positional track an owner already has.
+   */
+  const setPieces = (next: TrackPiece[], opts?: { commit?: boolean }) => {
+    if (readOnly) return;
+    if (opts?.commit) snapshot();
+    setState((prev) => {
+      // ⚠️ The start is DERIVED every time, not remembered. The walk runs one way
+      // from it, so a start in the middle of a run reports everything behind it
+      // as unreachable — which is what "the first piece laid" gives you the
+      // moment a second piece is snapped onto its back.
+      const a = poses.find((p) => p.id === "A");
+      const startAt = startJointFor(next, partLibrary, a ? { x: a.x, y: a.y } : null);
+      return {
+        ...prev,
+        graph: next.length && startAt ? { pieces: next, startAt } : undefined,
+      };
+    });
+  };
+
+  /** What the pieces currently say the module is — read off the graph, live.
+   * This is the whole claim of ADR 0001 made visible while you draw: lay a
+   * turnout and a siding appears here, with the positions the dispatcher view
+   * would get. */
+  const graphReadout = useMemo(() => {
+    const pieces = state.graph?.pieces ?? [];
+    if (!pieces.length) return null;
+    const startAt = state.graph!.startAt;
+    if (!pieces.some((p) => p.id === startAt.piece)) return null;
+
+    const { doc: derived, walk, warnings } = graphToDoc(pieces, { startAt, library: partLibrary });
+    return { derived, walk, warnings };
+  }, [state.graph, partLibrary]);
 
   /**
    * Edit a dimension. The doc's mainline length follows the module's (mainline
@@ -1588,10 +1635,16 @@ export function SchematicEditor({
   const savingRef = useRef(false);
   // Keep the "live value" refs current for a save scheduled a second ago
   // (writing refs during render is disallowed; this effect runs after commit).
+  // What a keyboard shortcut needs to read WITHOUT re-binding its listener on
+  // every keystroke of state — the same reason the save refs above exist.
+  const selectionRef = useRef(selection);
+  const stateRef = useRef(state);
   useEffect(() => {
     docRef.current = doc;
     dimsRef.current = dims;
     sigRef.current = { doc: docSig, dims: dimsSig };
+    selectionRef.current = selection;
+    stateRef.current = state;
   });
 
   const runSave = useCallback(async () => {
@@ -1685,14 +1738,30 @@ export function SchematicEditor({
         else if (e.key === "w" || e.key === "W") setTool("turnout");
         else if (e.key === "s" || e.key === "S") setTool("signal");
         else if (e.key === "i" || e.key === "I") setTool("industry");
+        else if (e.key === "p" || e.key === "P") setTool("pieces");
         else if (e.key === "Escape") {
           setSelection(null);
           setPendingTrack(null);
+        } else if (e.key === "Delete" || e.key === "Backspace") {
+          // A laid piece is the one object with no other way to remove it — the
+          // rest are removed from their inspector, and this one can be too, but
+          // laying track is a fast loop and reaching for the panel breaks it.
+          if (selectionRef.current?.kind === "piece") {
+            e.preventDefault();
+            const id = selectionRef.current.id;
+            setPieces((stateRef.current.graph?.pieces ?? []).filter((p) => p.id !== id), {
+              commit: true,
+            });
+            setSelection(null);
+          }
         }
       }
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
+    // `setPieces` is read through refs on purpose — listing it would re-bind the
+    // listener on every keystroke of state for no benefit.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [undo, redo]);
 
   /**
@@ -1903,6 +1972,8 @@ export function SchematicEditor({
                 signals={canvasSignals}
                 industries={canvasIndustries}
                 tool={tool}
+                pieces={state.graph?.pieces ?? []}
+                onPiecesChange={setPieces}
                 onTurnoutMove={moveTurnout}
                 onTrackEndMove={(id, end, pos) =>
                   patch((s) => {
@@ -1965,6 +2036,8 @@ export function SchematicEditor({
             select={setSelection}
             state={state}
             patch={patch}
+            setPieces={setPieces}
+            graphReadout={graphReadout}
             onTurnoutPos={moveTurnout}
             mains={mainRows}
             flex={flexByTrack}
@@ -2042,6 +2115,9 @@ const TOOL_GROUPS: RailTool[][] = [
     { id: "track", key: "T", label: "Track", glyph: "═", hint: "Draw the mainline · bend a siding or spur (T)" },
     { id: "turnout", key: "W", label: "Turnout", glyph: "⋋", hint: "Drop a turnout on the main (W)" },
     { id: "signal", key: "S", label: "Signal", glyph: "⚑", hint: "Drop a signal / control point on the main (S)" },
+    // ⭐ ADR 0001 — track built from the parts it is made of. Sits with the
+    // other track tools because that is what it is, not a mode apart.
+    { id: "pieces", key: "P", label: "Pieces", glyph: "⛓", hint: "Lay track as real pieces — they snap end to end (P)" },
   ],
   [{ id: "industry", key: "I", label: "Industry", glyph: "▢", hint: "Place an industry on a track (I)" }],
 ];
@@ -2076,6 +2152,51 @@ function sectionLengths(breaks: number[], lengthInches: number): number[] {
  * `value: null` shows an empty field, and clearing one commits `null` — for a
  * field whose blank is meaningful ("use the standard's recommendation").
  */
+/**
+ * What the pieces derive to, live (ADR 0001).
+ *
+ * ⭐ This is the whole claim made visible while you draw: lay a turnout and a
+ * siding appears here, with the very positions the dispatcher view will get,
+ * because it IS the derivation — `graphToDoc`, the same function, not a preview
+ * of it.
+ *
+ * The warnings matter more than the tally. An open end or a stacked joint is
+ * the difference between track that is joined and track that merely looks it,
+ * and it cannot be seen from the drawing: a piece a third of an inch short of
+ * snapping is drawn exactly like one that met.
+ */
+function GraphReadout({
+  readout,
+}: {
+  readout: {
+    derived: ReturnType<typeof graphToDoc>["doc"];
+    walk: ReturnType<typeof graphToDoc>["walk"];
+    warnings: string[];
+  } | null;
+}) {
+  if (!readout) return null;
+  const { derived, warnings } = readout;
+  const extra = derived.tracks.filter((t) => t.role !== "main");
+  return (
+    <div className="rounded-md border border-gray-200 bg-gray-50 p-2 text-[11px] text-gray-600">
+      <div className="font-medium text-gray-700">These pieces make</div>
+      <div>
+        Main {derived.lengthInches?.toFixed(1)}″
+        {extra.length > 0 &&
+          ` · ${extra.map((t) => `${t.role} ${t.fromPos?.toFixed(1)}–${t.toPos?.toFixed(1)}″`).join(" · ")}`}
+        {derived.turnouts?.length ? ` · ${derived.turnouts.length} turnout${derived.turnouts.length > 1 ? "s" : ""}` : ""}
+      </div>
+      {warnings.length > 0 && (
+        <ul className="mt-1 list-disc space-y-0.5 pl-4 text-amber-700">
+          {warnings.map((w, i) => (
+            <li key={i}>{w}</li>
+          ))}
+        </ul>
+      )}
+    </div>
+  );
+}
+
 function CommitNumberField({
   value,
   onCommit,
@@ -2900,11 +3021,22 @@ function Inspector({
   industryTypes,
   carTypes,
   onCarTypeSuggested,
+  setPieces,
+  graphReadout,
 }: {
   selection: Selection | null;
   select: (s: Selection | null) => void;
   state: EditorState;
   patch: (fn: (s: EditorState) => void) => void;
+  /** Lay out the pieces (ADR 0001) — the graph's own setter, because it also
+   * keeps `startAt` pointing at a piece that still exists. */
+  setPieces: (next: TrackPiece[], opts?: { commit?: boolean }) => void;
+  /** What the pieces currently derive to — null when none are laid. */
+  graphReadout: {
+    derived: ReturnType<typeof graphToDoc>["doc"];
+    walk: ReturnType<typeof graphToDoc>["walk"];
+    warnings: string[];
+  } | null;
   /** Moving a turnout carries its branch route with it, which needs the
    * centre-line — so it's the parent's job, not a raw patch here (#181). */
   onTurnoutPos: (id: string, pos: number) => void;
@@ -4002,6 +4134,86 @@ function Inspector({
         </div>
       </>,
       { fn: () => patch((s) => s.crossings.splice(i, 1)), label: "Remove crossing" },
+    );
+  }
+
+  // ---- A PIECE OF TRACK (ADR 0001) ----
+  if (selection.kind === "piece") {
+    const pieces = state.graph?.pieces ?? [];
+    const piece = pieces.find((p) => p.id === selection.id);
+    if (!piece) return null;
+    const part = partLibrary.find((p) => p.id === piece.partId);
+    const isFlex = part?.kind === "flex";
+    const r2 = (n: number) => Math.round(n * 100) / 100;
+    const editPiece = (fields: Partial<TrackPiece>) =>
+      setPieces(
+        pieces.map((p) => (p.id === piece.id ? { ...p, ...fields } : p)),
+        { commit: true },
+      );
+    return shell(
+      `Piece · ${part?.name ?? piece.partId}`,
+      <>
+        <p className="text-xs text-gray-500">
+          {isFlex
+            ? "Flex track is the one piece you cut. Drag the square handle to length; drag the piece to move it, and the round handle to turn it."
+            : "A part is the shape it is built to — it can only be moved and turned. Its ends snap to any open joint."}
+        </p>
+        {isFlex && (
+          <label className="block text-xs font-medium text-gray-600">
+            Length (in)
+            <CommitNumberField
+              step={0.25}
+              value={r2(piece.lengthInches ?? 0)}
+              onCommit={(v) => editPiece({ lengthInches: Math.max(1, v ?? 1) })}
+              inp={inp}
+            />
+          </label>
+        )}
+        <div className="grid grid-cols-3 gap-2">
+          <label className="block text-xs font-medium text-gray-600">
+            X (in)
+            <CommitNumberField
+              step={0.25}
+              value={r2(piece.x)}
+              onCommit={(v) => v != null && editPiece({ x: v })}
+              inp={inp}
+            />
+          </label>
+          <label className="block text-xs font-medium text-gray-600">
+            Y (in)
+            <CommitNumberField
+              step={0.25}
+              value={r2(piece.y)}
+              onCommit={(v) => v != null && editPiece({ y: v })}
+              inp={inp}
+            />
+          </label>
+          <label className="block text-xs font-medium text-gray-600">
+            Angle°
+            <CommitNumberField
+              step={1}
+              value={r2(piece.rotationDeg)}
+              onCommit={(v) => v != null && editPiece({ rotationDeg: v })}
+              inp={inp}
+            />
+          </label>
+        </div>
+        {part && part.kind !== "flex" && (
+          <label className="flex items-center gap-2 text-xs font-medium text-gray-600">
+            <input
+              type="checkbox"
+              checked={!!piece.flipped}
+              onChange={(e) => editPiece({ flipped: e.target.checked })}
+            />
+            Mirrored (a left-hand part from a right)
+          </label>
+        )}
+        <GraphReadout readout={graphReadout} />
+      </>,
+      {
+        fn: () => setPieces(pieces.filter((p) => p.id !== piece.id), { commit: true }),
+        label: "Remove piece",
+      },
     );
   }
 

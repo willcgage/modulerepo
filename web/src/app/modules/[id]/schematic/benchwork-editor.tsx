@@ -22,9 +22,18 @@ import {
   PINCH_EASE_INCHES,
   type EndplatePose,
   type TrackPart,
+  type TrackPiece,
   type TurnoutKind,
+  snapPiece,
 } from "@willcgage/module-schematic";
 import { drawablePartFor, PART_LIBRARY } from "./part-library";
+import {
+  PieceLayer,
+  PiecePalette,
+  flexLengthFor,
+  newPiece,
+  rotationFor,
+} from "./piece-layer";
 import {
   lanePath,
   sampleAt,
@@ -300,14 +309,24 @@ export type CanvasSelection =
   | { kind: "track"; id: string }
   | { kind: "endplate"; id: string }
   | { kind: "industry"; id: string }
-  | { kind: "cp"; id: string };
+  | { kind: "cp"; id: string }
+  | { kind: "piece"; id: string };
 
 /**
  * What a click on empty canvas means. Without this the canvas has to guess, and
  * it guessed "add a benchwork corner" — so there was no way to click background
  * and mean "nothing". Select is the default; Benchwork is the drawing mode.
  */
-export type CanvasTool = "select" | "benchwork" | "industry" | "track" | "turnout" | "signal";
+export type CanvasTool =
+  | "select"
+  | "benchwork"
+  | "industry"
+  | "track"
+  | "turnout"
+  | "signal"
+  /** ⭐ ADR 0001 — lay track as the PIECES it is built from. A module authored
+   * this way derives the same ordinary document; nothing else changes. */
+  | "pieces";
 
 /**
  * Benchwork outline editor — draw a module's physical footprint as a polygon in
@@ -363,6 +382,8 @@ export function BenchworkEditor({
   onSelect,
   tool = "select",
   partLibrary = PART_LIBRARY,
+  pieces = [],
+  onPiecesChange,
 }: {
   outline: BenchworkPoint[];
   /** A benchwork HOLE — the loop's open middle, punched out of `outline` so the
@@ -504,6 +525,11 @@ export function BenchworkEditor({
    * has never seen start drawing its own extent. Defaults to the built-ins so
    * the canvas still works standalone. */
   partLibrary?: TrackPart[];
+  /** ⭐ THE TRACK AS PLACED PIECES (ADR 0001). Empty = this module is authored
+   * positionally, and the Pieces tool has nothing to show. */
+  pieces?: TrackPiece[];
+  /** `commit` false = mid-drag (don't take an undo snapshot for every frame). */
+  onPiecesChange?: (next: TrackPiece[], opts?: { commit?: boolean }) => void;
 }) {
   const svgRef = useRef<SVGSVGElement | null>(null);
   const dragRef = useRef<
@@ -517,8 +543,17 @@ export function BenchworkEditor({
     | { kind: "endplateEnd"; id: string }
     | { kind: "endplateMove"; id: string }
     | { kind: "industryEnd"; id: string; end: "from" | "to" }
+    /** ADR 0001 — moving a whole piece (`grab` = pointer offset from its
+     * origin, so it doesn't jump to the pointer), or working one of its
+     * handles. */
+    | { kind: "piece"; id: string; grab: Pt }
+    | { kind: "pieceHandle"; id: string; handle: "rotate" | "flex" }
     | null
   >(null);
+  /** ADR 0001 — the part armed in the Pieces palette, and a drag ghost while one
+   * is being dragged out of it. Armed = the next board click lays that part. */
+  const [armedPart, setArmedPart] = useState<string | null>(null);
+  const [partDrag, setPartDrag] = useState<{ partId: string; x: number; y: number } | null>(null);
   /** An in-progress pan: pointer origin + the view at grab time. */
   /** An in-progress pan. `tentative` marks a press on empty canvas under the
    * Select tool, which only becomes a pan once the pointer moves — a click that
@@ -1596,14 +1631,36 @@ export function BenchworkEditor({
     // getBoundingClientRect is reliable for an inline SVG; ResizeObserver's
     // contentRect can report 0 height for one, which would strand `scale` on
     // its fallback (and peg the zoom readout at 100%).
+    //
+    // ⚠️⚠️ TWO WAYS THIS SILENTLY WRECKS THE WHOLE CANVAS, both found by
+    // mounting the editor in a container that had not been laid out yet:
+    //
+    // 1. **A BORDERED SVG NEVER MEASURES ZERO — it measures its border, 2×2.**
+    //    So a "no size yet" first paint sails through a `width && height` guard
+    //    and is taken as the truth. `scale` then comes out ~600× too small and
+    //    EVERY device-constant mark is drawn in board-sized inches: the corner
+    //    handles become 224″ circles covering the module, invisible against the
+    //    background but swallowing every click, so the canvas looks fine and is
+    //    completely dead. Demand a plausible size instead.
+    //
+    // 2. **ResizeObserver does not fire for an inline SVG** here — the element
+    //    grew from 2px to 1264 and no callback ever arrived, so nothing ever
+    //    corrected (1). Observe the PARENT, which is an ordinary block box, and
+    //    keep measuring the SVG itself.
     const measure = () => {
       const b = el.getBoundingClientRect();
-      if (b.width && b.height) setPx({ w: b.width, h: b.height });
+      if (b.width > 4 && b.height > 4) setPx({ w: b.width, h: b.height });
     };
     measure();
     const ro = new ResizeObserver(measure);
-    ro.observe(el);
-    return () => ro.disconnect();
+    ro.observe(el.parentElement ?? el);
+    // A window resize that doesn't change the parent's box (a zoom change, a
+    // devtools dock) still changes the SVG's.
+    window.addEventListener("resize", measure);
+    return () => {
+      ro.disconnect();
+      window.removeEventListener("resize", measure);
+    };
   }, []);
 
   // Hold space to pan from any tool (released → back to the active tool).
@@ -1616,6 +1673,11 @@ export function BenchworkEditor({
     };
     const up = (e: KeyboardEvent) => {
       if (e.code === "Space") setSpaceHeld(false);
+      // A palette part stays armed so a run of flex can be laid without going
+      // back to the palette between pieces — which means there has to be an
+      // obvious way to put it down again, or the next click on the board lays a
+      // piece nobody asked for.
+      if (e.key === "Escape") setArmedPart(null);
     };
     window.addEventListener("keydown", down);
     window.addEventListener("keyup", up);
@@ -2218,6 +2280,18 @@ export function BenchworkEditor({
     // there, so the drag was doing nothing, and it's the gesture people reach
     // for first (#188). A press that never moves is still a click, and a
     // background click still means "select nothing"; `onUp` decides which.
+    // Pieces tool: an armed part lays where you click. Clicking bare board with
+    // nothing armed means "select nothing", same as Select.
+    if (tool === "pieces") {
+      if (armedPart) {
+        layPiece(armedPart, toLocal(e));
+        return;
+      }
+      onSelect?.(null);
+      panRef.current = { from: toLocal(e), view: { ...vbBox }, tentative: true, moved: false };
+      svgRef.current?.setPointerCapture?.(e.pointerId);
+      return;
+    }
     if (tool === "select") {
       svgRef.current?.setPointerCapture?.(e.pointerId);
       panRef.current = { from: toLocal(e), view: { ...vbBox }, tentative: true, moved: false };
@@ -2496,6 +2570,28 @@ export function BenchworkEditor({
     const d = dragRef.current;
     if (!d) return;
 
+    // Pieces move in real inches — no projection onto anything. That is the
+    // whole difference from the positional model above: a piece is where it is
+    // on the board, and `pos` is read off it afterwards.
+    if (d.kind === "piece") {
+      const piece = pieces.find((x) => x.id === d.id);
+      if (piece) putPiece({ ...piece, x: p.x - d.grab.x, y: p.y - d.grab.y });
+      return;
+    }
+    if (d.kind === "pieceHandle") {
+      const piece = pieces.find((x) => x.id === d.id);
+      if (!piece) return;
+      if (d.handle === "rotate") {
+        putPiece({ ...piece, rotationDeg: rotationFor(piece, p) });
+        setReadout(`${fmt(rotationFor(piece, p))}°`);
+      } else {
+        const len = flexLengthFor(piece, p);
+        putPiece({ ...piece, lengthInches: len });
+        setReadout(lengthLabel(len));
+      }
+      return;
+    }
+
     // Track features are positional: project the pointer back onto the main.
     if (d.kind === "turnout") {
       if (centerline.length >= 2) {
@@ -2685,6 +2781,51 @@ export function BenchworkEditor({
     }
     commit(next);
   };
+  // ─── Pieces (ADR 0001) ────────────────────────────────────────────────────
+  /**
+   * Lay a piece, then let it find its joint.
+   *
+   * ⭐ EVERY placement goes through `snapPiece`, including the very first click,
+   * so there is one answer to "did that connect?" — the package's. It only
+   * offers OPEN joints, which is how an owner is stopped from stacking a third
+   * rail end on a junction rather than being told off for it afterwards.
+   */
+  const layPiece = (partId: string, at: Pt) => {
+    if (!onPiecesChange) return;
+    const part = partLibrary.find((p) => p.id === partId);
+    const fresh = newPiece(partId, at, pieces, part);
+    const snapped = snapPiece(fresh, pieces, partLibrary, world(14));
+    onPiecesChange([...pieces, snapped?.piece ?? fresh], { commit: true });
+    onSelect?.({ kind: "piece", id: fresh.id });
+  };
+
+  /** Replace one piece, keeping the rest. */
+  const putPiece = (next: TrackPiece, commit = false) =>
+    onPiecesChange?.(pieces.map((p) => (p.id === next.id ? next : p)), { commit });
+
+  /** Drag a part out of the palette onto the board. A ghost follows the pointer;
+   * releasing over the canvas lays it there. Window listeners, so the drag
+   * survives leaving the little button. */
+  const startPartDrag = (partId: string, e: React.PointerEvent) => {
+    e.preventDefault();
+    setArmedPart(partId);
+    setPartDrag({ partId, x: e.clientX, y: e.clientY });
+    const move = (ev: PointerEvent) => setPartDrag({ partId, x: ev.clientX, y: ev.clientY });
+    const up = (ev: PointerEvent) => {
+      window.removeEventListener("pointermove", move);
+      window.removeEventListener("pointerup", up);
+      setPartDrag(null);
+      const svg = svgRef.current;
+      if (!svg) return;
+      const r = svg.getBoundingClientRect();
+      const over =
+        ev.clientX >= r.left && ev.clientX <= r.right && ev.clientY >= r.top && ev.clientY <= r.bottom;
+      if (over) layPiece(partId, toLocal(ev));
+    };
+    window.addEventListener("pointermove", move);
+    window.addEventListener("pointerup", up);
+  };
+
   const onUp = (e: React.PointerEvent) => {
     // Draw-to-create: releasing finishes the new track.
     if (placeRef.current) {
@@ -2712,6 +2853,17 @@ export function BenchworkEditor({
     // Releasing a turnout drag: an End-of-Double-Track turnout dragged onto the
     // single end's plate completes the double main (the editor flips the config).
     if (dragRef.current?.kind === "turnout") onTurnoutDrop?.(dragRef.current.id);
+    // Releasing a piece: let it take the nearest open joint. Snapping on RELEASE
+    // rather than while dragging means the piece follows the pointer honestly
+    // and lands where it belongs — snapping live makes it fight the hand.
+    const pd = dragRef.current;
+    if ((pd?.kind === "piece" || pd?.kind === "pieceHandle") && onPiecesChange) {
+      const moved = pieces.find((p) => p.id === pd.id);
+      if (moved && pd.kind !== "pieceHandle") {
+        const snap = snapPiece(moved, pieces.filter((p) => p.id !== moved.id), partLibrary, world(14));
+        if (snap) putPiece(snap.piece, true);
+      }
+    }
     dragRef.current = null;
     setReadout(null);
   };
@@ -3033,6 +3185,20 @@ const ENDPLATE_TAB = 5; // ballast-shoulder band width, inches
               </span>
             )}
           </>
+        ) : tool === "pieces" ? (
+          <>
+            <PiecePalette
+              library={partLibrary}
+              armed={armedPart}
+              onArm={setArmedPart}
+              onDragStart={startPartDrag}
+            />
+            <span className="text-gray-500">
+              {armedPart
+                ? "Click the board to lay it. Ends snap to open joints."
+                : "Drag a part onto the board — or click one, then click the board."}
+            </span>
+          </>
         ) : tool === "track" ? (
           pendingTrack ? (
             <>
@@ -3129,6 +3295,14 @@ const ENDPLATE_TAB = 5; // ballast-shoulder band width, inches
           <TurnoutGlyph kind={paletteDrag.kind} className="h-4 w-6" />
         </div>
       )}
+      {partDrag && (
+        <div
+          className="pointer-events-none fixed z-50 rounded border border-blue-500 bg-white/95 px-2 py-1 text-[11px] text-blue-700 shadow-md"
+          style={{ left: partDrag.x + 12, top: partDrag.y + 12 }}
+        >
+          {partLibrary.find((p) => p.id === partDrag.partId)?.name ?? partDrag.partId}
+        </div>
+      )}
       <svg
         ref={svgRef}
         viewBox={vb}
@@ -3138,6 +3312,10 @@ const ENDPLATE_TAB = 5; // ballast-shoulder band width, inches
         className={`min-h-0 flex-1 touch-none rounded-md border border-gray-300 bg-white ${
           spaceHeld
             ? "cursor-grab"
+            : tool === "pieces"
+              ? armedPart
+                ? "cursor-crosshair"
+                : "cursor-grab"
             : tool === "benchwork" || tool === "industry" || tool === "track" || tool === "turnout" || tool === "signal"
               ? "cursor-crosshair"
               : // Select: the background is draggable, so say so (#188). Objects
@@ -3974,6 +4152,45 @@ const ENDPLATE_TAB = 5; // ballast-shoulder band width, inches
           </g>
         )}
 
+        {/* ⭐ THE PIECES (ADR 0001) — drawn OVER the positional track, not
+            instead of it. A module can carry both while the graph is being laid,
+            and hiding one would be deciding the coexistence question by drawing
+            rather than by asking. On a blank module there is nothing underneath
+            anyway, which is the case this is for.
+
+            ⚠️ DRAWN THIS LATE ON PURPOSE. Sitting with the track it was
+            painted UNDER the mainline guide, the endplate faces and the board
+            handles — all of which are hit-testable, so a press on a piece lying
+            along the centre line went to the dashed guide instead and the piece
+            could not be picked up at all. In this tool the pieces ARE the
+            objects; everything else is context. */}
+        {pieces.length > 0 && (
+          <PieceLayer
+            pieces={pieces}
+            library={partLibrary}
+            selected={selection?.kind === "piece" ? selection.id : null}
+            scale={scale}
+            laying={tool === "pieces" && !!armedPart}
+            onSelect={(id) => onSelect?.(id ? { kind: "piece", id } : null)}
+            onPieceDown={(id, e) => {
+              if (tool !== "pieces" && tool !== "select") return;
+              const piece = pieces.find((x) => x.id === id);
+              if (!piece || !onPiecesChange) return;
+              const at = toLocal(e);
+              dragRef.current = {
+                kind: "piece",
+                id,
+                grab: { x: at.x - piece.x, y: at.y - piece.y },
+              };
+              svgRef.current?.setPointerCapture?.(e.pointerId);
+            }}
+            onHandleDown={(id, handle, e) => {
+              if (!onPiecesChange) return;
+              dragRef.current = { kind: "pieceHandle", id, handle };
+              svgRef.current?.setPointerCapture?.(e.pointerId);
+            }}
+          />
+        )}
         {/* --- Dimension callouts: the board's overall W × H, drafting-style --- */}
         {extentW > 0 && (
           <g pointerEvents="none" stroke="#cbd5e1" fill="#64748b" fontSize={world(10)}>
