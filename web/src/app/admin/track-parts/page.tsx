@@ -24,12 +24,19 @@ const SOURCE_OPTIONS = [
   { value: "unverified", label: "unverified (plausible, unconfirmed)" },
 ];
 
+// ⚠️ EVERY KIND THE LIBRARY CAN HOLD. This list had five while the model had
+// nine, so there was no way to add a length of flex, a bumper or any sectional
+// piece at all — the parts an owner is most likely to have a box of.
 const KIND_OPTIONS = [
   { value: "turnout", label: "Turnout" },
   { value: "wye", label: "Wye" },
   { value: "curved-turnout", label: "Curved turnout" },
   { value: "crossover", label: "Crossover — two turnouts and the diagonal" },
   { value: "crossing", label: "Crossing" },
+  { value: "straight", label: "Straight — a sectional piece of fixed length" },
+  { value: "curve", label: "Curve — a sectional piece of fixed radius and arc" },
+  { value: "flex", label: "Flex — sold by the length, cut and bent to fit" },
+  { value: "bumper", label: "Bumper — the end of the track" },
 ];
 
 const STATUS_OPTIONS = [
@@ -199,6 +206,12 @@ function PartFields({ row }: { row?: TrackPartRow }) {
         <div className="mt-3 grid gap-x-4 sm:grid-cols-2">
           <NumberField label="Lead (points → frog), only if the offsets aren't known" name="lead_inches" defaultValue={n(row?.lead_inches)} required={false} step="any" min={0} />
           <SelectField label="…source" name="lead_source" defaultValue={row?.lead_source ?? ""} options={SOURCE_OPTIONS} required={false} />
+          {/* A SECTIONAL CURVE'S OWN radius and arc — how curves are sold, and
+              what is on the box. Its length is the arc between them and is
+              deliberately not asked for: a chord entered as a length would
+              shorten every curve on the module. */}
+          <NumberField label="Curve radius (sectional curve)" name="radius_inches" defaultValue={n(row?.radius_inches)} required={false} step="any" min={0} />
+          <NumberField label="Curve arc (degrees)" name="arc_degrees" defaultValue={n(row?.arc_degrees)} required={false} step="any" min={0} />
           <NumberField label="Outer radius" name="outer_radius_inches" defaultValue={n(row?.outer_radius_inches)} required={false} step="any" min={0} />
           <NumberField label="Inner radius" name="inner_radius_inches" defaultValue={n(row?.inner_radius_inches)} required={false} step="any" min={0} />
           <SelectField label="Radii source" name="radius_source" defaultValue={row?.radius_source ?? ""} options={SOURCE_OPTIONS} required={false} />

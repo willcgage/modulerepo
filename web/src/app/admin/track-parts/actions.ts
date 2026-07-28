@@ -159,6 +159,8 @@ function readPart(formData: FormData) {
     buildable,
     lead_inches: number(formData, "lead_inches"),
     lead_source: source(formData, "lead_source"),
+    radius_inches: number(formData, "radius_inches"),
+    arc_degrees: number(formData, "arc_degrees"),
     outer_radius_inches: number(formData, "outer_radius_inches"),
     inner_radius_inches: number(formData, "inner_radius_inches"),
     radius_source: source(formData, "radius_source"),

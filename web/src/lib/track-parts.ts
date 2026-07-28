@@ -15,7 +15,7 @@ export const TRACK_PART_COLUMNS =
   "track_spacing_inches, track_spacing_source, " +
   "secondary_frog_angle_deg, secondary_frog_angle_source, pieces_per_assembly, " +
   "lead_inches, lead_source, " +
-  "outer_radius_inches, inner_radius_inches, radius_source, " +
+  "outer_radius_inches, inner_radius_inches, radius_source, radius_inches, arc_degrees, " +
   "actual_angle_deg, actual_angle_source, " +
   "measurement_note, status, created_at, updated_at";
 
@@ -52,6 +52,8 @@ export interface TrackPartRow {
   lead_inches: number | string | null;
   lead_source: string | null;
   outer_radius_inches: number | string | null;
+  radius_inches?: number | string | null;
+  arc_degrees?: number | string | null;
   inner_radius_inches: number | string | null;
   radius_source: string | null;
   actual_angle_deg: number | string | null;
@@ -102,6 +104,8 @@ export function rowToStoredPart(r: TrackPartRow): StoredTrackPart {
     leadInches: num(r.lead_inches),
     leadSource: r.lead_source,
     outerRadiusInches: num(r.outer_radius_inches),
+    radiusInches: num(r.radius_inches),
+    arcDegrees: num(r.arc_degrees),
     innerRadiusInches: num(r.inner_radius_inches),
     radiusSource: r.radius_source,
     actualAngleDeg: num(r.actual_angle_deg),
