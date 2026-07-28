@@ -7,6 +7,8 @@ import {
   flexRunEnd,
   partGeometry,
   partsPlaceable,
+  pieceHand,
+  piecePartNumber,
   pieceRoutePaths,
   placedJoints,
   type TrackPart,
@@ -245,16 +247,20 @@ export function endplateTrackPoints(pose: {
     .sort((a, b) => a.y - b.y);
 }
 
-/** A new piece of `partId`, laid flat at `pt`. */
-export function newPiece(partId: string, pt: Pt, existing: TrackPiece[], part?: TrackPart): TrackPiece {
+/** What the palette has armed: a part, and which hand of it. */
+export type PieceSpec = { partId: string; flipped?: boolean };
+
+/** A new piece of `spec.partId`, laid flat at `pt`. */
+export function newPiece(spec: PieceSpec, pt: Pt, existing: TrackPiece[], part?: TrackPart): TrackPiece {
   let n = 1;
   while (existing.some((p) => p.id === `p${n}`)) n += 1;
   return {
     id: `p${n}`,
-    partId,
+    partId: spec.partId,
     x: pt.x,
     y: pt.y,
     rotationDeg: 0,
+    ...(spec.flipped ? { flipped: true } : {}),
     // Flex is the one piece a builder cuts, so it needs a length to exist at
     // all. A foot is a piece you can see and then drag to what you meant.
     ...(part?.kind === "flex" ? { lengthInches: 12 } : {}),
@@ -277,16 +283,32 @@ export function PiecePalette({
   onDragStart,
 }: {
   library: TrackPart[];
-  armed: string | null;
-  onArm: (partId: string | null) => void;
-  onDragStart: (partId: string, e: React.PointerEvent) => void;
+  armed: PieceSpec | null;
+  onArm: (spec: PieceSpec | null) => void;
+  onDragStart: (spec: PieceSpec, e: React.PointerEvent) => void;
 }) {
   const { placeable, blocked } = partsPlaceable(library);
-  const byMaker = new Map<string, TrackPart[]>();
-  for (const p of placeable) {
-    const k = `${p.manufacturer} ${p.line}`;
-    byMaker.set(k, [...(byMaker.get(k) ?? []), p]);
+  const byMaker = new Map<string, { part: TrackPart; spec: PieceSpec; label: string }[]>();
+  for (const part of placeable) {
+    const k = `${part.manufacturer} ${part.line}`;
+    // ⭐ A HANDED PART IS TWO THINGS YOU CAN OWN, so it is two buttons. Laying a
+    // right-hand turnout used to mean laying a left one and then finding a
+    // "Mirrored" checkbox in the inspector — an owner reaching for the part
+    // they are holding should not have to know that "flipped" is how the app
+    // spells it. A wye has no hand, and stays one button.
+    const hands: PieceSpec[] = pieceHand(part, false)
+      ? [{ partId: part.id }, { partId: part.id, flipped: true }]
+      : [{ partId: part.id }];
+    for (const spec of hands) {
+      const hand = pieceHand(part, spec.flipped);
+      byMaker.set(k, [
+        ...(byMaker.get(k) ?? []),
+        { part, spec, label: `${shortName(part)}${hand ? (hand === "left" ? " LH" : " RH") : ""}` },
+      ]);
+    }
   }
+  const same = (a: PieceSpec | null, b: PieceSpec) =>
+    !!a && a.partId === b.partId && !!a.flipped === !!b.flipped;
   return (
     <div className="flex flex-wrap items-center gap-2">
       {[...byMaker.entries()].map(([maker, parts]) => (
@@ -294,23 +316,26 @@ export function PiecePalette({
           <span className="text-[10px] font-medium uppercase tracking-wide text-gray-400">
             {maker}
           </span>
-          {parts.map((p) => (
-            <button
-              key={p.id}
-              type="button"
-              title={`${p.name} — drag onto the board, or click to arm and then click the board`}
-              aria-pressed={armed === p.id}
-              onPointerDown={(e) => onDragStart(p.id, e)}
-              onClick={() => onArm(armed === p.id ? null : p.id)}
-              className={`rounded border px-2 py-1 text-xs transition ${
-                armed === p.id
-                  ? "border-blue-600 bg-blue-600 text-white"
-                  : "border-gray-300 bg-white text-gray-700 hover:border-gray-400"
-              }`}
-            >
-              {shortName(p)}
-            </button>
-          ))}
+          {parts.map(({ part, spec, label }) => {
+            const number = piecePartNumber(part, spec.flipped);
+            return (
+              <button
+                key={label}
+                type="button"
+                title={`${part.name}${number ? ` (${number})` : ""} — drag onto the board, or click to arm and then click the board`}
+                aria-pressed={same(armed, spec)}
+                onPointerDown={(e) => onDragStart(spec, e)}
+                onClick={() => onArm(same(armed, spec) ? null : spec)}
+                className={`rounded border px-2 py-1 text-xs transition ${
+                  same(armed, spec)
+                    ? "border-blue-600 bg-blue-600 text-white"
+                    : "border-gray-300 bg-white text-gray-700 hover:border-gray-400"
+                }`}
+              >
+                {label}
+              </button>
+            );
+          })}
         </Fragment>
       ))}
       {blocked.length > 0 && (

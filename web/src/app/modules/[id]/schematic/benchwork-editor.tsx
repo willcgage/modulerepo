@@ -26,6 +26,7 @@ import {
   type TrackPiece,
   type TurnoutKind,
   fitFlexBetween,
+  pieceHand,
   snapPiece,
 } from "@willcgage/module-schematic";
 import { drawablePartFor, PART_LIBRARY } from "./part-library";
@@ -37,6 +38,7 @@ import {
   offAxis,
   radiusForBend,
   rotationFor,
+  type PieceSpec,
 } from "./piece-layer";
 import {
   lanePath,
@@ -560,8 +562,8 @@ export function BenchworkEditor({
   >(null);
   /** ADR 0001 — the part armed in the Pieces palette, and a drag ghost while one
    * is being dragged out of it. Armed = the next board click lays that part. */
-  const [armedPart, setArmedPart] = useState<string | null>(null);
-  const [partDrag, setPartDrag] = useState<{ partId: string; x: number; y: number } | null>(null);
+  const [armedPart, setArmedPart] = useState<PieceSpec | null>(null);
+  const [partDrag, setPartDrag] = useState<{ spec: PieceSpec; x: number; y: number } | null>(null);
   /** An in-progress pan: pointer origin + the view at grab time. */
   /** An in-progress pan. `tentative` marks a press on empty canvas under the
    * Select tool, which only becomes a pan once the pointer moves — a click that
@@ -2842,10 +2844,10 @@ export function BenchworkEditor({
    */
   const grabInches = Math.min(world(14), FREEMO_TRACK_SPACING_INCHES / 2);
 
-  const layPiece = (partId: string, at: Pt) => {
+  const layPiece = (spec: PieceSpec, at: Pt) => {
     if (!onPiecesChange) return;
-    const part = partLibrary.find((p) => p.id === partId);
-    const fresh = newPiece(partId, at, pieces, part);
+    const part = partLibrary.find((p) => p.id === spec.partId);
+    const fresh = newPiece(spec, at, pieces, part);
     const snapped = snapPiece(fresh, pieces, partLibrary, grabInches);
     onPiecesChange([...pieces, snapped?.piece ?? fresh], { commit: true });
     onSelect?.({ kind: "piece", id: fresh.id });
@@ -2858,11 +2860,11 @@ export function BenchworkEditor({
   /** Drag a part out of the palette onto the board. A ghost follows the pointer;
    * releasing over the canvas lays it there. Window listeners, so the drag
    * survives leaving the little button. */
-  const startPartDrag = (partId: string, e: React.PointerEvent) => {
+  const startPartDrag = (spec: PieceSpec, e: React.PointerEvent) => {
     e.preventDefault();
-    setArmedPart(partId);
-    setPartDrag({ partId, x: e.clientX, y: e.clientY });
-    const move = (ev: PointerEvent) => setPartDrag({ partId, x: ev.clientX, y: ev.clientY });
+    setArmedPart(spec);
+    setPartDrag({ spec, x: e.clientX, y: e.clientY });
+    const move = (ev: PointerEvent) => setPartDrag({ spec, x: ev.clientX, y: ev.clientY });
     const up = (ev: PointerEvent) => {
       window.removeEventListener("pointermove", move);
       window.removeEventListener("pointerup", up);
@@ -2872,7 +2874,7 @@ export function BenchworkEditor({
       const r = svg.getBoundingClientRect();
       const over =
         ev.clientX >= r.left && ev.clientX <= r.right && ev.clientY >= r.top && ev.clientY <= r.bottom;
-      if (over) layPiece(partId, toLocal(ev));
+      if (over) layPiece(spec, toLocal(ev));
     };
     window.addEventListener("pointermove", move);
     window.addEventListener("pointerup", up);
@@ -3361,7 +3363,14 @@ const ENDPLATE_TAB = 5; // ballast-shoulder band width, inches
           className="pointer-events-none fixed z-50 rounded border border-blue-500 bg-white/95 px-2 py-1 text-[11px] text-blue-700 shadow-md"
           style={{ left: partDrag.x + 12, top: partDrag.y + 12 }}
         >
-          {partLibrary.find((p) => p.id === partDrag.partId)?.name ?? partDrag.partId}
+          {(() => {
+            const part = partLibrary.find((p) => p.id === partDrag.spec.partId);
+            if (!part) return partDrag.spec.partId;
+            // The ghost says the same thing the button said — including the
+            // hand, so what is being dragged is never in doubt mid-drag.
+            const hand = pieceHand(part, partDrag.spec.flipped);
+            return `${part.name}${hand ? (hand === "left" ? " LH" : " RH") : ""}`;
+          })()}
         </div>
       )}
       <svg
