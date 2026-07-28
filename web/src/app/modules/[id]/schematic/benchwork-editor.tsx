@@ -3064,9 +3064,17 @@ const ENDPLATE_TAB = 5; // ballast-shoulder band width, inches
           e.stopPropagation();
           onAddIndustry(line.main ? "main" : line.id, posFrom(toLocal(e)));
         }
-      : // Turnout / Signal tools: don't intercept — let the click fall through
-        // to the background handler, which drops on the nearest track (#63/#53).
-        tool !== "turnout" && tool !== "signal" && line.selectable && onSelect
+      : // Turnout / Signal / Pieces tools: don't intercept — let the click fall
+        // through to the background handler, which drops on the nearest track
+        // (#63/#53) or lays the armed part (ADR 0001).
+        //
+        // ⚠️ THE PIECES TOOL HAD TO BE ADDED HERE TOO, and forgetting it made
+        // the tool useless on any module that already has track — which is
+        // nearly all of them. The piece layer stands aside while a part is
+        // armed, but the POSITIONAL track drawn underneath had its own click
+        // handler, so laying a piece over an existing main just selected the
+        // main. Verified on a real module before it was noticed.
+        tool !== "turnout" && tool !== "signal" && tool !== "pieces" && line.selectable && onSelect
         ? (e: React.PointerEvent) => {
             e.stopPropagation();
             onSelect({ kind: "track", id: trackSelId(line) });
