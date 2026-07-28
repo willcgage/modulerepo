@@ -25,6 +25,7 @@ import {
   type TrackPart,
   type TrackPiece,
   type TurnoutKind,
+  fitFlexBetween,
   snapPiece,
 } from "@willcgage/module-schematic";
 import { drawablePartFor, PART_LIBRARY } from "./part-library";
@@ -549,8 +550,12 @@ export function BenchworkEditor({
     /** ADR 0001 — moving a whole piece (`grab` = pointer offset from its
      * origin, so it doesn't jump to the pointer), or working one of its
      * handles. */
-    | { kind: "piece"; id: string; grab: Pt }
-    | { kind: "pieceHandle"; id: string; handle: "rotate" | "flex" | "bend" }
+    /** ⚠️ `latest` is the piece AS THE DRAG LEFT IT. Reading it back out of
+     * props on release would give whatever the last render carried, which is
+     * a move behind when the release lands in the same tick as the move — and
+     * a fit computed against the piece's OLD length silently does nothing. */
+    | { kind: "piece"; id: string; grab: Pt; latest?: TrackPiece }
+    | { kind: "pieceHandle"; id: string; handle: "rotate" | "flex" | "bend"; latest?: TrackPiece }
     | null
   >(null);
   /** ADR 0001 — the part armed in the Pieces palette, and a drag ghost while one
@@ -1652,17 +1657,36 @@ export function BenchworkEditor({
     //    keep measuring the SVG itself.
     const measure = () => {
       const b = el.getBoundingClientRect();
-      if (b.width > 4 && b.height > 4) setPx({ w: b.width, h: b.height });
+      if (!(b.width > 4 && b.height > 4)) return false;
+      setPx({ w: b.width, h: b.height });
+      return true;
     };
-    measure();
-    const ro = new ResizeObserver(measure);
+    // 3. **AND NO EVENT EVER ARRIVES FOR A SIZE THAT WAS SIMPLY NOT THERE YET.**
+    //    If the first measurement is too early and the box never changes again
+    //    afterwards, both the observer and the resize listener stay silent and
+    //    the canvas is stuck on its fallback scale for the life of the page —
+    //    every handle drawn inches wide, and the grab radius nine inches. So
+    //    keep looking for a few frames until the layout settles. This is the
+    //    belt: the observer is the braces.
+    let raf = 0;
+    if (!measure()) {
+      let tries = 0;
+      const tick = () => {
+        if (measure() || ++tries > 60) return;
+        raf = requestAnimationFrame(tick);
+      };
+      raf = requestAnimationFrame(tick);
+    }
+    const ro = new ResizeObserver(() => measure());
     ro.observe(el.parentElement ?? el);
     // A window resize that doesn't change the parent's box (a zoom change, a
     // devtools dock) still changes the SVG's.
-    window.addEventListener("resize", measure);
+    const onResize = () => measure();
+    window.addEventListener("resize", onResize);
     return () => {
+      if (raf) cancelAnimationFrame(raf);
       ro.disconnect();
-      window.removeEventListener("resize", measure);
+      window.removeEventListener("resize", onResize);
     };
   }, []);
 
@@ -2577,27 +2601,34 @@ export function BenchworkEditor({
     // whole difference from the positional model above: a piece is where it is
     // on the board, and `pos` is read off it afterwards.
     if (d.kind === "piece") {
-      const piece = pieces.find((x) => x.id === d.id);
-      if (piece) putPiece({ ...piece, x: p.x - d.grab.x, y: p.y - d.grab.y });
+      const piece = d.latest ?? pieces.find((x) => x.id === d.id);
+      if (piece) {
+        const next = { ...piece, x: p.x - d.grab.x, y: p.y - d.grab.y };
+        d.latest = next;
+        putPiece(next);
+      }
       return;
     }
     if (d.kind === "pieceHandle") {
-      const piece = pieces.find((x) => x.id === d.id);
+      const piece = d.latest ?? pieces.find((x) => x.id === d.id);
       if (!piece) return;
+      let next = piece;
       if (d.handle === "rotate") {
-        putPiece({ ...piece, rotationDeg: rotationFor(piece, p) });
-        setReadout(`${fmt(rotationFor(piece, p))}°`);
+        next = { ...piece, rotationDeg: rotationFor(piece, p) };
+        setReadout(`${fmt(next.rotationDeg)}°`);
       } else if (d.handle === "bend") {
         const r = radiusForBend(piece.lengthInches ?? 0, offAxis(piece, p));
-        putPiece({ ...piece, radiusInches: r });
+        next = { ...piece, radiusInches: r };
         // The RADIUS is the number a modeller thinks in and the one the
         // standards are written in — not the offset that was dragged.
         setReadout(r ? `${fmt(Math.abs(r))}″ radius` : "straight");
       } else {
         const len = flexLengthFor(piece, p);
-        putPiece({ ...piece, lengthInches: len });
+        next = { ...piece, lengthInches: len };
         setReadout(lengthLabel(len));
       }
+      d.latest = next;
+      putPiece(next);
       return;
     }
 
@@ -2879,10 +2910,19 @@ export function BenchworkEditor({
     // and lands where it belongs — snapping live makes it fight the hand.
     const pd = dragRef.current;
     if ((pd?.kind === "piece" || pd?.kind === "pieceHandle") && onPiecesChange) {
-      const moved = pieces.find((p) => p.id === pd.id);
+      const moved = pd.latest ?? pieces.find((p) => p.id === pd.id);
+      const rest = pieces.filter((p) => p.id !== pd.id);
       if (moved && pd.kind !== "pieceHandle") {
-        const snap = snapPiece(moved, pieces.filter((p) => p.id !== moved.id), partLibrary, grabInches);
+        const snap = snapPiece(moved, rest, partLibrary, grabInches);
         if (snap) putPiece(snap.piece, true);
+      }
+      // ⭐ PULLING A RUN TOWARD A JOINT CUTS IT TO FIT. Letting go of the length
+      // handle near an open joint sets the angle AND the length so the far end
+      // lands exactly on it — which is what makes a crossover connector
+      // possible by hand at all, since its ends are fixed by two turnouts.
+      if (moved && pd.kind === "pieceHandle" && pd.handle === "flex") {
+        const fitted = fitFlexBetween(moved, rest, partLibrary, grabInches);
+        if (fitted) putPiece(fitted, true);
       }
     }
     dragRef.current = null;
