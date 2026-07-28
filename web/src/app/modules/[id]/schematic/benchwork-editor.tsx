@@ -3229,14 +3229,11 @@ const ENDPLATE_TAB = 5; // ballast-shoulder band width, inches
                 );
               })}
             </div>
-            {dropWarn ? (
-              <span className="font-medium text-amber-700">{dropWarn}</span>
-            ) : (
-              <span className="text-gray-500">
-                Drag a turnout onto a track — it lands with a short spur you drag to
-                size. (Or click a glyph, then click the board.)
-              </span>
-            )}
+            {/* Only the WARNING lives with the palette. Sharing a bar with the
+                track controls, its old standing hint sat alongside the track
+                hint and the owner got two paragraphs telling them different
+                things; the one hint below now says whichever is true. */}
+            {dropWarn && <span className="font-medium text-amber-700">{dropWarn}</span>}
     </>
   );
 
