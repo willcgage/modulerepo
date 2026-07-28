@@ -127,7 +127,15 @@ export function RebuildAsPieces({
         } ${silent === 1 ? "is" : "are"}.`,
       },
       unmeasured.length && {
-        text: `${unmeasured.length === unanswered.length ? "They're" : `${unmeasured.length} are`} recorded as ${sizes}, which nobody has measured yet — so tell us what you actually laid.`,
+        // ⚠️ Count AND coverage both bend the sentence: "1 are recorded as #6"
+        // is what falls out of getting only one of them right.
+        text: `${
+          unmeasured.length === unanswered.length
+            ? unmeasured.length === 1
+              ? "It's"
+              : "They're"
+            : `${unmeasured.length} ${unmeasured.length === 1 ? "is" : "are"}`
+        } recorded as ${sizes}, which nobody has measured yet — so tell us what you actually laid.`,
       },
     ].filter(Boolean) as { text: string }[];
   }, [report.turnouts]);
