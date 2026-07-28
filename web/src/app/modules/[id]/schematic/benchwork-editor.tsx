@@ -326,9 +326,12 @@ export type CanvasSelection =
 export type CanvasTool =
   | "select"
   | "benchwork"
-  | "industry"
+  /** ⭐ TRACK BUILDING IS ONE JOB, turnouts included. There was a separate
+   * Turnout tool; a turnout is not a different activity from track, it is a
+   * thing you put ON track, so it is a palette inside this one. A click places
+   * the armed turnout, and edits the track when nothing is armed. */
   | "track"
-  | "turnout"
+  | "industry"
   | "signal"
   /** ⭐ ADR 0001 — lay track as the PIECES it is built from. A module authored
    * this way derives the same ordinary document; nothing else changes. */
@@ -580,7 +583,11 @@ export function BenchworkEditor({
   const [showLegend, setShowLegend] = useState(false);
   /** The turnout armed in the palette — a canvas click drops this one, and it's
    * what a palette drag carries (#turnout-palette). */
-  const [armedPalette, setArmedPalette] = useState<PaletteKind>("right");
+  /** ⚠️ NULL BY DEFAULT, and that is what makes the merge safe. The Turnout tool
+   * could assume a default hand because a click there could only ever mean
+   * "drop a turnout". Sharing the Track tool, an armed default would hijack
+   * every click meant for bending the main. */
+  const [armedPalette, setArmedPalette] = useState<PaletteKind | null>(null);
   /** A palette glyph being dragged toward the board: its kind + live client
    * position, so a ghost can follow the pointer until it's dropped. */
   const [paletteDrag, setPaletteDrag] = useState<{ kind: PaletteKind; x: number; y: number } | null>(
@@ -1706,7 +1713,10 @@ export function BenchworkEditor({
       // back to the palette between pieces — which means there has to be an
       // obvious way to put it down again, or the next click on the board lays a
       // piece nobody asked for.
-      if (e.key === "Escape") setArmedPart(null);
+      if (e.key === "Escape") {
+        setArmedPart(null);
+        setArmedPalette(null);
+      }
     };
     window.addEventListener("keydown", down);
     window.addEventListener("keyup", up);
@@ -2266,25 +2276,23 @@ export function BenchworkEditor({
       if (onDropSignal && centerline.length >= 2) onDropSignal(posFrom(toLocal(e)));
       return;
     }
-    // Turnout tool: a click on a track drops the armed turnout there — a palette
-    // drag can also land it (below). Either way it arrives with a spur stub.
-    if (tool === "turnout") {
-      if (centerline.length < 2) return;
-      const xo = crossoverSpecForPalette(armedPalette);
-      if (xo) {
-        dropCrossoverAt(xo, toLocal(e));
+    // Track tool: a background click bends whichever track is armed — the
+    // selected spur, Main 2, or Main 1 (mainline + spur editing are one tool) —
+    // UNLESS a turnout is armed in the palette, in which case it lands there.
+    if (tool === "track") {
+      if (armedPalette && centerline.length >= 2) {
+        const xo = crossoverSpecForPalette(armedPalette);
+        if (xo) {
+          dropCrossoverAt(xo, toLocal(e));
+          return;
+        }
+        const spec = specForPalette(armedPalette);
+        if (onDropTurnout && spec) {
+          const hit = nearestTrackPos(toLocal(e));
+          if (hit) dropTurnoutGuarded(spec, hit.onTrack, hit.pos);
+        }
         return;
       }
-      const spec = specForPalette(armedPalette);
-      if (onDropTurnout && spec) {
-        const hit = nearestTrackPos(toLocal(e));
-        if (hit) dropTurnoutGuarded(spec, hit.onTrack, hit.pos);
-      }
-      return;
-    }
-    // Track tool: a background click bends whichever track is armed — the
-    // selected spur, Main 2, or Main 1 (mainline + spur editing are one tool).
-    if (tool === "track") {
       if (editSpurTrack && onTrackPathChange) addSpurVertex(editSpurTrack, toLocal(e));
       // Main 2 selected used to fall through and bend MAIN 1 instead, because
       // Main 2 isn't an editable spur so `editSpurTrack` missed it (#192).
@@ -3074,7 +3082,11 @@ const ENDPLATE_TAB = 5; // ballast-shoulder band width, inches
         // armed, but the POSITIONAL track drawn underneath had its own click
         // handler, so laying a piece over an existing main just selected the
         // main. Verified on a real module before it was noticed.
-        tool !== "turnout" && tool !== "signal" && tool !== "pieces" && line.selectable && onSelect
+        !(tool === "track" && armedPalette) &&
+          tool !== "signal" &&
+          tool !== "pieces" &&
+          line.selectable &&
+          onSelect
         ? (e: React.PointerEvent) => {
             e.stopPropagation();
             onSelect({ kind: "track", id: trackSelId(line) });
@@ -3168,6 +3180,66 @@ const ENDPLATE_TAB = 5; // ballast-shoulder band width, inches
     );
   };
 
+  /**
+   * The turnout palette — part of TRACK BUILDING, not a tool of its own.
+   *
+   * ⭐ A turnout is not a different activity from track; it is a thing you put
+   * ON track. It used to have its own rail button, which meant deciding "am I
+   * drawing or am I switching?" before every action.
+   */
+  const turnoutPalette = (
+    <>
+            <label className="flex items-center gap-1 font-medium text-gray-600">
+              Turnout #
+              <select
+                value={turnoutSize}
+                onChange={(e) => onTurnoutSizeChange?.(Number(e.target.value))}
+                className="rounded border border-gray-300 px-1 py-0.5 text-xs"
+              >
+                {[4, 5, 6, 7, 8, 10].map((n) => (
+                  <option key={n} value={n}>
+                    #{n}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <div className="flex items-center gap-0.5">
+              {TURNOUT_PALETTE.map((p) => {
+                const armed = !p.soon && armedPalette === p.kind;
+                return (
+                  <button
+                    key={p.kind}
+                    type="button"
+                    title={p.soon ? `${p.label} — coming soon` : `${p.label} — drag onto a track, or click it then click the board`}
+                    disabled={p.soon}
+                    onPointerDown={p.soon ? undefined : (e) => startPaletteDrag(p.kind, e)}
+                    onClick={
+                      p.soon
+                        ? undefined
+                        : () => setArmedPalette((prev) => (prev === p.kind ? null : p.kind))
+                    }
+                    className={`flex h-7 w-8 items-center justify-center rounded border ${
+                      armed
+                        ? "border-blue-500 bg-blue-50 text-blue-700 ring-1 ring-blue-400"
+                        : "border-gray-300 text-gray-600 hover:bg-gray-50"
+                    } ${p.soon ? "cursor-not-allowed opacity-40" : "cursor-grab active:cursor-grabbing"}`}
+                  >
+                    <TurnoutGlyph kind={p.kind} className="h-4 w-6" />
+                  </button>
+                );
+              })}
+            </div>
+            {dropWarn ? (
+              <span className="font-medium text-amber-700">{dropWarn}</span>
+            ) : (
+              <span className="text-gray-500">
+                Drag a turnout onto a track — it lands with a short spur you drag to
+                size. (Or click a glyph, then click the board.)
+              </span>
+            )}
+    </>
+  );
+
   return (
     <div className="relative flex h-full min-h-0 flex-col">
       {/* Tool options (left) + view controls (right). Only the active tool's
@@ -3209,53 +3281,6 @@ const ENDPLATE_TAB = 5; // ballast-shoulder band width, inches
             Click the main to drop a signal (a block control point) · then set its
             direction and side in the inspector.
           </span>
-        ) : tool === "turnout" ? (
-          <>
-            <label className="flex items-center gap-1 font-medium text-gray-600">
-              Turnout #
-              <select
-                value={turnoutSize}
-                onChange={(e) => onTurnoutSizeChange?.(Number(e.target.value))}
-                className="rounded border border-gray-300 px-1 py-0.5 text-xs"
-              >
-                {[4, 5, 6, 7, 8, 10].map((n) => (
-                  <option key={n} value={n}>
-                    #{n}
-                  </option>
-                ))}
-              </select>
-            </label>
-            <div className="flex items-center gap-0.5">
-              {TURNOUT_PALETTE.map((p) => {
-                const armed = !p.soon && armedPalette === p.kind;
-                return (
-                  <button
-                    key={p.kind}
-                    type="button"
-                    title={p.soon ? `${p.label} — coming soon` : `${p.label} — drag onto a track, or click it then click the board`}
-                    disabled={p.soon}
-                    onPointerDown={p.soon ? undefined : (e) => startPaletteDrag(p.kind, e)}
-                    onClick={p.soon ? undefined : () => setArmedPalette(p.kind)}
-                    className={`flex h-7 w-8 items-center justify-center rounded border ${
-                      armed
-                        ? "border-blue-500 bg-blue-50 text-blue-700 ring-1 ring-blue-400"
-                        : "border-gray-300 text-gray-600 hover:bg-gray-50"
-                    } ${p.soon ? "cursor-not-allowed opacity-40" : "cursor-grab active:cursor-grabbing"}`}
-                  >
-                    <TurnoutGlyph kind={p.kind} className="h-4 w-6" />
-                  </button>
-                );
-              })}
-            </div>
-            {dropWarn ? (
-              <span className="font-medium text-amber-700">{dropWarn}</span>
-            ) : (
-              <span className="text-gray-500">
-                Drag a turnout onto a track — it lands with a short spur you drag to
-                size. (Or click a glyph, then click the board.)
-              </span>
-            )}
-          </>
         ) : tool === "pieces" ? (
           <>
             <PiecePalette
@@ -3293,6 +3318,7 @@ const ENDPLATE_TAB = 5; // ballast-shoulder band width, inches
           ) : (
             <>
               {trackMenu}
+              {turnoutPalette}
               {!editSpurTrack && mainPath.length >= 2 && onMainPathChange && (
                 <button type="button" onClick={() => onMainPathChange([])} className={btn}>
                   Straighten
@@ -3308,11 +3334,13 @@ const ENDPLATE_TAB = 5; // ballast-shoulder band width, inches
                 </button>
               )}
               <span className="text-gray-500">
-                {editSpurTrack
-                  ? "Drag the spur's points ○ to bend/rotate (◇ to curve · Alt-click to remove). The throat stays on its turnout."
-                  : mainPath.length < 2 && centerline.length < 2
-                    ? "Draw the mainline — click near one end of the board, then the other. Then drag a point ○ to move it, or an edge ◇ to curve it."
-                    : "Drag the mainline's points ○ · edge ◇ to curve · click the line to add a bend · Alt-click to remove. Click a siding or spur to edit it."}
+                {armedPalette
+                  ? "Click a track to drop the turnout there — it lands with a short spur you drag to size. Esc to put it down."
+                  : editSpurTrack
+                    ? "Drag the spur's points ○ to bend/rotate (◇ to curve · Alt-click to remove). The throat stays on its turnout."
+                    : mainPath.length < 2 && centerline.length < 2
+                      ? "Draw the mainline — click near one end of the board, then the other. Then drag a point ○ to move it, or an edge ◇ to curve it."
+                      : "Drag the mainline's points ○ · edge ◇ to curve · click the line to add a bend · Alt-click to remove. Click a siding or spur to edit it."}
               </span>
             </>
           )
@@ -3394,7 +3422,7 @@ const ENDPLATE_TAB = 5; // ballast-shoulder band width, inches
               ? armedPart
                 ? "cursor-crosshair"
                 : "cursor-grab"
-            : tool === "benchwork" || tool === "industry" || tool === "track" || tool === "turnout" || tool === "signal"
+            : tool === "benchwork" || tool === "industry" || tool === "track" || tool === "signal"
               ? "cursor-crosshair"
               : // Select: the background is draggable, so say so (#188). Objects
                 // on it set their own cursor, which wins.

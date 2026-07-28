@@ -1742,7 +1742,9 @@ export function SchematicEditor({
         if (e.key === "v" || e.key === "V") setTool("select");
         else if (e.key === "b" || e.key === "B") setTool("benchwork");
         else if (e.key === "t" || e.key === "T") setTool("track");
-        else if (e.key === "w" || e.key === "W") setTool("turnout");
+        // W still works: it was the Turnout tool's key for a long time, and it
+        // now takes you to the tool that owns turnouts.
+        else if (e.key === "w" || e.key === "W") setTool("track");
         else if (e.key === "s" || e.key === "S") setTool("signal");
         else if (e.key === "i" || e.key === "I") setTool("industry");
         else if (e.key === "p" || e.key === "P") setTool("pieces");
@@ -2119,8 +2121,16 @@ const TOOL_GROUPS: RailTool[][] = [
   [{ id: "select", key: "V", label: "Select", glyph: "▶", hint: "Select & move (V)" }],
   [
     { id: "benchwork", key: "B", label: "Benchwork", glyph: "▱", hint: "Draw the board outline (B)" },
-    { id: "track", key: "T", label: "Track", glyph: "═", hint: "Draw the mainline · bend a siding or spur (T)" },
-    { id: "turnout", key: "W", label: "Turnout", glyph: "⋋", hint: "Drop a turnout on the main (W)" },
+    {
+      id: "track",
+      key: "T",
+      label: "Track",
+      glyph: "═",
+      // ⭐ ONE JOB. A turnout is a thing you put on track, not a separate
+      // activity, so its palette lives in this tool rather than in a rail
+      // button of its own.
+      hint: "Build track — draw the main, bend a siding, drop a turnout (T)",
+    },
     { id: "signal", key: "S", label: "Signal", glyph: "⚑", hint: "Drop a signal / control point on the main (S)" },
     // ⭐ ADR 0001 — track built from the parts it is made of. Sits with the
     // other track tools because that is what it is, not a mode apart.
