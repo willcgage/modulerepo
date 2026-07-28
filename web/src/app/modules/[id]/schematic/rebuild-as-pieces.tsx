@@ -27,19 +27,42 @@ import {
 
 const SAME = "";
 
-/** Parts that can answer "which turnout is this?" — PLACEABLE ones only.
- * Offering a part we cannot draw would be an answer that does not answer. */
+/** Real products that can answer "which turnout is this?" — PLACEABLE ones only,
+ * and never a stand-in. Offering a part we cannot draw would be an answer that
+ * does not answer; offering a placeholder here would let one be picked as though
+ * it were a product. */
 function answerableParts(library: TrackPart[]): TrackPart[] {
   return library
-    .filter((p) => (p.kind === "turnout" || p.kind === "wye") && partGeometryGap(p) == null)
+    .filter(
+      (p) =>
+        (p.kind === "turnout" || p.kind === "wye") &&
+        !p.provisional &&
+        partGeometryGap(p) == null,
+    )
     .sort((a, b) =>
       (a.manufacturer ?? "").localeCompare(b.manufacturer ?? "") ||
       (a.frogNumber ?? 0) - (b.frogNumber ?? 0),
     );
 }
 
+/**
+ * The stand-ins, offered SEPARATELY and second.
+ *
+ * ⭐ An owner who cannot say what they laid should not be stuck — 35 turnouts in
+ * the database say nothing at all, and their owners may genuinely not know. But
+ * a placeholder is a different KIND of answer from "Atlas #7", so it sits in its
+ * own group, below, and says what it costs.
+ */
+function placeholderParts(library: TrackPart[]): TrackPart[] {
+  return library
+    .filter((p) => p.provisional && p.kind === "turnout")
+    .sort((a, b) => (a.frogNumber ?? 0) - (b.frogNumber ?? 0));
+}
+
 const labelOf = (p: TrackPart) =>
-  `${p.manufacturer ?? ""} ${p.line ?? ""} #${p.frogNumber}${p.kind === "wye" ? " wye" : ""}`.trim();
+  p.provisional
+    ? `#${p.frogNumber} — make unknown`
+    : `${p.manufacturer ?? ""} ${p.line ?? ""} #${p.frogNumber}${p.kind === "wye" ? " wye" : ""}`.trim();
 
 export function RebuildAsPieces({
   doc,
@@ -60,6 +83,9 @@ export function RebuildAsPieces({
 
   const report = useMemo(() => moduleConversionReport(doc, library), [doc, library]);
   const options = useMemo(() => answerableParts(library), [library]);
+  const placeholders = useMemo(() => placeholderParts(library), [library]);
+  const chosePlaceholder =
+    !!moduleWide && placeholders.some((p) => p.id === moduleWide);
   /** An owner knows "yard 1", not "mt16" — name a loss the way they named it. */
   const nameOf = (id: string) =>
     doc.tracks?.find((t) => t.id === id)?.trackName || id;
@@ -168,7 +194,29 @@ export function RebuildAsPieces({
                 {labelOf(p)}
               </option>
             ))}
+            {/* ⭐ SECOND, AND IN ITS OWN GROUP. A placeholder is a different kind
+                of answer from "Atlas #7", and an owner who genuinely does not
+                know should not be stuck — but it must not read as an equal. */}
+            <optgroup label="I don't know what make they are">
+              {placeholders.map((p) => (
+                <option key={p.id} value={p.id}>
+                  {labelOf(p)}
+                </option>
+              ))}
+            </optgroup>
           </select>
+          {/* ⭐ SAY WHAT A PLACEHOLDER COSTS, at the moment it is chosen. It is
+              a real answer — the module converts and the track connects — but
+              its shape is interpolated, and an owner who is not told that will
+              reasonably read the drawing as a measurement of their turnout. */}
+          {chosePlaceholder && (
+            <span className="mt-1 block rounded border border-amber-300 bg-amber-50 p-1.5 font-normal text-amber-900">
+              These will be drawn from the frog number alone — the right angle
+              and roughly the right length, but not any particular product. The
+              module converts and the track joins up; come back and name the real
+              turnout whenever you find out, and the drawing sharpens.
+            </span>
+          )}
           {/* ⚠️ WHY IT IS BEING ASKED IS NOT ONE REASON. "The document never
               says what this is" needs the owner's knowledge; "no measured #6 in
               the library yet" needs a measurement from us, and the turnout may
@@ -214,6 +262,13 @@ export function RebuildAsPieces({
                         {labelOf(p)}
                       </option>
                     ))}
+                    <optgroup label="I don't know what make it is">
+                      {placeholders.map((p) => (
+                        <option key={p.id} value={p.id}>
+                          {labelOf(p)}
+                        </option>
+                      ))}
+                    </optgroup>
                   </select>
                 </div>
               ))}
