@@ -79,6 +79,33 @@ export function RebuildAsPieces({
     [open, doc, answers, library],
   );
 
+  const asked = report.unanswered.length;
+
+  /**
+   * Why each unanswered turnout is unanswered, grouped.
+   *
+   * The two causes are genuinely different and an owner can act on the
+   * difference: one is a fact only they hold, the other a measurement nobody
+   * has taken yet — and a turnout in the second group may be described
+   * perfectly well in their document.
+   */
+  const reasons = useMemo(() => {
+    const unanswered = report.turnouts.filter((t) => !t.partId);
+    const silent = unanswered.filter((t) => t.size == null).length;
+    const unmeasured = unanswered.filter((t) => t.size != null);
+    const sizes = [...new Set(unmeasured.map((t) => `#${t.size}`))].join(", ");
+    return [
+      silent && {
+        text: `The document doesn't say what ${
+          silent === unanswered.length ? (silent === 1 ? "it" : "any of them") : `${silent} of them`
+        } ${silent === 1 ? "is" : "are"}.`,
+      },
+      unmeasured.length && {
+        text: `${unmeasured.length === unanswered.length ? "They're" : `${unmeasured.length} are`} recorded as ${sizes}, which nobody has measured yet — so tell us what you actually laid.`,
+      },
+    ].filter(Boolean) as { text: string }[];
+  }, [report.turnouts]);
+
   if (report.alreadyGraph) return null;
 
   // ⚠️ A BLOCKER IS NOT A QUESTION — no answer supplies a shape the model cannot
@@ -89,8 +116,6 @@ export function RebuildAsPieces({
         This module can&rsquo;t be rebuilt as pieces yet — {report.blockers[0]?.why}.
       </span>
     );
-
-  const asked = report.unanswered.length;
 
   if (!open)
     return (
@@ -144,10 +169,16 @@ export function RebuildAsPieces({
               </option>
             ))}
           </select>
+          {/* ⚠️ WHY IT IS BEING ASKED IS NOT ONE REASON. "The document never
+              says what this is" needs the owner's knowledge; "no measured #6 in
+              the library yet" needs a measurement from us, and the turnout may
+              be perfectly well described. Collapsing them into "the document
+              doesn't say" told an owner their document was silent when it had
+              named a #6 all along — the report distinguishes them, so show it. */}
           <span className="mt-0.5 block font-normal text-gray-500">
-            {asked === report.turnouts.length
-              ? `The document doesn't say, for any of its ${asked} turnout${asked === 1 ? "" : "s"}.`
-              : `${asked} of ${report.turnouts.length} need this; the rest already name a part.`}
+            {reasons.map((r) => r.text).join(" ")}
+            {asked < report.turnouts.length &&
+              ` The other ${report.turnouts.length - asked} already name a part.`}
           </span>
         </label>
       )}
