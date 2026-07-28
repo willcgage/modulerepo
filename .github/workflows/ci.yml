@@ -1,0 +1,48 @@
+name: CI
+
+# Lint and build the web app on every PR. Four eslint errors once sat on `main`
+# because nothing checked — two of them real bugs in the post-login modal, not
+# style nits.
+#
+# Not filtered by `paths`: a job that is skipped on some PRs cannot serve as a
+# required status check without blocking those PRs forever.
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+concurrency:
+  # A newer push to the same branch makes an in-flight run redundant.
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  web:
+    name: Lint and build (web)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: web
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+
+      - run: npm ci
+
+      - run: npm run lint
+
+      # `next build` prerenders /reset-password, which constructs a Supabase
+      # client — so the build fails outright with these unset. They are
+      # deliberately PLACEHOLDERS, not the real project's values: nothing here
+      # talks to Supabase, it only has to be constructible. This job checks that
+      # the app compiles, typechecks and prerenders; it is not an integration
+      # test, and wiring the real project in would imply otherwise.
+      - run: npm run build
+        env:
+          NEXT_PUBLIC_SUPABASE_URL: https://placeholder.supabase.co
+          NEXT_PUBLIC_SUPABASE_ANON_KEY: placeholder-anon-key-for-ci-build-only
