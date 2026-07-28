@@ -4421,14 +4421,16 @@ const ENDPLATE_TAB = 5; // ballast-shoulder band width, inches
                 fill="#b45309"
                 fontWeight={600}
               >
+                {/* ⚠️ THE SPACING IS A FACT; "tighter than Free-moN" WAS NOT.
+                    §2.0 fixes 1.125″ AT THE ENDPLATE — "double track endplates
+                    must have a track spacing of 1.125 inches", perpendicular,
+                    straight and level for 4″ from the outside face. What the
+                    mains do in between is the builder's business, and EVERY
+                    real crossover pinches them closer. Labelling that a
+                    departure amber-flagged an ordinary, correctly built piece
+                    of trackwork (Will, 2026-07-28). The measurement stays
+                    because it is worth seeing; the verdict goes. */}
                 Crossover {m.spacing}″
-                <tspan
-                  x={lx + ux * world(3)}
-                  dy={world(10)}
-                  fontWeight={400}
-                >
-                  {m.delta.toFixed(3)}″ tighter than Free-moN
-                </tspan>
               </text>
             </g>
           );
