@@ -1,9 +1,58 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useSyncExternalStore } from "react";
 import Link from "next/link";
 
 const SEEN_KEY = "mr:changelog:lastSeen";
+
+/**
+ * The seen-key lives in localStorage, which is external mutable state. Reading
+ * it through `useSyncExternalStore` rather than an effect means dismissing the
+ * modal never has to call setState from inside an effect, and other tabs stay
+ * in sync for free.
+ *
+ * The snapshot has three states, so no sentinel string is needed:
+ *   `undefined` — don't show at all (server render, or storage unavailable)
+ *   `null`      — storage readable, nothing acknowledged yet
+ *   `string`    — the entry key this browser last acknowledged
+ */
+type Seen = string | null | undefined;
+
+const listeners = new Set<() => void>();
+
+function subscribe(onChange: () => void) {
+  listeners.add(onChange);
+  const onStorage = (e: StorageEvent) => {
+    if (e.key === SEEN_KEY) onChange();
+  };
+  window.addEventListener("storage", onStorage);
+  return () => {
+    listeners.delete(onChange);
+    window.removeEventListener("storage", onStorage);
+  };
+}
+
+function getSnapshot(): Seen {
+  try {
+    return window.localStorage.getItem(SEEN_KEY);
+  } catch {
+    return undefined; // private mode / storage disabled — just don't nag
+  }
+}
+
+/** Nothing renders during SSR; the client re-reads once hydrated. */
+function getServerSnapshot(): Seen {
+  return undefined;
+}
+
+function markSeenKey(latestKey: string) {
+  try {
+    window.localStorage.setItem(SEEN_KEY, latestKey);
+  } catch {
+    /* ignore — the modal closes either way, it just reappears next visit */
+  }
+  for (const notify of listeners) notify();
+}
 
 /**
  * Post-login "what's new" notice. When the newest changelog entry differs from
@@ -26,15 +75,10 @@ export function WhatsNewModal({
   /** How many additional bullets exist beyond `items`. */
   moreCount: number;
 }) {
-  const [open, setOpen] = useState(false);
+  const seen = useSyncExternalStore(subscribe, getSnapshot, getServerSnapshot);
+  const open = seen !== undefined && seen !== latestKey;
 
-  useEffect(() => {
-    try {
-      if (window.localStorage.getItem(SEEN_KEY) !== latestKey) setOpen(true);
-    } catch {
-      /* private mode / storage disabled — just don't nag */
-    }
-  }, [latestKey]);
+  const dismiss = useCallback(() => markSeenKey(latestKey), [latestKey]);
 
   // Close on Escape while open.
   useEffect(() => {
@@ -44,20 +88,7 @@ export function WhatsNewModal({
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [open]);
-
-  const markSeen = () => {
-    try {
-      window.localStorage.setItem(SEEN_KEY, latestKey);
-    } catch {
-      /* ignore */
-    }
-  };
-  const dismiss = () => {
-    markSeen();
-    setOpen(false);
-  };
+  }, [open, dismiss]);
 
   if (!open) return null;
 
@@ -111,7 +142,7 @@ export function WhatsNewModal({
           </button>
           <Link
             href="/changelog"
-            onClick={markSeen}
+            onClick={dismiss}
             className="rounded-md bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700"
           >
             See what changed
