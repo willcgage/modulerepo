@@ -3304,9 +3304,22 @@ const ENDPLATE_TAB = 5; // ballast-shoulder band width, inches
             />
             <span className="text-gray-500">
               {armedPart
-                ? "Click the board to lay it. Ends snap to open joints."
+                ? "Click the board to lay it. Ends snap to open joints, and dropping one ON a run cuts the run to take it."
                 : "Drag a part onto the board — or click one, then click the board."}
             </span>
+            {/* ⚠️ SAY WHY THE TRACK ALREADY HERE CANNOT BE JOINED. Pieces snap
+                to other PIECES; a mainline drawn with the Track tool is the
+                positional model and has no joints at all, so a piece dropped
+                against it simply sits there and nothing happens. Silence read
+                as a broken snap — an owner tried it repeatedly and reported it
+                twice (#199). This does not fix it; it stops it being a mystery
+                while the question of how the two models meet is settled. */}
+            {centerline.length >= 2 && (
+              <span className="font-medium text-amber-700">
+                The mainline here was drawn with the Track tool. Pieces join other
+                pieces, so they can&rsquo;t connect to it yet.
+              </span>
+            )}
           </>
         ) : tool === "track" ? (
           pendingTrack ? (
