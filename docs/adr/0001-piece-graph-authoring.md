@@ -1,10 +1,13 @@
 # ADR 0001 — Author track as a graph of pieces, derive the topology
 
-- **Status:** **Accepted**
+- **Status:** **Accepted**, amended
 - **Date:** 2026-07-26 (proposed and accepted same day)
 - **Accepted by:** Will Gage
 - **Issue:** [#179](https://github.com/willcgage/modulerepo/issues/179)
 - **Supersedes:** the 2026-07-16 verdict *"do NOT rewrite the model to 2-D. Not yet, maybe never."* and its 2026-07-18 partial reversal (*"physical view only"*)
+- **Amended by:**
+  - [ADR 0002](0002-owner-initiated-conversion.md) (2026-07-28) — an owner may convert one module, having been shown the cost. Narrows "no auto-migration"; answers open question 1.
+  - [ADR 0003](0003-an-assembly-is-one-piece.md) (2026-07-28) — a double crossover is one piece, not four turnouts.
 
 ## Context
 
@@ -100,7 +103,7 @@ OK   features.tracks           identical
 
 ## What this does not commit us to
 
-- **No auto-migration.** Converting a 1-D document into pieces would invent leads, frog numbers and radii nobody measured. Existing modules stay on the existing path, untouched, and keep working.
+- **No auto-migration.** Converting a 1-D document into pieces would invent leads, frog numbers and radii nobody measured. Existing modules stay on the existing path, untouched, and keep working. — *Narrowed by [ADR 0002](0002-owner-initiated-conversion.md): still no automatic conversion, but an owner may convert one module themselves. The clause was written against conversion happening **to** an owner; it was read afterwards as forbidding conversion at all.*
 - **No change to the dispatcher/operations view**, which stays derived and straightened.
 - **No rewrite of Free-Dispatcher.**
 
@@ -120,8 +123,8 @@ The 2026-07-16 verdict rested on three objections:
 
 ## Open questions
 
-- Do the two authoring paths coexist indefinitely, or is there an owner-driven conversion?
-- What does an owner do when they don't know the brand of a turnout — a generic placeholder, and does it claim geometry or stay honest about not knowing?
+- ~~Do the two authoring paths coexist indefinitely, or is there an owner-driven conversion?~~ **Answered by [ADR 0002](0002-owner-initiated-conversion.md):** they coexist, and there is an owner-driven conversion.
+- What does an owner do when they don't know the brand of a turnout — a generic placeholder, and does it claim geometry or stay honest about not knowing? **Partly answered by [ADR 0002](0002-owner-initiated-conversion.md):** conversion asks, offers only parts it can actually draw, and holds the module back rather than inventing a generic. What an owner does when they genuinely cannot answer is still open.
 - Do industries, signals and control points become properties of pieces, or stay positional along a derived route?
 
 ## Not yet validated
