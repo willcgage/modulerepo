@@ -1,4 +1,4 @@
-# Free-moN Module Repository
+# Module Repository
 
 Backend (Supabase/PostgreSQL + Edge Functions) for the Free-moN Module
 Repository. See `github.com/willcgage/modulerepo`.
