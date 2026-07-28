@@ -337,6 +337,18 @@ export type CanvasTool =
    * this way derives the same ordinary document; nothing else changes. */
   | "pieces";
 
+/** A sibling section, drawn as faint context behind the board being edited. */
+type ContextOutline = { id: string; name?: string; outline: { x: number; y: number }[] };
+
+/**
+ * Stable empty default for `contextOutlines`. Writing `= []` in the destructuring
+ * would mint a new array on every render, so `bounds` — which reads it — could
+ * never actually memoise, and the wheel listener keyed on `bounds` would unbind
+ * and rebind every render. Callers with nothing to show should pass `undefined`
+ * rather than a fresh `[]`, for the same reason.
+ */
+const NO_CONTEXT_OUTLINES: ContextOutline[] = [];
+
 /**
  * Benchwork outline editor — draw a module's physical footprint as a polygon in
  * module-local inches (endplate A's track point at the origin, mainline +x,
@@ -349,7 +361,7 @@ export function BenchworkEditor({
   outline,
   outlineInner = [],
   onChange,
-  contextOutlines = [],
+  contextOutlines = NO_CONTEXT_OUTLINES,
   seedOutline,
   editingLabel,
   lengthInches,
@@ -401,7 +413,7 @@ export function BenchworkEditor({
   outlineInner?: BenchworkPoint[];
   /** The module's OTHER sections, drawn as faint context so you can see what
    * the board you're editing has to meet (#96 phase 2b). Not editable. */
-  contextOutlines?: { id: string; name?: string; outline: { x: number; y: number }[] }[];
+  contextOutlines?: ContextOutline[];
   /** What "Start from a rectangle" should seed — a section's derived band
    * rather than the whole module's, when editing a section. */
   seedOutline?: { x: number; y: number }[] | null;
@@ -1440,7 +1452,9 @@ export function BenchworkEditor({
     }
     if (cur < lengthInches) keeps.push([cur, lengthInches]);
     return keeps.map(([s, e]) => mainAt(s, e)).filter((p) => p.length >= 2);
-  }, [turnouts, tracks, centerline, lengthInches, mainLane, pinches]);
+    // `turnouts`/`tracks` are deliberately absent: the wye gapping that used
+    // them is gone (see above), so the body no longer reads either.
+  }, [centerline, lengthInches, mainLane, pinches]);
 
   const trackPaths = useMemo(
     () =>
@@ -1618,7 +1632,7 @@ export function BenchworkEditor({
     const maxY = Math.max(...ys);
     const pad = Math.max(8, (maxX - minX) * 0.08);
     return { minX: minX - pad, minY: minY - pad, w: maxX - minX + pad * 2, h: maxY - minY + pad * 2 };
-  }, [lengthInches, anchors, sampled, centerline, trackPaths]);
+  }, [lengthInches, anchors, sampled, centerline, trackPaths, contextOutlines]);
 
   // The viewport in world inches. `null` = follow content (auto-fit) until the
   // first zoom/pan — so a fresh module frames itself, but once you take control

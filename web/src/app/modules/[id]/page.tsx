@@ -9,7 +9,6 @@ import { ModuleFootprintView, footprintInput } from "@/components/module-footpri
 import { StatusBadge } from "@/components/status-badge";
 import {
   TextField,
-  TextAreaField,
   NumberField,
   SelectField,
   SubmitButton,
