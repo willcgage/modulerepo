@@ -1,0 +1,25 @@
+name: Changelog
+
+# The changelog is owner-facing here, not developer bookkeeping: the post-login
+# "What's new" notice draws its bullets from the newest entry. A version without
+# an entry ships silently — which is how v0.38.1 through v0.47.1 went out
+# unannounced, and it only surfaced by accident.
+#
+# Deliberately NOT filtered by `paths`. A job that is skipped on some PRs cannot
+# be used as a required status check without blocking those PRs forever, and the
+# whole job is a checkout plus a few milliseconds of Node.
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+jobs:
+  entry-exists:
+    name: Released version has a changelog entry
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - run: node .github/scripts/check-changelog.mjs
