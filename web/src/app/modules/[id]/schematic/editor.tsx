@@ -749,16 +749,44 @@ export function SchematicEditor({
   };
 
   /**
+   * Re-read this module's tracks and turnouts from its pieces.
+   *
+   * ⭐⭐ **ONE DERIVATION SITE.** Both the rebuild offer and every later edit go
+   * through here, so there is exactly one answer to "what do these pieces mean"
+   * and it is the package's own `deriveGraphDoc` — the same function
+   * Free-Dispatcher's document comes out of. A second, editor-local derivation
+   * would be two things to keep in step, which is the class of bug ADR 0001
+   * exists to remove.
+   *
+   * ⚠️ **A MODULE WITHOUT A GRAPH IS UNTOUCHED.** `deriveGraphDoc` returns the
+   * SAME OBJECT when there is no graph, so the 1-D path is not merely preserved
+   * but literally not executed — ADR 0001's coexistence, by construction rather
+   * than by a flag someone could get wrong.
+   *
+   * ⚠️ It rebuilds the whole editor state from the derived document. That is
+   * safe because `docToState(stateToDoc(s))` is a fixed point — verified against
+   * a module carrying benchwork, endplate edge bindings, widths, a spur with an
+   * owner's capacity and module_tracks link, an industry and a signal.
+   */
+  const deriveFromPieces = (s: EditorState): EditorState => {
+    if (!s.graph?.pieces?.length) return s;
+    const { doc: derived } = deriveGraphDoc(stateToDoc(s, recordNumber), partLibrary);
+    return docToState(derived, s.lengthInches);
+  };
+
+  /**
    * Lay out the pieces (ADR 0001).
    *
    * ⚠️ `commit` false is a MID-DRAG frame: it must not take an undo snapshot,
    * or one Ctrl+Z rewinds a single pixel of a drag. `patch` coalesces rapid
    * edits, but a drag emits far more than that window forgives.
    *
-   * The pieces are stored and nothing else on the module is touched — the
-   * derivation that turns them into tracks is a separate, explicit step
-   * (`deriveGraphDoc`), so laying a piece can never quietly rewrite the
-   * positional track an owner already has.
+   * ⭐ On commit the module's tracks and turnouts follow the pieces, through
+   * {@link deriveFromPieces}. That is only ever true of a module that IS
+   * authored as pieces: without a graph the derivation is not executed at all,
+   * so laying a piece still cannot rewrite positional track an owner has drawn.
+   * Adopting a graph in the first place remains an explicit, offered act
+   * (ADR 0002) — this is what keeps a module in step once it has one.
    */
   const setPieces = (next: TrackPiece[], opts?: { commit?: boolean }) => {
     if (readOnly) return;
@@ -773,10 +801,15 @@ export function SchematicEditor({
       // two, and the run meeting the second one is Main 2. Nothing for an owner
       // to declare, and nothing that can contradict what they drew.
       const starts = startJointsFor(next, partLibrary, a ? endplateTrackPoints(a) : []);
-      return {
+      const moved = {
         ...prev,
         graph: next.length && starts ? { pieces: next, ...starts } : undefined,
       };
+      // ⭐ ON COMMIT, THE TRACK FOLLOWS THE PIECES. Mid-gesture it does not:
+      // a drag emits a position per pointer move, and re-deriving the whole
+      // module on each of them would be work nobody sees (the live read-out
+      // above the canvas is already showing what the pieces say).
+      return opts?.commit ? deriveFromPieces(moved) : moved;
     });
   };
 
@@ -799,6 +832,9 @@ export function SchematicEditor({
     if (!conv.graph) return;
     const { doc: derived } = deriveGraphDoc({ ...doc, graph: conv.graph }, partLibrary);
     snapshot();
+    // Straight to `docToState` rather than through {@link deriveFromPieces},
+    // because the graph being adopted is not in the state yet — this is the one
+    // moment a module acquires one.
     setState(docToState(derived, state.lengthInches));
   };
 
