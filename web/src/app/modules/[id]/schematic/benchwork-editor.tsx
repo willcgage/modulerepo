@@ -394,6 +394,7 @@ export function BenchworkEditor({
   partLibrary = PART_LIBRARY,
   pieces = [],
   onPiecesChange,
+  rebuildOffer,
 }: {
   outline: BenchworkPoint[];
   /** A benchwork HOLE — the loop's open middle, punched out of `outline` so the
@@ -535,6 +536,10 @@ export function BenchworkEditor({
    * has never seen start drawing its own extent. Defaults to the built-ins so
    * the canvas still works standalone. */
   partLibrary?: TrackPart[];
+  /** The offer to rebuild this module's 1-D track as pieces (#199). Built by
+   * the editor, which owns the document and the undo stack; rendered here
+   * because the Pieces bar is where an owner meets the problem it solves. */
+  rebuildOffer?: React.ReactNode;
   /** ⭐ THE TRACK AS PLACED PIECES (ADR 0001). Empty = this module is authored
    * positionally, and the Pieces tool has nothing to show. */
   pieces?: TrackPiece[];
@@ -3307,18 +3312,22 @@ const ENDPLATE_TAB = 5; // ballast-shoulder band width, inches
                 ? "Click the board to lay it. Ends snap to open joints, and dropping one ON a run cuts the run to take it."
                 : "Drag a part onto the board — or click one, then click the board."}
             </span>
-            {/* ⚠️ SAY WHY THE TRACK ALREADY HERE CANNOT BE JOINED. Pieces snap
-                to other PIECES; a mainline drawn with the Track tool is the
-                positional model and has no joints at all, so a piece dropped
-                against it simply sits there and nothing happens. Silence read
-                as a broken snap — an owner tried it repeatedly and reported it
-                twice (#199). This does not fix it; it stops it being a mystery
-                while the question of how the two models meet is settled. */}
-            {centerline.length >= 2 && (
-              <span className="font-medium text-amber-700">
-                The mainline here was drawn with the Track tool. Pieces join other
-                pieces, so they can&rsquo;t connect to it yet.
-              </span>
+            {/* ⚠️ SAY WHY THE TRACK ALREADY HERE CANNOT BE JOINED — and now
+                offer the way out. Pieces snap to other PIECES; a mainline drawn
+                with the Track tool is the positional model and has no joints at
+                all, so a piece dropped against it simply sits there. Silence
+                read as a broken snap and an owner reported it twice (#199).
+                The rebuild is the answer to it: convert the board's track to
+                pieces and there is something to join. */}
+            {centerline.length >= 2 && pieces.length === 0 && (
+              <>
+                <span className="font-medium text-amber-700">
+                  The mainline here was drawn with the Track tool. Pieces join
+                  other pieces, so they can&rsquo;t connect to it until it is
+                  rebuilt.
+                </span>
+                {rebuildOffer}
+              </>
             )}
           </>
         ) : tool === "track" ? (

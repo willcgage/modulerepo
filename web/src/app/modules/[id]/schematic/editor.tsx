@@ -1,13 +1,18 @@
 "use client";
 
 import { partsByManufacturer, crossoverParts } from "./part-library";
+import { RebuildAsPieces } from "./rebuild-as-pieces";
 import { Fragment, useCallback, useEffect, useMemo, useRef, useState, useTransition } from "react";
 import Link from "next/link";
 import {
   MAIN_TRACK_ID,
   MAIN2_TRACK_ID,
   stateToDoc,
+  docToState,
   graphToDoc,
+  docToGraph,
+  deriveGraphDoc,
+  type ConversionAnswers,
   type TrackPiece,
   buildTransition,
   buildCrossover,
@@ -773,6 +778,28 @@ export function SchematicEditor({
         graph: next.length && starts ? { pieces: next, ...starts } : undefined,
       };
     });
+  };
+
+  /**
+   * Rebuild this module's 1-D track as pieces (MR #199, ADR 0001 amendment).
+   *
+   * ⭐ **THE OWNER ASKED FOR IT, AND ONE UNDO PUTS IT BACK.** Unlike
+   * {@link setPieces}, this DOES rewrite the module's tracks and turnouts —
+   * that is the whole point, and why it can only run from the offer. Storing
+   * the graph alone would leave the module drawing its old positional track and
+   * the new pieces on top of each other.
+   *
+   * The derivation is the package's own `deriveGraphDoc`, so the tracks that
+   * come out are exactly the ones Free-Dispatcher will read — there is no
+   * second, editor-local idea of what the pieces mean.
+   */
+  const rebuildAsPieces = (answers: ConversionAnswers) => {
+    if (readOnly) return;
+    const conv = docToGraph(doc, answers, partLibrary);
+    if (!conv.graph) return;
+    const { doc: derived } = deriveGraphDoc({ ...doc, graph: conv.graph }, partLibrary);
+    snapshot();
+    setState(docToState(derived, state.lengthInches));
   };
 
   /** What the pieces currently say the module is — read off the graph, live.
@@ -1983,6 +2010,14 @@ export function SchematicEditor({
                 tool={tool}
                 pieces={state.graph?.pieces ?? []}
                 onPiecesChange={setPieces}
+                rebuildOffer={
+                  <RebuildAsPieces
+                    doc={doc}
+                    library={partLibrary}
+                    readOnly={readOnly}
+                    onRebuild={rebuildAsPieces}
+                  />
+                }
                 onTurnoutMove={moveTurnout}
                 onTrackEndMove={(id, end, pos) =>
                   patch((s) => {
