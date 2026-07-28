@@ -20,7 +20,6 @@ import {
   type BenchworkPoint,
   crossoverPinches,
   laneOffsetAt,
-  PINCH_EASE_INCHES,
   type EndplatePose,
   type TrackPart,
   type TrackPiece,
@@ -694,40 +693,22 @@ export function BenchworkEditor({
   );
 
   /**
-   * Where each pinch is, and how to say so.
+   * ⛔ THE PINCH IS DRAWN, NOT ANNOTATED.
    *
-   * ⚠️ THE DEVIATION IS TOO SMALL TO SEE ON ITS OWN. 0.035″ is a fifth of a
-   * pixel at a normal zoom and about 1.4 px even zoomed right in — geometrically
-   * true and visually nothing. So the pinch is DRAWN truly (that's `lanePath`)
-   * and then LABELLED and its extent highlighted, because "show the pinch" is
-   * not satisfied by a sub-pixel wobble no one can see. The label carries the
-   * real number; the highlight says where it applies.
+   * A crossover built to 1.09″ narrows the mains by 0.035″, which is about a
+   * fifth of a pixel at normal zoom — so this used to add a leader line, a
+   * highlighted span and a "Crossover 1.09″" callout to make it visible, and
+   * before that "0.035″ tighter than Free-moN" underneath.
+   *
+   * Both are gone. §2.0 fixes the spacing AT A DOUBLE-TRACK ENDPLATE and 4″
+   * inboard of it, and says nothing about how far apart the mains run in
+   * between — where every real crossover draws them closer. Annotating an
+   * ordinary, correctly built piece of trackwork as though it were remarkable
+   * is noise on the drawing (Will, 2026-07-28).
+   *
+   * `crossoverPinches` still supplies the geometry, and `lanePath` still draws
+   * the narrowing truly. It simply is not called out.
    */
-  const pinchMarks = useMemo(() => {
-    if (!pinches.length || centerline.length < 2) return [];
-    const ptAt = (pos: number, lane: number) => {
-      const c = sampleAt(centerline, pos);
-      const o = laneOffsetAt(lane, pos, pinches);
-      return { x: c.x + c.nx * o, y: c.y + c.ny * o, nx: c.nx, ny: c.ny };
-    };
-    return pinches.map((p) => {
-      const mid = (p.fromPos + p.toPos) / 2;
-      const near = ptAt(mid, 0);
-      const far = ptAt(mid, p.lane);
-      const span: Pt[] = [];
-      const a = p.fromPos - PINCH_EASE_INCHES;
-      const b = p.toPos + PINCH_EASE_INCHES;
-      for (let s = 0; s <= 48; s++) span.push(ptAt(a + ((b - a) * s) / 48, p.lane));
-      return {
-        key: `${p.lane}:${p.fromPos}:${p.toPos}`,
-        near,
-        far,
-        span,
-        spacing: p.spacingInches,
-        delta: Math.abs(p.lane) * LANE_SPACING_INCHES - p.spacingInches,
-      };
-    });
-  }, [pinches, centerline]);
 
   // Track context. A track with an authored 2-D path draws along it; otherwise
   // it's laid onto the main centre-line, offset to its lane (#2d-track).
@@ -4376,65 +4357,17 @@ const ENDPLATE_TAB = 5; // ballast-shoulder band width, inches
           </g>
         )}
 
-        {/* A crossover built to a spacing the standard doesn't use (#180). The
-            track really is drawn at 1.09″ here — but that is 0.2 px, so the
-            callout is what actually shows it. */}
-        {pinchMarks.map((m) => {
-          const ux = m.far.nx;
-          const uy = m.far.ny;
-          const lx = m.far.x + ux * world(22);
-          const ly = m.far.y + uy * world(22);
-          return (
-            <g key={`pinch-${m.key}`} pointerEvents="none">
-              <polyline
-                points={m.span.map((p) => `${p.x},${sy(p.y)}`).join(" ")}
-                fill="none"
-                stroke="#b45309"
-                strokeWidth={world(2.5)}
-                strokeOpacity={0.28}
-                strokeLinecap="round"
-              />
-              <line
-                x1={m.near.x}
-                y1={sy(m.near.y)}
-                x2={lx}
-                y2={sy(ly)}
-                stroke="#b45309"
-                strokeWidth={world(0.6)}
-              />
-              {[m.near, m.far].map((p, i) => (
-                <line
-                  key={i}
-                  x1={p.x - uy * world(3)}
-                  y1={sy(p.y - ux * world(3))}
-                  x2={p.x + uy * world(3)}
-                  y2={sy(p.y + ux * world(3))}
-                  stroke="#b45309"
-                  strokeWidth={world(0.8)}
-                />
-              ))}
-              <text
-                x={lx + ux * world(3)}
-                y={sy(ly + uy * world(3))}
-                textAnchor={ux >= 0 ? "start" : "end"}
-                fontSize={world(9)}
-                fill="#b45309"
-                fontWeight={600}
-              >
-                {/* ⚠️ THE SPACING IS A FACT; "tighter than Free-moN" WAS NOT.
-                    §2.0 fixes 1.125″ AT THE ENDPLATE — "double track endplates
-                    must have a track spacing of 1.125 inches", perpendicular,
-                    straight and level for 4″ from the outside face. What the
-                    mains do in between is the builder's business, and EVERY
-                    real crossover pinches them closer. Labelling that a
-                    departure amber-flagged an ordinary, correctly built piece
-                    of trackwork (Will, 2026-07-28). The measurement stays
-                    because it is worth seeing; the verdict goes. */}
-                Crossover {m.spacing}″
-              </text>
-            </g>
-          );
-        })}
+        {/* ⛔ NO CALLOUT ON A CROSSOVER. This drew "Crossover 1.09″" with a
+            leader line beside every one, and before that "0.035″ tighter than
+            Free-moN" under it. Both were noise on a correctly built piece of
+            trackwork: §2.0 fixes the 1.125″ spacing AT A DOUBLE-TRACK ENDPLATE
+            and 4″ inboard of it, and says nothing about how far apart the mains
+            run in between — where every real crossover draws them closer
+            (Will, 2026-07-28).
+
+            The pinch is still DRAWN, because the track really does narrow
+            there; it just is not annotated. `crossoverPinches` still supplies
+            the geometry that narrows it. */}
       </svg>
 
       {/* Status bar — board size, zoom, grid, pointer. */}
