@@ -65,4 +65,8 @@ The document records `partId: "generic-turnout-6"`, so a converted module still 
 
 ## Still open
 
-- **A main that begins at a turnout** — a single-to-double transition module. Both mains are laid as their own runs from endplate A, so a main that actually begins at a turnout is laid where that turnout cannot reach it; the turnout is then dropped and the module loses a main. It did this **silently** on FMN-0075. Conversion is now withheld for that shape ([#199](https://github.com/willcgage/modulerepo/issues/199)), which affects seven production modules. Proper support means laying the second main off its turnout the way a branch is laid, while keeping its `main` role in the emitted document. The standard actively recommends building transition modules, so this is common and worth doing.
+- **Two mains joined partway along, written as bare turnouts.** ELM Yard has `sw7` and `sw8` crossing between its mains with no connector track between them. That is a crossover, and [ADR 0003](0003-an-assembly-is-one-piece.md) says an assembly is one piece — but there is nothing in the document to lay one *from*. Reported rather than dropped; supporting it means recognising the pair as a crossover and asking which product it is.
+
+## Resolved since
+
+- **A main that begins or ends at a turnout** — a transition module. Both shapes now convert (pkg 0.109.0). One that BEGINS at a turnout is laid by the branch pass; one that ENDS at a turnout is closed onto it as a siding closes onto its far turnout. Both keep their `main` role, and a second main that does not cross the endplates no longer claims to.
