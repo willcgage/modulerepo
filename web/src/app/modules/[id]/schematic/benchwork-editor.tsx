@@ -26,6 +26,7 @@ import {
   type TrackPiece,
   type TurnoutKind,
   fitFlexBetween,
+  insertIntoRun,
   pieceHand,
   snapPiece,
 } from "@willcgage/module-schematic";
@@ -2856,8 +2857,23 @@ export function BenchworkEditor({
     if (!onPiecesChange) return;
     const part = partLibrary.find((p) => p.id === spec.partId);
     const fresh = newPiece(spec, at, pieces, part);
+
+    // ⭐ AN OPEN END FIRST, THEN THE MIDDLE OF A RUN. Landing on a joint is the
+    // commoner intent and the more precise one, so it wins; only when nothing
+    // is in reach does dropping ONTO track mean "cut it here and let me in".
     const snapped = snapPiece(fresh, pieces, partLibrary, grabInches);
-    onPiecesChange([...pieces, snapped?.piece ?? fresh], { commit: true });
+    if (snapped) {
+      onPiecesChange([...pieces, snapped.piece], { commit: true });
+      onSelect?.({ kind: "piece", id: fresh.id });
+      return;
+    }
+    const cut = insertIntoRun(pieces, fresh, at, partLibrary, world(14));
+    if (cut) {
+      onPiecesChange(cut.pieces, { commit: true });
+      onSelect?.({ kind: "piece", id: cut.insertedId });
+      return;
+    }
+    onPiecesChange([...pieces, fresh], { commit: true });
     onSelect?.({ kind: "piece", id: fresh.id });
   };
 

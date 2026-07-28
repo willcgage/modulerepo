@@ -181,6 +181,11 @@ export function footprintInput(
   // its length lives in the doc, not the module record's stored total — using the
   // record here ran the main straight through the loop (#loop).
   const isLoop = (doc as { loop?: boolean } | null)?.loop === true;
+  // ⚠️ A module whose document PLACES TRACK is asserting a main exists — `pos`
+  // is inches from endplate A along it. Without this the card drew the board
+  // and silently none of its track, for any module whose track was authored
+  // before it had a geometry (FMN-0078).
+  const hasPlacedTrack = (doc?.tracks?.length ?? 0) > 0;
   // Which axial faces the module actually presents. Read from the doc's
   // endplates rather than a config field: an end of the line or a pocket simply
   // has no B, and without this the read-only and catalog views drew a plate at
@@ -221,6 +226,7 @@ export function footprintInput(
           : doc?.lengthInches) || 24;
   return {
     lengthInches: len,
+    hasPlacedTrack,
     geometryType: module.geometry_type,
     geometryDegrees: module.geometry_degrees,
     geometryOffsetInches: module.geometry_offset_inches,
