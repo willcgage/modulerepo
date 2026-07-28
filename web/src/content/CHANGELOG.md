@@ -5,6 +5,128 @@ Headings are `version — date` (YYYY-MM-DD).
 
 ---
 
+## v0.47.1 — 2026-07-28
+
+### Added
+- **Your module's track can be rebuilt as the parts it's actually made of — if you tell it what those parts are.** Open the Pieces tool on a module you drew the old way and there's now an offer at the top: name the turnouts you used, and the whole module is laid again as real parts with real ends that join.
+
+  It asks **one question for the module** — "the turnouts on this module are…" — with a folded-away list underneath for the odd one out. Owners lay one kind throughout, and asking turnout by turnout would ask the same question eight times on a yard.
+
+  **It never runs on its own, and one Undo puts it back.** Rebuilding has to supply things your module never recorded — where a frog sits, how long a turnout really is — and inventing those quietly would be putting words in your mouth. Done in front of you, with the cost shown and your answer taken, it's an edit you made.
+
+- **If you genuinely don't know what a turnout is, you can now say so.** The list has a second group below the real products: "#6 — make unknown". Pick one and the module converts, drawn at the right angle and roughly the right length for that frog number — but not as any particular product.
+
+  It tells you that at the moment you choose it, and invites you back to name the real turnout when you find out. Without that you'd reasonably read the drawing as a measurement of your own track, and it isn't one.
+
+### Fixed
+- **A double crossover is one assembly, not four turnouts.** Treated as four, a scissors came out as impossible geometry — two turnouts far apart with the crossovers relabelled as sidings — and the module was blamed for ordinary trackwork. A crossover is now laid as the single product it is, so a rebuild handles one the way you built it.
+- **A crossover no longer refuses to convert over a measurement nobody needs.** It was asking you to name a measured turnout in order to lay a crossover, which is a different product with its own published geometry.
+- **Two turnouts and a piece of track between them are laid as what they are.** Not every pair joining two mains is a factory crossover — plenty are built from separate turnouts, and that's now the assumption unless you name a crossover product.
+- **The "tighter than Free-moN" note is gone from crossovers.** The standard fixes 1.125″ track spacing **at the endplate**; what the mains do in between is the builder's business, and every real double crossover pinches them closer. Calling that a deviation read as though your module didn't conform. It does.
+
+## v0.47.0 — 2026-07-27
+
+### Added
+- **Drop a turnout onto a run of track and it cuts the track there**, joining both halves to it. Until now a part could only join at an open end, so putting a turnout into the middle of a main — which is where turnouts go — had nowhere to land.
+
+  **An open end still wins.** If there's a joint within reach, that's the intent, and it's more precise; dropping onto track means "cut it here" only when nothing is in reach.
+
+### Fixed
+- **A module card drew its board and none of its track.** A module with track but no geometry set had its whole spine refused, so everything positioned along it silently vanished from the drawing. A document that places track is already asserting a main exists — positions are measured in inches from endplate A along it — so the card now says so.
+
+## v0.46.1 — 2026-07-27
+
+### Fixed
+- **A sectional curve draws as a curve.** It was laying with its ends in exactly the right places and the rail running dead straight between them. The joints being right is why nothing caught it sooner.
+
+## v0.46.0 — 2026-07-27
+
+### Added
+- **The parts library can hold sectional track, and four kinds of part it could never hold at all.** Flex, bumpers, crossovers and sectional pieces had no way in — several of them the parts you're most likely to have a box of. The admin form now offers every kind the app understands, not the five it happened to list.
+
+  A sectional curve records **its own radius and arc** — the two numbers printed on the box. It deliberately doesn't ask for a length: that's the arc between them, and a straight-line length typed into that field would quietly shorten every curve on your module.
+
+## v0.45.0 — 2026-07-27
+
+### Added
+- **Lay a bumper and the end reads as finished.** It snaps onto an open end like any other part, and the graph stops calling that end unfinished because it genuinely isn't — not because anything was ticked.
+
+  It's drawn as a **bar across the rails** rather than the short stub its body would otherwise be. Track doesn't just stop; an unmarked bumper would read as a length of unfinished track, which is the one thing it exists to say it isn't.
+
+## v0.44.2 — 2026-07-27
+
+### Fixed
+- **The word is "turnout", not "switch".** Four places in the app said switch where they meant a turnout — the transition-module prompt, the part picker and its explanation, and the admin parts page.
+
+  **Manufacturers' product names are left exactly as they're sold**, "Atlas #7 LH Switch 2052" included. A parts library that renames products can't be searched by anyone holding the box.
+
+## v0.44.1 — 2026-07-27
+
+### Fixed
+- **One hint in the Track bar, not two.** With the turnout palette moved in beside the track controls, both were showing their own standing hint and telling you different things at once. There's now a single line that says whichever is true — how to drop the armed turnout, or how to bend the track when nothing is armed.
+
+## v0.44.0 — 2026-07-27
+
+### Changed
+- **Building track is one job: the Turnout tool has folded into Track.** A turnout isn't a different activity from track — it's a thing you put *on* track. Two buttons meant deciding "am I drawing, or am I switching?" before every action, and the answer was always "I'm building track".
+
+  The turnout palette now sits in the Track tool's own bar. Click a glyph to arm it and the next click on the board drops that turnout; with nothing armed, clicking edits the track exactly as before.
+
+  **Nothing is armed by default**, and that's what makes the merge safe. The old tool could assume a hand, because a click there could only ever mean "drop a turnout". Sharing a tool with drawing, a default would have hijacked every click meant for bending the main.
+
+## v0.43.1 — 2026-07-27
+
+### Fixed
+- **The Pieces tool works on modules that already have track.** Laying a piece over an existing main just selected the main — the older track drawn underneath was still catching the click — which made the tool unusable on nearly every real module.
+
+## v0.43.0 — 2026-07-27
+
+### Added
+- **Pick the hand you own straight from the palette.** A handed part is now two buttons — "#7 Turnout LH" and "#7 Turnout RH" — each laying that hand directly, with the part number in the tooltip. Laying a right-hand turnout used to mean laying a left one and then finding a "Mirrored" checkbox afterwards; reaching for the part in your hand shouldn't mean knowing that the app spells it "flipped".
+
+  **A wye stays one button.** It splits symmetrically, which is exactly why it's sold as one product — offering a choice would invent one you don't have.
+
+## v0.42.0 — 2026-07-27
+
+### Added
+- **Pull a length of flex onto the joint opposite and it cuts itself to fit.** Let go near an open end and both the angle and the length are set so the far end lands exactly there.
+
+  That's what makes a crossover connector layable by hand. Its two ends are fixed by two turnouts, and a length handle only drags along its own axis — so without this you'd have had to type an angle and a length to a hundredth of an inch.
+
+## v0.41.0 — 2026-07-27
+
+### Added
+- **A double-track module's second main lays itself.** Both mains start from endplate A's own track points: a double end has two, and the run arriving at the second one is Main 2. Nothing for you to declare, and nothing that can contradict what you drew.
+
+### Fixed
+- **Laying Main 2 beside Main 1 used to snap it onto Main 1.** The two mains sit 1.125″ apart — closer together than fourteen screen pixels at any sensible zoom — so the second main was swallowed by the first and the module came out with one main and a warning. The grab now reaches at most half a track spacing: past that you're nearer the other track than the one you meant.
+- **New double-track modules were born with their mains swapped**, because the stored track offsets are measured in the endplate's own frame and endplate A faces the other way.
+
+## v0.40.0 — 2026-07-27
+
+### Added
+- **Bend a run of flex into a curve.** There's a ◇ in the middle of a selected run — the same handle the benchwork edges already use to bow an edge into an arc. Pull it off the axis and the run curves; push it flat and it's straight again.
+
+  **The readout names the radius**, which is the number a modeller thinks in and the one the standards are written in — not the offset you happen to be dragging. There's a Radius field in the inspector saying the same thing in numbers; leave it blank for straight.
+
+  A piece snapped onto a curved end leaves **along the curve**, turned to the tangent there. And bending track doesn't shorten it: the derived length stays what the rail measures.
+
+## v0.39.0 — 2026-07-27
+
+### Added
+- **The Pieces tool: lay track as the parts it's built from.** A new tool (P) with a palette of every part the library can place. Drag one onto the board, or arm it and click. Pieces move, turn, and — flex only, the one piece a builder actually cuts — pull to length.
+
+  **Ends snap, and the snap brings the angle with it.** Dropped a third of an inch short and a quarter-inch high, a length of flex lands exactly on a #7's diverging end *and* turns itself to that turnout's frog angle. Nobody types an angle and nobody types a position; the siding that appears in the panel gets its numbers from the geometry.
+
+  **A joint won't take a second connection.** A third rail end can't be stacked on a junction — it stays where you dropped it, unjoined and reported, rather than being silently dropped out of the layout.
+
+  **Nothing else on your module is touched.** What you lay is stored alongside the track you already have; turning it into your module's tracks is a separate, deliberate step, so laying a piece can never quietly rewrite what's there.
+
+## v0.38.1 — 2026-07-27
+
+### Fixed
+- **An endplate bound to a benchwork edge is now drawn at the edge's width.** The binding was reaching the endplate's position and facing but not the drawn face, which kept using the stored width — so on a tapered board whose ends are 16″ and 32″, both faces still drew 24″. That's exactly the disagreement binding an endplate to an edge exists to end.
+
 ## v0.38.0 — 2026-07-26
 
 ### Added
