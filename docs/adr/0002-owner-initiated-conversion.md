@@ -84,5 +84,6 @@ The **points offset** for a #6. Free-moN §2.0 requires main-line turnouts of at
 
 ## Still open
 
-- What an owner does when they genuinely cannot answer what a turnout is. Today the module simply does not convert. A generic placeholder that claims geometry would be the dishonest fix; one that claims none may still be useful.
-- Whether the derivation should run on every save, so that moving a piece after conversion re-derives the tracks. Today only the explicit rebuild derives.
+- ~~What an owner does when they genuinely cannot answer what a turnout is.~~ **Answered by [ADR 0004](0004-placeholder-for-an-unidentified-turnout.md).**
+- ~~Whether the derivation should run on every save, so that moving a piece after conversion re-derives the tracks.~~ **Answered:** it runs on every commit, through one derivation site; a module without a graph is untouched because `deriveGraphDoc` returns the same object.
+- **A main that begins at a turnout** — a single-to-double transition module. Conversion is withheld for that shape; see [ADR 0004](0004-placeholder-for-an-unidentified-turnout.md)'s open question.

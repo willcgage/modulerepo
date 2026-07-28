@@ -17,3 +17,4 @@ than a code comment and older than the code.
 | [0001](0001-piece-graph-authoring.md) | Author track as a graph of pieces, derive the topology | **Accepted** 2026-07-26 · amended by 0002, 0003 |
 | [0002](0002-owner-initiated-conversion.md) | Conversion to pieces is allowed when the owner asks for it | **Accepted** 2026-07-28 · amends 0001 |
 | [0003](0003-an-assembly-is-one-piece.md) | An assembly sold as one product is one piece | **Accepted** 2026-07-28 · amends 0001 |
+| [0004](0004-placeholder-for-an-unidentified-turnout.md) | A placeholder for a turnout nobody has identified | **Accepted** 2026-07-28 · answers 0002 |
