@@ -116,7 +116,7 @@ export function selectableParts(library: TrackPart[] = PART_LIBRARY): TrackPart[
   // `partId` on ONE turnout, and a crossover is an ASSEMBLY — two turnouts plus
   // the diagonal, sold as a single fixture. Offering it here would let a lone
   // turnout claim the 10.07″ length of the whole crossover and read, in a field
-  // asking "which switch is this?", as an answer that isn't a switch. The parts
+  // asking "which turnout is this?", as an answer that isn't one. The parts
   // are in the library for the canvas's own crossover tool to use; they just
   // aren't a single turnout's identity.
   return library.filter(
@@ -126,7 +126,7 @@ export function selectableParts(library: TrackPart[] = PART_LIBRARY): TrackPart[
 
 /**
  * The crossover products a connector can name — the assemblies deliberately
- * kept out of {@link selectableParts}, which answers "which switch is this?".
+ * kept out of {@link selectableParts}, which answers "which turnout is this?".
  *
  * A crossover names its product on the CONNECTOR because the fixture that set
  * its angle also set its track spacing, and that spacing belongs to the pair of

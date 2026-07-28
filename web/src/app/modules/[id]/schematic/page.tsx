@@ -59,7 +59,7 @@ export default async function ModuleSchematicPage({
 
   // Existing industries (rows of record) + the type/car lookups for the inspector.
   // The turnout parts library — turnouts are drawn at their part's measured
-  // dimensions, so this is what an admin adding a manufacturer's switch changes.
+  // dimensions, so this is what an admin adding a manufacturer's turnout changes.
   const [{ data: industryRows }, industryTypes, carTypes, storedParts] = await Promise.all([
     supabase
       .from("freemon_industries")

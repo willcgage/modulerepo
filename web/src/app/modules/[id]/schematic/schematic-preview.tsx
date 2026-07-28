@@ -238,7 +238,7 @@ export function SchematicPreview({
           const isSpur = t.role === "spur";
           // A spur's throat is at its turnout (either end, #bug3); the stub runs
           // to the far end. A siding dips to the main at both ends — UNLESS
-          // nothing switches into it (no turnout diverges to it) while turnouts
+          // nothing diverges into it (no turnout diverges to it) while turnouts
           // sit ON it: then its connection is elsewhere (a crossover's diagonal),
           // so it draws flat with square ends instead of spurious end-dips.
           const flat =

@@ -1204,7 +1204,7 @@ export function SchematicEditor({
    * Move a turnout — from the canvas drag OR the inspector's position field.
    * Both go through one handler so the two can't drift apart.
    *
-   * ⚠️ This used to drag every endplate-bound branch route along with the switch
+   * ⚠️ This used to drag every endplate-bound branch route along with the turnout
    * (#181). It doesn't any more (#189): a branch is ordinary track, so it stays
    * where its owner put it and SNAPS to the turnout's diverging rail when they
    * bring it near. Moving a turnout away from its route now leaves a visible
@@ -3433,7 +3433,7 @@ function Inspector({
                   One end is single track and the other double — the main line
                   needs a transition turnout where Main 2{" "}
                   {state.configA === "double" ? "ends" : "begins"}. This adds the
-                  switch and an <em>End of Double Track</em> control point with
+                  turnout and an <em>End of Double Track</em> control point with
                   signals; adjust its position afterwards.
                 </p>
                 <button
@@ -3876,7 +3876,7 @@ function Inspector({
     const i = state.turnouts.findIndex((t) => t.id === selection.id);
     if (i < 0) return null;
     const t = state.turnouts[i];
-    // The switch this turnout IS, if the owner has named one — and every part
+    // The part this turnout IS, if the owner has named one — and every part
     // they could name, grouped by manufacturer (#187).
     const namedPart = t.partId ? (partLibrary.find((p) => p.id === t.partId) ?? null) : null;
     const partGroups = partsByManufacturer(partLibrary);
@@ -4036,7 +4036,7 @@ function Inspector({
               })
             }
             className={`mt-0.5 ${inp}`}
-            title="The switch you're actually laying. Its own measurements drive how long the turnout is drawn and where your flex track starts."
+            title="The turnout you're actually laying. Its own measurements drive how long it is drawn and where your flex track starts."
           >
             <option value="">Not specified — draw from the frog number</option>
             {partGroups.map((g) => (
@@ -4063,7 +4063,7 @@ function Inspector({
           ) : (
             <span className="mt-1 block font-normal text-[11px] text-gray-500">
               Drawn from the frog number alone — a reasoned shape, not a
-              particular product. Name the switch you&rsquo;re laying and it is
+              particular product. Name the turnout you&rsquo;re laying and it is
               drawn at that part&rsquo;s own measurements.
             </span>
           )}

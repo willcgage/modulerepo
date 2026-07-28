@@ -376,7 +376,7 @@ export function physicalSchematic(
   const onTrackHas = (id: string) => (doc.turnouts ?? []).some((sw) => sw.onTrack === id);
   for (const t of f.extraTracks) {
     const isSpur = t.role === "spur";
-    // A track that turnouts sit ON but nothing switches INTO (a crossover leg)
+    // A track that turnouts sit ON but nothing DIVERGES INTO (a crossover leg)
     // stays flat — its connection is the crossover diagonal, not an end dip.
     const flat = !isSpur && !divergesTo(t.id) && onTrackHas(t.id);
     const tx = isSpur ? t.throatFrac : t.fromFrac;
@@ -415,7 +415,7 @@ export function physicalSchematic(
   for (const t of doc.tracks ?? []) {
     if (t.role !== "branch" || !t.path || t.path.length < 2) continue;
     // Drawn exactly as authored — no pinning to the turnout (#189). If it starts
-    // clear of the switch, that gap is real, and the builder marks it.
+    // clear of the turnout, that gap is real, and the builder marks it.
     const pts = samplePath(t.path);
     if (pts.length >= 2) tracks.push({ id: t.id, pts, role: "branch" });
   }

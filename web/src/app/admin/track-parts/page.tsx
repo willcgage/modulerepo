@@ -239,7 +239,7 @@ export default async function TrackPartsPage({
       <p className="mt-1 text-sm text-gray-600">
         The parts a module&apos;s turnouts are drawn from. A turnout is drawn at
         its part&apos;s <span className="font-medium">measured</span> dimensions,
-        so adding the switch a builder actually uses is what makes it draw
+        so adding the turnout a builder actually uses is what makes it draw
         correctly — a frog number with no measured part is drawn without a part
         boundary rather than at an invented length.
       </p>

@@ -143,7 +143,7 @@ function crossoverSpecForPalette(
 }
 
 /** A little schematic icon for each turnout kind — a straight route plus the
- * diverging leg(s), so the palette reads like the switches it drops. */
+ * diverging leg(s), so the palette reads like the turnouts it drops. */
 function TurnoutGlyph({ kind, className }: { kind: PaletteKind; className?: string }) {
   const s = {
     fill: "none",
@@ -1022,7 +1022,7 @@ export function BenchworkEditor({
     // A NAMED part answers for itself. Looking the extent up by frog number
     // picks whichever part in the library carries that number, which is only the
     // same thing while no two parts share one — so once an owner has said which
-    // switch they're laying, that part's own measurements are the answer (#187).
+    // turnout they're laying, that part's own measurements are the answer (#187).
     const named = t.partId ? partLibrary.find((p) => p.id === t.partId) : undefined;
     const ext =
       !t.curved && t.kind !== "wye"
@@ -1113,7 +1113,7 @@ export function BenchworkEditor({
   };
   /** spur/siding id → its throat's curved diverging leg + endpoints, so a drawn
    * track starts at the frog (one continuous curved route with its turnout). */
-  /** track id → EVERY switch leg reaching it. A passing siding has a turnout at
+  /** track id → EVERY turnout leg reaching it. A passing siding has a turnout at
    * BOTH ends and a crossover connector one on each lane, so a track can have
    * several — keeping only one left the far end visually unconnected
    * (#FMN-0040). */
@@ -1151,7 +1151,7 @@ export function BenchworkEditor({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [turnouts, tracks, centerline, lengthInches]);
   /** The primary (first) leg per track — what a drawn path pins its throat to. */
-  const switchByTrack = useMemo(() => {
+  const turnoutByTrack = useMemo(() => {
     const map = new Map<
       string,
       { throat: Pt; frog: Pt; frogV: [Pt, Pt]; join: Pt; leg: Pt[]; outline: Pt[][] | null; body: Pt[] | null; throughJoints: Joint[]; divergeJoint: Joint; turnoutId: string }
@@ -1164,7 +1164,7 @@ export function BenchworkEditor({
    * A drawn track's path — exactly as authored.
    *
    * ⚠️ This used to PIN the first point to the turnout's leg and prepend the leg
-   * to the drawn band, so a spur always appeared welded to its switch. It no
+   * to the drawn band, so a spur always appeared welded to its turnout. It no
    * longer does either. A turnout is a part of a fixed length; the track that
    * meets it is the owner's, and where it starts is theirs to say. Silently
    * moving their first point hid the gap rather than closing it, and hid it in
@@ -1323,7 +1323,7 @@ export function BenchworkEditor({
     return body;
   };
 
-  /** A plain lane-parallel body, CLIPPED to any switch leg reaching it — so the
+  /** A plain lane-parallel body, CLIPPED to any turnout leg reaching it — so the
    * rails run continuously from the leg into the track instead of the body
    * carrying on underneath it. A track's stored extent ends at the turnout's
    * FROG, but the leg only becomes parallel at its JOIN further along, so the
@@ -1331,7 +1331,7 @@ export function BenchworkEditor({
    * showed this plainly: body 0→17.4, leg 21.8→10.6 (#173 follow-up). Tracks
    * with two legs are handled by passingSidingBody; this covers the rest. */
   const laneBody = (t: CanvasTrack): Pt[] => {
-    // ⚠️ No longer pulled out to any switch leg's join. A track runs between the
+    // ⚠️ No longer pulled out to any turnout leg's join. A track runs between the
     // positions its owner gave it; if that leaves a gap to the turnout, the gap
     // is real and theirs to close by dragging the end onto the rail (#189).
     //
@@ -1354,7 +1354,7 @@ export function BenchworkEditor({
 
   /** A wye's mirrored second route — the leg forced to the opposite side, then
    * continued along its frog tangent to the same length as the (real) spur, so
-   * the switch reads as a symmetric Y. Rendered as a band; it isn't a separately
+   * the turnout reads as a symmetric Y. Rendered as a band; it isn't a separately
    * editable track (a wye is symmetric — the two routes mirror). */
   const wyeMirrorLegs = useMemo(() => {
     if (centerline.length < 2) return [];
@@ -1385,7 +1385,7 @@ export function BenchworkEditor({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [turnouts, tracks, centerline, lengthInches]);
 
-  /** Switch legs that the track band itself doesn't already include — the far
+  /** Turnout legs that the track band itself doesn't already include — the far
    * end of a passing siding, the second turnout of a crossover connector — so
    * every turnout visibly joins what it diverges to (#FMN-0040). */
   const connectorLegs = useMemo(() => {
@@ -1476,7 +1476,7 @@ export function BenchworkEditor({
             .filter((t) => t.pts.length > 1)
         : [],
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [centerline, tracks, switchByTrack],
+    [centerline, tracks, turnoutByTrack],
   );
   const turnoutPts = useMemo(
     () =>
@@ -1488,12 +1488,12 @@ export function BenchworkEditor({
             // The frog marker belongs to the turnout whose leg draws the route —
             // a crossover connector has a turnout on BOTH ends, and drawing the
             // shared frog from both doubled the circles at the far end.
-            const sw = t.divergeTrack ? switchByTrack.get(t.divergeTrack) : undefined;
-            // THIS turnout's own leg. `switchByTrack` keeps only the FIRST leg
+            const sw = t.divergeTrack ? turnoutByTrack.get(t.divergeTrack) : undefined;
+            // THIS turnout's own leg. `turnoutByTrack` keeps only the FIRST leg
             // reaching a track, which is right for the frog marker (a passing
             // siding's two turnouts once shared a leg and drew doubled circles,
             // #81) but wrong for the part BODY: each turnout is a separate
-            // physical switch and draws its own moulding. Without this, a
+            // physical turnout and draws its own moulding. Without this, a
             // passing siding's second turnout showed rail joints at a tie strip
             // that was never drawn.
             const mine = t.divergeTrack
@@ -1511,7 +1511,7 @@ export function BenchworkEditor({
           })
         : [],
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [centerline, turnouts, tracks, switchByTrack, legsByTrack, lengthInches],
+    [centerline, turnouts, tracks, turnoutByTrack, legsByTrack, lengthInches],
   );
   /** Draggable end handles for sidings/spurs (not the derived Main 2). */
   const trackEnds = useMemo(() => {
@@ -1542,7 +1542,7 @@ export function BenchworkEditor({
         });
       });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [centerline, tracks, switchByTrack]);
+  }, [centerline, tracks, turnoutByTrack]);
   const signalPts = useMemo(
     () =>
       centerline.length >= 2
@@ -2142,10 +2142,10 @@ export function BenchworkEditor({
   }, [flexCutsByTrack, centerline, tracks]);
 
   /** Where the spur body starts — the turnout's JOIN (the ramp's end, so the
-   * spur is continuous with the switch), falling back to the on-main turnout
+   * spur is continuous with the turnout), falling back to the on-main turnout
    * point if there's no leg yet. */
   const spurThroat = (t: CanvasTrack): Pt | null => {
-    const f = switchByTrack.get(t.id)?.join;
+    const f = turnoutByTrack.get(t.id)?.join;
     if (f) return f;
     if (t.throatPos == null || centerline.length < 2) return null;
     const p = sampleAt(centerline, t.throatPos);
@@ -2372,7 +2372,7 @@ export function BenchworkEditor({
 
   /** Is a track curving at `pos`? Compares the tangent a short way either side;
    * a straight run keeps the same heading, an arc turns. Used to keep a curved
-   * turnout on curved track (a curved switch belongs on a curve, per the
+   * turnout on curved track (a curved turnout belongs on a curve, per the
    * prototype). Window ±3″ with a ~4° threshold ignores sampling jitter. */
   const isCurvedAt = (pts: Pt[], pos: number): boolean => {
     if (pts.length < 2) return false;
@@ -3054,7 +3054,7 @@ const ENDPLATE_TAB = 5; // ballast-shoulder band width, inches
     ...trackPaths.map((t) => ({ id: t.id, pts: t.pts, main: false, selectable: true })),
     // A wye's mirrored second route draws as a (non-selectable) band.
     ...wyeMirrorLegs.map((w) => ({ id: w.id, pts: w.pts, main: false, selectable: false })),
-    // Switch legs the bands don't already carry (a siding's far turnout, etc.).
+    // Turnout legs the bands don't already carry (a siding's far turnout, etc.).
     ...connectorLegs.map((c) => ({ id: c.id, pts: c.pts, main: false, selectable: false })),
   ];
 
@@ -3099,7 +3099,7 @@ const ENDPLATE_TAB = 5; // ballast-shoulder band width, inches
    *
    * Drawn per track (band and rails as one group) a later track's roadbed —
    * 1.3″ wide — paints straight over an earlier track's rails, which are 0.03″.
-   * The main is first in `trackLines`, so EVERY switch leg erased the stretch of
+   * The main is first in `trackLines`, so EVERY turnout leg erased the stretch of
    * Main 1 it crossed. Main 1 was never broken: the DOM had it as one unbroken
    * polyline 0→96 the whole time. It was buried.
    *
@@ -3185,7 +3185,7 @@ const ENDPLATE_TAB = 5; // ballast-shoulder band width, inches
    *
    * ⭐ A turnout is not a different activity from track; it is a thing you put
    * ON track. It used to have its own rail button, which meant deciding "am I
-   * drawing or am I switching?" before every action.
+   * drawing, or am I placing a turnout?" before every action.
    */
   const turnoutPalette = (
     <>
