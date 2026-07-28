@@ -621,8 +621,8 @@ export function BenchworkEditor({
    * match the normal also covers branch endplates, whose headings are
    * arbitrary. */
   const faceAxis = (p: { x: number; y: number; heading: number; id: string }) => {
-    let px = Math.cos((p.heading + 90) * DEG);
-    let py = Math.sin((p.heading + 90) * DEG);
+    const px = Math.cos((p.heading + 90) * DEG);
+    const py = Math.sin((p.heading + 90) * DEG);
     let flip: boolean;
     if (centerline.length >= 2) {
       // Best source: the centre-line's own left normal, which also follows a
