@@ -109,12 +109,26 @@ export async function saveModuleSchematic(
     // A branch route to a placed endplate (#170) is through geometry, not a
     // car-spotting track — it has no meaningful capacity (it can be zero-length
     // along the main), so it lives only in the schematic doc, never module_tracks.
-    const extraTracks = doc.tracks.filter((t) => t.role !== "main" && t.role !== "branch");
+    //
+    // ⭐ A CROSSOVER CONNECTOR IS THE SAME KIND OF THING. You cannot stand cars
+    // on a crossover — it is a way BETWEEN two mains, not a place to put a cut —
+    // so it has no capacity to record either. Writing one made the whole save
+    // fail against `module_tracks_capacity_scale_feet_check`, which is how a
+    // rebuilt module silently failed to save at all.
+    const extraTracks = doc.tracks.filter(
+      (t) => t.role !== "main" && t.role !== "branch" && t.role !== "crossover",
+    );
     const keptIds: number[] = [];
     for (const t of extraTracks) {
-      const capacity =
-        t.capacityFeet ??
-        Math.round(inchesToScaleFeet(Math.abs((t.toPos ?? 0) - (t.fromPos ?? 0))));
+      // ⚠️ `?? ` DOES NOT CATCH ZERO. A track that round-trips through the editor
+      // with no capacity comes back as `capacityFeet: 0`, which is not nullish,
+      // so the derived fallback was skipped and a 0 went to a column with
+      // CHECK (capacity_scale_feet > 0). Treat a non-positive stored capacity as
+      // "not recorded" and derive it; if that is still not positive the track
+      // holds nothing, and null says so honestly.
+      const stored = t.capacityFeet != null && t.capacityFeet > 0 ? t.capacityFeet : null;
+      const derived = Math.round(inchesToScaleFeet(Math.abs((t.toPos ?? 0) - (t.fromPos ?? 0))));
+      const capacity = stored ?? (derived > 0 ? derived : null);
       const trackName = t.trackName?.trim() || null;
 
       if (t.moduleTrackId != null) {
