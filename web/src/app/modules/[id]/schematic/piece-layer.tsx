@@ -449,6 +449,37 @@ export function PieceLayer({
         )),
       )}
 
+      {/* BUMPERS read as a STOP, not as a stub of track. Drawn as the track's
+          own rails do not end in anything, a bumper piece would be a short
+          orphan band that looks like unfinished track — which is the one thing
+          it exists to say it is not. */}
+      {pieces.map((p) => {
+        const part = library.find((x) => x.id === p.partId);
+        if (part?.kind !== "bumper") return null;
+        const at = placedJoints([p], library)[0];
+        if (!at) return null;
+        const rad = (p.rotationDeg * Math.PI) / 180;
+        // Across the rails, at the joint it closes.
+        const nx = -Math.sin(rad);
+        const ny = Math.cos(rad);
+        const h = RAIL_GAUGE_INCHES * 1.1;
+        return (
+          <line
+            key={`bmp${p.id}`}
+            x1={at.x - nx * h}
+            y1={sy(at.y - ny * h)}
+            x2={at.x + nx * h}
+            y2={sy(at.y + ny * h)}
+            stroke={p.id === selected ? "#0284c7" : "#7f1d1d"}
+            strokeWidth={world(2.5)}
+            strokeLinecap="round"
+            pointerEvents="none"
+          >
+            <title>Bumper — the track ends here</title>
+          </line>
+        );
+      })}
+
       {/* JOINTS. An open end is a hollow ring and a made connection is a solid
           dot, because "is this actually joined?" is the question this whole
           model turns on — and an owner cannot answer it from the track alone,
