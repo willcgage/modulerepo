@@ -2018,7 +2018,9 @@ export function SchematicEditor({
                       )
                     : patch((s) => (s.outline = next))
                 }
-                contextOutlines={activeSection ? otherSectionOutlines : []}
+                // `undefined`, not `[]`: a fresh array here would change identity
+                // every render and defeat the memo that reads it.
+                contextOutlines={activeSection ? otherSectionOutlines : undefined}
                 seedOutline={activeSectionBand}
                 editingLabel={
                   activeSection
