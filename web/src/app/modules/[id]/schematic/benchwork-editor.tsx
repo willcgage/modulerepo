@@ -9,6 +9,7 @@ import {
   leadInchesForSize,
   pastFrogInchesForSize,
   partOutlineAtFrog,
+  crossoverAssembly,
   partExtent,
   partExtentForSize,
   turnoutFacing,
@@ -2111,6 +2112,60 @@ export function BenchworkEditor({
    * turnout's diverging rail you get the ring telling you to bring track to it,
    * and once you have, you get the joint saying the two pieces meet here.
    */
+  /**
+   * Rail joints where a crossover ASSEMBLY meets the flex track on both mains.
+   *
+   * A turnout's through joints come from `partExtent`, which is meaningless for
+   * a crossover — it is ONE moulding carrying four point-sets, not a turnout —
+   * so `ext` is null for all four and the mains ran unbroken straight through
+   * the assembly with no joint anywhere. `crossoverAssembly()` supplies the
+   * number that fixes it: `lengthInches`, end to end, centred on the scissors.
+   *
+   * ⭐ Kept OUT of `frogLegOf`. Every turnout on every module flows through that
+   * function, and a field reaching the model but not the renderer has already
+   * shipped three silent bugs here. This reads the same published geometry
+   * independently and only ever ADDS joints.
+   *
+   * Both hosts are mains by construction — a connector is `role: "crossover"`
+   * only when its two turnouts sit on different mains — so absolute positions
+   * sample directly, with no host-relative conversion.
+   *
+   * A double crossover is TWO connectors over ONE assembly, so both produce the
+   * same four joints; deduped by position.
+   */
+  const crossoverAssemblyJoints = useMemo(() => {
+    if (centerline.length < 2) return [];
+    const out: Joint[] = [];
+    const seen = new Set<string>();
+    for (const t of tracks) {
+      if (t.role !== "crossover" || !t.crossoverPartId) continue;
+      const part = partLibrary.find((p) => p.id === t.crossoverPartId);
+      if (!part) continue;
+      const asm = crossoverAssembly(part);
+      if (!asm) continue;
+      const sw = turnouts.filter((x) => x.divergeTrack === t.id);
+      if (sw.length !== 2) continue;
+      // The assembly is centred on the scissors, which sits midway between the
+      // two frogs — `pos` marks the frog (#132).
+      const centre = (sw[0].pos + sw[1].pos) / 2;
+      const ends = [centre - asm.lengthInches / 2, centre + asm.lengthInches / 2];
+      for (const s of sw) {
+        const host = hostPointsOf(s.onTrack);
+        if (host.length < 2) continue;
+        for (const e of ends) {
+          if (e < 0 || e > lengthInches) continue;
+          const p = sampleAt(host, e);
+          const key = `${p.x.toFixed(2)}|${p.y.toFixed(2)}`;
+          if (seen.has(key)) continue;
+          seen.add(key);
+          out.push({ x: p.x, y: p.y, nx: p.nx, ny: p.ny });
+        }
+      }
+    }
+    return out;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tracks, turnouts, partLibrary, centerline, lengthInches, pinches]);
+
   const trackJoints = useMemo(() => {
     const loose = new Set(danglingRailEnds.map((r) => `${r.turnoutId}|${r.trackId}`));
     const out: Joint[] = [];
@@ -2120,8 +2175,9 @@ export function BenchworkEditor({
         if (!loose.has(`${l.turnoutId}|${trackId}`)) out.push(l.divergeJoint);
       }
     }
+    out.push(...crossoverAssemblyJoints);
     return out;
-  }, [legsByTrack, danglingRailEnds]);
+  }, [legsByTrack, danglingRailEnds, crossoverAssemblyJoints]);
 
   /**
    * Where one length of FLEX meets the next (#193) — kept apart from the joints
