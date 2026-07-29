@@ -1233,9 +1233,18 @@ export function BenchworkEditor({
     if (!legs || legs.length !== 2) return null;
     const [a, b] = legs;
     const d = Math.hypot(a.join.x - b.join.x, a.join.y - b.join.y);
-    // Legs that already meet leave nothing to bridge; drawing a zero-length
-    // band would just add a blob at the joint.
-    return d < 0.05 ? null : [a.join, b.join];
+    // ⚠️ EMPTY, NOT NULL. Legs that already meet leave nothing to bridge — but
+    // the caller reads `crossoverBody(t) ?? <authored path>`, so returning null
+    // here does not mean "draw nothing", it means "fall back to the stored
+    // main-centre-to-main-centre path" — the very path this function exists to
+    // stop drawing (#196). On a correctly-spaced double crossover the two legs
+    // meet within 0.01″, so the fallback fired and one of the two connectors
+    // drew a full-width diagonal across the assembly.
+    //
+    // null is reserved for "this isn't a crossover, or its data can't be read"
+    // — the cases where the fallback IS right. An empty band is dropped by the
+    // caller's `pts.length > 1` filter.
+    return d < 0.05 ? [] : [a.join, b.join];
   };
 
   /** A stub spur's diverging route, angled away like the prototype (Option 1):
