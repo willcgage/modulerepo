@@ -5,6 +5,15 @@ Headings are `version — date` (YYYY-MM-DD).
 
 ---
 
+## v0.54.2 — 2026-07-30
+
+### Fixed
+- **Opening a module no longer blunts the measurements in it.** Every position in a module — a turnout's place along the main, where a siding starts and ends, a crossing, a branch — was being rounded to the nearest hundredth of an inch **as the module loaded**, before you had done anything. Since the editor saves as you work, that rounded figure could then be written back over what you had actually recorded.
+
+  For most modules the difference was invisible. Where it bit was the trackwork the app works out for you: a scissors crossover's turnouts are placed at figures like **40.104″**, and the module was reloading them as 40.1″ — so the app could not hold on to a number it had calculated itself. **Undo could not help**, because the rounding happened as the module opened, before there was anything to undo.
+
+  Positions are now left exactly as recorded. Rounding still happens in the one case it was meant for: when a module's **length changes** and every feature in it has to be rescaled to fit.
+
 ## v0.54.1 — 2026-07-30
 
 ### Fixed
