@@ -2001,14 +2001,27 @@ export function BenchworkEditor({
   /** Edit Main 2 when it's selected under the Track (or Select) tool. */
   const editingMain2 =
     isDoubleMain && edit1D && selection?.kind === "track" && selection.id === MAIN2_TRACK_ID;
-  const commitMain2 = (next: BenchworkPoint[]) =>
+  const commitMain2 = (next: BenchworkPoint[]) => {
+    // ⭐ NOW THAT A DRAWN MAIN 2 REALLY DRAWS, its ends get the same snap a
+    // spur's do (#189). This shipped once in #210 and was reverted with it —
+    // not because it was wrong, but because it was pointless while the canvas
+    // ignored the path it was snapping. `snapToTurnoutRail` only ever takes
+    // hold of a rail belonging to a turnout that diverges to THIS track.
+    const pts = next.map((pt) => ({ ...pt }));
+    if (pts.length >= 2) {
+      for (const i of [0, pts.length - 1]) {
+        const at = snapToTurnoutRail(pts[i], MAIN2_TRACK_ID);
+        if (at) pts[i] = { ...pts[i], x: at.x, y: at.y };
+      }
+    }
     onMain2PathChange?.(
-      next.map((pt) => ({
+      pts.map((pt) => ({
         x: round(pt.x),
         y: round(pt.y),
         ...(pt.bulge ? { bulge: round(pt.bulge) } : {}),
       })),
     );
+  };
   /** Seed Main 2's control points from where it runs today — its lane offset
    * from Main 1 across its own extent — so bending starts from the current
    * shape. */
@@ -2126,14 +2139,21 @@ export function BenchworkEditor({
       if (tp.pts.length < 2) continue;
       ends.push(tp.pts[0], tp.pts[tp.pts.length - 1]);
     }
+    // ⛔ MAIN 2 IS ONLY JOINED BY DERIVATION WHILE IT IS DERIVED. Excluding it
+    // outright was right when it always ran at its lane offset from Main 1 —
+    // then it met its turnout by construction and a ring would have been a lie.
+    // A DRAWN Main 2 is wherever the owner put it and now draws there, so it can
+    // dangle like any other track and has to be able to say so.
+    // ⚠️ Read from `tracks`, the same source `trackPaths` draws from, so the ring
+    // and the drawing can never disagree about whether Main 2 is bent.
+    const m2 = tracks.find((t) => t.id === MAIN2_TRACK_ID);
+    const main2Drawn = !!m2?.path && m2.path.length >= 2;
     return turnoutRailEnds.filter(
       (r) =>
-        // Main 2 stays joined by derivation (see laneBody), so it is never
-        // dangling and must not be flagged as something to go and fix.
-        r.trackId !== MAIN2_TRACK_ID &&
+        (main2Drawn || r.trackId !== MAIN2_TRACK_ID) &&
         !ends.some((e) => Math.hypot(e.x - r.at.x, e.y - r.at.y) <= RAIL_SNAP_INCHES),
     );
-  }, [turnoutRailEnds, trackPaths]);
+  }, [turnoutRailEnds, trackPaths, tracks]);
 
   /**
    * Every rail joint to draw — where a piece of track ends and the next begins.
