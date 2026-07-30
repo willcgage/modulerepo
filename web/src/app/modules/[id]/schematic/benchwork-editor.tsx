@@ -29,13 +29,11 @@ import {
   flexPieces,
   insertIntoRun,
   maxFlexPieceInches,
-  pieceHand,
   snapPiece,
 } from "@willcgage/module-schematic";
 import { drawablePartFor, PART_LIBRARY } from "./part-library";
 import {
   PieceLayer,
-  PiecePalette,
   flexLengthFor,
   newPiece,
   offAxis,
@@ -43,6 +41,12 @@ import {
   rotationFor,
   type PieceSpec,
 } from "./piece-layer";
+import {
+  PieceGlyph,
+  TrackPalette,
+  trackPaletteEntries,
+  type PaletteEntry,
+} from "./track-palette";
 import {
   lanePath,
   sampleAt,
@@ -83,165 +87,6 @@ interface Joint {
 function niceStep(raw: number): number {
   const steps = [0.25, 0.5, 1, 2, 3, 6, 12, 24, 48, 96];
   return steps.find((s) => s >= raw) ?? 192;
-}
-
-/** The turnout kinds the palette offers. left/right/wye place today; the rest
- * need geometry the package doesn't model yet, so they show as "coming soon"
- * placeholders — settling the palette's final shape (#turnout-palette). */
-type PaletteKind =
-  | TurnoutKind
-  | "curved-left"
-  | "curved-right"
-  | "crossover-lh"
-  | "crossover-rh"
-  | "crossover-double"
-  | "slip-single"
-  | "slip-double";
-
-const TURNOUT_PALETTE: { kind: PaletteKind; label: string; soon?: boolean }[] = [
-  { kind: "right", label: "Right-hand" },
-  { kind: "left", label: "Left-hand" },
-  { kind: "wye", label: "Wye" },
-  { kind: "curved-right", label: "Curved right" },
-  { kind: "curved-left", label: "Curved left" },
-  { kind: "crossover-lh", label: "Single crossover (LH)" },
-  { kind: "crossover-rh", label: "Single crossover (RH)" },
-  { kind: "crossover-double", label: "Double crossover" },
-  { kind: "slip-single", label: "Single slip", soon: true },
-  { kind: "slip-double", label: "Double slip", soon: true },
-];
-
-/** A palette glyph → the turnout it drops: its hand + whether the diverging leg
- * is curved. Null for the not-yet-buildable kinds (crossover/slip). */
-function specForPalette(k: PaletteKind): { kind: TurnoutKind; curved: boolean } | null {
-  switch (k) {
-    case "left":
-      return { kind: "left", curved: false };
-    case "right":
-      return { kind: "right", curved: false };
-    case "wye":
-      return { kind: "wye", curved: false };
-    case "curved-left":
-      return { kind: "left", curved: true };
-    case "curved-right":
-      return { kind: "right", curved: true };
-    default:
-      return null;
-  }
-}
-
-/** A crossover glyph → its spec: the hand (which way the single diagonal throws,
- * facing endplate B) or double. ⚠️ A DOUBLE CROSSOVER *CONTAINS* A SCISSORS —
- * the X where its two opposite diverging routes meet and cross — it is not
- * itself "a scissors". Null for non-crossover kinds. */
-function crossoverSpecForPalette(
-  k: PaletteKind,
-): { hand?: "left" | "right"; double?: boolean } | null {
-  switch (k) {
-    case "crossover-lh":
-      return { hand: "left" };
-    case "crossover-rh":
-      return { hand: "right" };
-    case "crossover-double":
-      return { double: true };
-    default:
-      return null;
-  }
-}
-
-/** A little schematic icon for each turnout kind — a straight route plus the
- * diverging leg(s), so the palette reads like the turnouts it drops. */
-function TurnoutGlyph({ kind, className }: { kind: PaletteKind; className?: string }) {
-  const s = {
-    fill: "none",
-    stroke: "currentColor",
-    strokeWidth: 1.6,
-    strokeLinecap: "round" as const,
-    strokeLinejoin: "round" as const,
-  };
-  const main = <line x1={3} y1={9} x2={25} y2={9} {...s} />;
-  const body = (() => {
-    switch (kind) {
-      case "right":
-        return (
-          <>
-            {main}
-            <path d="M10 9 L25 3" {...s} />
-          </>
-        );
-      case "left":
-        return (
-          <>
-            {main}
-            <path d="M10 9 L25 15" {...s} />
-          </>
-        );
-      case "wye":
-        return (
-          <>
-            <line x1={3} y1={9} x2={11} y2={9} {...s} />
-            <path d="M11 9 L25 4 M11 9 L25 14" {...s} />
-          </>
-        );
-      case "curved-right":
-        return (
-          <>
-            <path d="M3 9 Q16 10 25 13" {...s} />
-            <path d="M10 9 Q19 6 25 3" {...s} />
-          </>
-        );
-      case "curved-left":
-        return (
-          <>
-            <path d="M3 9 Q16 8 25 5" {...s} />
-            <path d="M10 9 Q19 12 25 15" {...s} />
-          </>
-        );
-      case "crossover-lh":
-        return (
-          <>
-            <line x1={3} y1={5} x2={25} y2={5} {...s} />
-            <line x1={3} y1={13} x2={25} y2={13} {...s} />
-            <path d="M10 13 L18 5" {...s} />
-          </>
-        );
-      case "crossover-rh":
-        return (
-          <>
-            <line x1={3} y1={5} x2={25} y2={5} {...s} />
-            <line x1={3} y1={13} x2={25} y2={13} {...s} />
-            <path d="M10 5 L18 13" {...s} />
-          </>
-        );
-      case "crossover-double":
-        return (
-          <>
-            <line x1={3} y1={5} x2={25} y2={5} {...s} />
-            <line x1={3} y1={13} x2={25} y2={13} {...s} />
-            <path d="M10 5 L18 13 M18 5 L10 13" {...s} />
-          </>
-        );
-      case "slip-single":
-        return (
-          <>
-            <path d="M4 4 L24 14 M4 14 L24 4" {...s} />
-            <path d="M9 6.5 Q14 9 19 11.5" {...s} />
-          </>
-        );
-      case "slip-double":
-        return (
-          <>
-            <path d="M4 4 L24 14 M4 14 L24 4" {...s} />
-            <path d="M9 6.5 Q14 9 19 11.5 M9 11.5 Q14 9 19 6.5" {...s} />
-          </>
-        );
-    }
-  })();
-  return (
-    <svg viewBox="0 0 28 18" className={className} aria-hidden>
-      {body}
-    </svg>
-  );
 }
 
 /** Track/feature context drawn under the benchwork layer. */
@@ -415,8 +260,6 @@ export function BenchworkEditor({
   onDropSignal,
   onTrackEndDrop,
   onTurnoutDrop,
-  turnoutSize = 6,
-  onTurnoutSizeChange,
   flexCutsByTrack,
   selection = null,
   onSelect,
@@ -514,7 +357,16 @@ export function BenchworkEditor({
    * canvas click or a palette drag. It lands with a short diverging spur stub
    * (#turnout-palette). */
   onDropTurnout?: (
-    spec: { kind: TurnoutKind; curved?: boolean },
+    spec: {
+      kind: TurnoutKind;
+      curved?: boolean;
+      /** Frog number — the palette entry's own, not a separate control's. */
+      size: number;
+      /** Set only when the owner picked a REAL product. A bare `#N` stays bare:
+       * `turnoutPartForSize` refuses to adopt a placeholder for one, so naming
+       * the placeholder would silently drop the extent a bare #5 is drawn at. */
+      partId?: string;
+    },
     onTrack: string,
     pos: number,
   ) => void;
@@ -526,6 +378,12 @@ export function BenchworkEditor({
   onDropCrossover?: (p: {
     hand?: "left" | "right";
     double?: boolean;
+    /** Frog number of the turnouts it is built from — from the palette entry. */
+    size: number;
+    /** The crossover PRODUCT, when one was named. It goes on the CONNECTOR, not
+     * on a turnout: the fixture that set the angle also set the track spacing,
+     * and that belongs to the pair of tracks (#180). */
+    partId?: string;
     /** Which side of the main the parallel lane sits (from the drop point). */
     side: 1 | -1;
     /** The crossover's span along the main (inches from A). */
@@ -547,9 +405,6 @@ export function BenchworkEditor({
   /** Fired when a turnout drag is released — an End-of-Double-Track turnout
    * dragged onto the single end's plate completes the double main. */
   onTurnoutDrop?: (id: string) => void;
-  /** The frog number the Turnout tool drops (governs the diverging angle). */
-  turnoutSize?: number;
-  onTurnoutSizeChange?: (size: number) => void;
   /** Where the flex track is jointed on each run — ABSOLUTE inches along the
    * module, by track id (#193). The editor works these out (it owns the pieces
    * and the parts they're cut from); the canvas only has to place them, which
@@ -599,10 +454,6 @@ export function BenchworkEditor({
     | { kind: "pieceHandle"; id: string; handle: "rotate" | "flex" | "bend"; latest?: TrackPiece }
     | null
   >(null);
-  /** ADR 0001 — the part armed in the Pieces palette, and a drag ghost while one
-   * is being dragged out of it. Armed = the next board click lays that part. */
-  const [armedPart, setArmedPart] = useState<PieceSpec | null>(null);
-  const [partDrag, setPartDrag] = useState<{ spec: PieceSpec; x: number; y: number } | null>(null);
   /** An in-progress pan: pointer origin + the view at grab time. */
   /** An in-progress pan. `tentative` marks a press on empty canvas under the
    * Select tool, which only becomes a pan once the pointer moves — a click that
@@ -623,18 +474,25 @@ export function BenchworkEditor({
     null,
   );
   const [showLegend, setShowLegend] = useState(false);
-  /** The turnout armed in the palette — a canvas click drops this one, and it's
-   * what a palette drag carries (#turnout-palette). */
-  /** ⚠️ NULL BY DEFAULT, and that is what makes the merge safe. The Turnout tool
-   * could assume a default hand because a click there could only ever mean
-   * "drop a turnout". Sharing the Track tool, an armed default would hijack
-   * every click meant for bending the main. */
-  const [armedPalette, setArmedPalette] = useState<PaletteKind | null>(null);
-  /** A palette glyph being dragged toward the board: its kind + live client
+  /**
+   * ⭐ ONE ARMED THING (#198 step 5). There used to be two — `armedPart` for the
+   * parts palette and `armedPalette` for the turnout glyphs — which is what four
+   * pickers in three idioms costs you in state. One palette, one arming, and the
+   * canvas dispatches on {@link PaletteEntry.action}.
+   *
+   * ⚠️ NULL BY DEFAULT, and that is what makes the merge with the Track tool
+   * safe. The old Turnout tool could assume a default hand because a click there
+   * could only ever mean "drop a turnout". Sharing the Track tool, an armed
+   * default would hijack every click meant for bending the main.
+   */
+  const [armedRaw, setArmed] = useState<PaletteEntry | null>(null);
+  /** A palette entry being dragged toward the board, with its live client
    * position, so a ghost can follow the pointer until it's dropped. */
-  const [paletteDrag, setPaletteDrag] = useState<{ kind: PaletteKind; x: number; y: number } | null>(
-    null,
-  );
+  const [paletteDrag, setPaletteDrag] = useState<{
+    entry: PaletteEntry;
+    x: number;
+    y: number;
+  } | null>(null);
   /** A transient warning shown in the toolbar (e.g. a curved turnout dropped on
    * straight track). Cleared on the next pointer-down. */
   const [dropWarn, setDropWarn] = useState<string | null>(null);
@@ -1748,10 +1606,7 @@ export function BenchworkEditor({
       // back to the palette between pieces — which means there has to be an
       // obvious way to put it down again, or the next click on the board lays a
       // piece nobody asked for.
-      if (e.key === "Escape") {
-        setArmedPart(null);
-        setArmedPalette(null);
-      }
+      if (e.key === "Escape") setArmed(null);
     };
     window.addEventListener("keydown", down);
     window.addEventListener("keyup", up);
@@ -1986,6 +1841,31 @@ export function BenchworkEditor({
   /** Where the 1-D reshape handles are live at all. Select shows them too (#192
    * — selecting a track arms it), so it has to answer the same question. */
   const edit1D = !graphAuthoring && (tool === "track" || tool === "select");
+  /**
+   * Everything the Track tool can lay, for THIS module's authoring model
+   * (#198 step 5). One builder, one entry type — the models differ only in what
+   * they can honestly accept, which `trackPaletteEntries` is the single place to
+   * decide.
+   */
+  const paletteEntries = useMemo(
+    () => trackPaletteEntries(partLibrary, graphAuthoring ? "graph" : "positional"),
+    [partLibrary, graphAuthoring],
+  );
+  /**
+   * What is armed, checked against what the palette is actually offering.
+   *
+   * ⚠️ A REBUILD FLIPS THE MODEL UNDER THE ARMED ENTRY. Converting a legacy
+   * module to pieces switches the palette to the graph model mid-session, and an
+   * entry armed from the other model would still be sitting in state — the next
+   * board click would then try to drop a 1-D turnout on a module that no longer
+   * has a 1-D document to put it in. DERIVED rather than cleared in an effect:
+   * an effect would run a render late, which is a render in which the stale
+   * entry is live.
+   */
+  const armed = armedRaw && paletteEntries.some((e) => e.key === armedRaw.key) ? armedRaw : null;
+  /** The armed entry as a PIECE, when it is one — the ADR 0001 laying path. */
+  const armedPart: PieceSpec | null =
+    armed?.action?.how === "piece" ? armed.action.spec : null;
   /**
    * Is Main 1 armed for editing? SELECTING it arms it, under Select or Track,
    * the same gesture as every other track (#192) — Main 2 already worked that
@@ -2433,17 +2313,8 @@ export function BenchworkEditor({
     // + spur editing are one tool) — UNLESS a turnout is armed in the palette,
     // in which case it lands there.
     if (track1D) {
-      if (armedPalette && centerline.length >= 2) {
-        const xo = crossoverSpecForPalette(armedPalette);
-        if (xo) {
-          dropCrossoverAt(xo, toLocal(e));
-          return;
-        }
-        const spec = specForPalette(armedPalette);
-        if (onDropTurnout && spec) {
-          const hit = nearestTrackPos(toLocal(e));
-          if (hit) dropTurnoutGuarded(spec, hit.onTrack, hit.pos);
-        }
+      if (armed && centerline.length >= 2) {
+        dropPositionalEntry(armed, toLocal(e));
         return;
       }
       if (editSpurTrack && onTrackPathChange) addSpurVertex(editSpurTrack, toLocal(e));
@@ -2524,9 +2395,14 @@ export function BenchworkEditor({
     return Math.acos(dot) > 4 * DEG;
   };
 
-  /** Place a turnout from the palette, keeping a curved turnout on curved track. */
+  /** Place a turnout from the palette, keeping a curved turnout on curved track.
+   *
+   * ⭐ THE SPEC NOW CARRIES ITS OWN FROG NUMBER, which is what let the separate
+   * `Turnout #` dropdown go: the palette entry an owner clicked already said
+   * whether it was a #6 or an Atlas #7, and a second control that could disagree
+   * with the part is a contradiction you could author (#198 step 5). */
   const dropTurnoutGuarded = (
-    spec: { kind: TurnoutKind; curved?: boolean },
+    spec: { kind: TurnoutKind; curved?: boolean; size: number; partId?: string },
     onTrack: string,
     pos: number,
   ) => {
@@ -2562,11 +2438,11 @@ export function BenchworkEditor({
    * owner has.
    */
   const dropCrossoverAt = (
-    spec: { hand?: "left" | "right"; double?: boolean },
+    spec: { hand?: "left" | "right"; double?: boolean; size: number; partId?: string },
     pt: Pt,
   ) => {
     if (!onDropCrossover || centerline.length < 2) return;
-    const size = turnoutSize > 0 ? turnoutSize : 6;
+    const size = spec.size > 0 ? spec.size : 6;
     const span = (LANE_SPACING_INCHES - 2 * RAIL_GAUGE_INCHES) * size;
     if (lengthInches < span + 2) {
       setDropWarn("Not enough room for a crossover at this frog number.");
@@ -2631,38 +2507,28 @@ export function BenchworkEditor({
     return best === null ? null : { onTrack: best.onTrack, pos: Math.round(best.pos * 10) / 10 };
   };
 
-  /** Drag a turnout out of the palette and onto the board. A ghost follows the
-   * pointer; releasing over a track drops the turnout there (snapped to the
-   * nearest track), with its spur stub. Releasing off-board just cancels. Uses
-   * window listeners so the drag survives leaving the little glyph button. */
-  const startPaletteDrag = (kind: PaletteKind, e: React.PointerEvent) => {
-    e.preventDefault();
-    setArmedPalette(kind);
-    setPaletteDrag({ kind, x: e.clientX, y: e.clientY });
-    const move = (ev: PointerEvent) => setPaletteDrag({ kind, x: ev.clientX, y: ev.clientY });
-    const up = (ev: PointerEvent) => {
-      window.removeEventListener("pointermove", move);
-      window.removeEventListener("pointerup", up);
-      setPaletteDrag(null);
-      const svg = svgRef.current;
-      if (!svg || centerline.length < 2) return;
-      const r = svg.getBoundingClientRect();
-      const over =
-        ev.clientX >= r.left && ev.clientX <= r.right && ev.clientY >= r.top && ev.clientY <= r.bottom;
-      if (!over) return;
-      const pt = toLocal(ev);
-      const xo = crossoverSpecForPalette(kind);
-      if (xo) {
-        dropCrossoverAt(xo, pt);
-        return;
-      }
-      const spec = specForPalette(kind);
-      if (!spec || !onDropTurnout) return;
-      const hit = nearestTrackPos(pt);
-      if (hit) dropTurnoutGuarded(spec, hit.onTrack, hit.pos);
-    };
-    window.addEventListener("pointermove", move);
-    window.addEventListener("pointerup", up);
+  /**
+   * Place what a palette entry says, on a 1-D module. The graph model's own
+   * placement (`layPiece` / `fillRun`) is a different gesture — a piece can be
+   * laid on bare board, whereas a turnout has to land ON a track.
+   */
+  const dropPositionalEntry = (entry: PaletteEntry, pt: Pt) => {
+    const a = entry.action;
+    if (!a || centerline.length < 2) return;
+    // ⚠️ Field by field, not `{...a}` — `how` is the palette's own discriminant
+    // and has no business reaching the document.
+    if (a.how === "crossover") {
+      dropCrossoverAt({ hand: a.hand, double: a.double, size: a.size, partId: a.partId }, pt);
+      return;
+    }
+    if (a.how !== "turnout" || !onDropTurnout) return;
+    const hit = nearestTrackPos(pt);
+    if (hit)
+      dropTurnoutGuarded(
+        { kind: a.kind, curved: a.curved, size: a.size, partId: a.partId },
+        hit.onTrack,
+        hit.pos,
+      );
   };
 
   /** Finish a draw-to-create: turn the drawn line into track geometry, anchored
@@ -3107,24 +2973,33 @@ export function BenchworkEditor({
   const putPiece = (next: TrackPiece, commit = false) =>
     onPiecesChange?.(pieces.map((p) => (p.id === next.id ? next : p)), { commit });
 
-  /** Drag a part out of the palette onto the board. A ghost follows the pointer;
-   * releasing over the canvas lays it there. Window listeners, so the drag
-   * survives leaving the little button. */
-  const startPartDrag = (spec: PieceSpec, e: React.PointerEvent) => {
+  /**
+   * Drag an entry out of the palette onto the board. A ghost follows the
+   * pointer; releasing over the canvas places it. Window listeners, so the drag
+   * survives leaving the little button.
+   *
+   * ⭐ ONE HANDLER FOR BOTH MODELS (#198 step 5) — there were two, differing
+   * only in what they did on release, each with its own ghost element. What is
+   * dragged is a palette ENTRY; where it lands is decided by the entry.
+   */
+  const startPaletteDrag = (entry: PaletteEntry, e: React.PointerEvent) => {
     e.preventDefault();
-    setArmedPart(spec);
-    setPartDrag({ spec, x: e.clientX, y: e.clientY });
-    const move = (ev: PointerEvent) => setPartDrag({ spec, x: ev.clientX, y: ev.clientY });
+    setArmed(entry);
+    setPaletteDrag({ entry, x: e.clientX, y: e.clientY });
+    const move = (ev: PointerEvent) => setPaletteDrag({ entry, x: ev.clientX, y: ev.clientY });
     const up = (ev: PointerEvent) => {
       window.removeEventListener("pointermove", move);
       window.removeEventListener("pointerup", up);
-      setPartDrag(null);
+      setPaletteDrag(null);
       const svg = svgRef.current;
       if (!svg) return;
       const r = svg.getBoundingClientRect();
       const over =
         ev.clientX >= r.left && ev.clientX <= r.right && ev.clientY >= r.top && ev.clientY <= r.bottom;
-      if (over) layPiece(spec, toLocal(ev));
+      if (!over) return;
+      const at = toLocal(ev);
+      if (entry.action?.how === "piece") layPiece(entry.action.spec, at);
+      else dropPositionalEntry(entry, at);
     };
     window.addEventListener("pointermove", move);
     window.addEventListener("pointerup", up);
@@ -3356,7 +3231,7 @@ const ENDPLATE_TAB = 5; // ballast-shoulder band width, inches
         // POSITIONAL track drawn underneath had its own click handler, so laying
         // a piece over an existing main just selected the main. Verified on a
         // real module before it was noticed.
-        !(track1D && armedPalette) &&
+        !(track1D && armed) &&
           tool !== "signal" &&
           !piecesMode &&
           line.selectable &&
@@ -3455,60 +3330,25 @@ const ENDPLATE_TAB = 5; // ballast-shoulder band width, inches
   };
 
   /**
-   * The turnout palette — part of TRACK BUILDING, not a tool of its own.
+   * ⭐⭐ THE ONE PARTS PALETTE (#198 step 5). Same component, same entry type,
+   * same builder, in both authoring models — see `track-palette.tsx`.
    *
    * ⭐ A turnout is not a different activity from track; it is a thing you put
-   * ON track. It used to have its own rail button, which meant deciding "am I
-   * drawing, or am I placing a turnout?" before every action.
+   * ON track. It used to have its own rail button, then its own row of glyphs
+   * beside a frog-number dropdown while the graph model had a separate palette
+   * of products. Three idioms for one question: **what is this bit of track?**
    */
-  const turnoutPalette = (
-    <>
-            <label className="flex items-center gap-1 font-medium text-gray-600">
-              Turnout #
-              <select
-                value={turnoutSize}
-                onChange={(e) => onTurnoutSizeChange?.(Number(e.target.value))}
-                className="rounded border border-gray-300 px-1 py-0.5 text-xs"
-              >
-                {[4, 5, 6, 7, 8, 10].map((n) => (
-                  <option key={n} value={n}>
-                    #{n}
-                  </option>
-                ))}
-              </select>
-            </label>
-            <div className="flex items-center gap-0.5">
-              {TURNOUT_PALETTE.map((p) => {
-                const armed = !p.soon && armedPalette === p.kind;
-                return (
-                  <button
-                    key={p.kind}
-                    type="button"
-                    title={p.soon ? `${p.label} — coming soon` : `${p.label} — drag onto a track, or click it then click the board`}
-                    disabled={p.soon}
-                    onPointerDown={p.soon ? undefined : (e) => startPaletteDrag(p.kind, e)}
-                    onClick={
-                      p.soon
-                        ? undefined
-                        : () => setArmedPalette((prev) => (prev === p.kind ? null : p.kind))
-                    }
-                    className={`flex h-7 w-8 items-center justify-center rounded border ${
-                      armed
-                        ? "border-blue-500 bg-blue-50 text-blue-700 ring-1 ring-blue-400"
-                        : "border-gray-300 text-gray-600 hover:bg-gray-50"
-                    } ${p.soon ? "cursor-not-allowed opacity-40" : "cursor-grab active:cursor-grabbing"}`}
-                  >
-                    <TurnoutGlyph kind={p.kind} className="h-4 w-6" />
-                  </button>
-                );
-              })}
-            </div>
-            {/* Only the WARNING lives with the palette. Sharing a bar with the
-                track controls, its old standing hint sat alongside the track
-                hint and the owner got two paragraphs telling them different
-                things; the one hint below now says whichever is true. */}
-            {dropWarn && <span className="font-medium text-amber-700">{dropWarn}</span>}
-    </>
+  const palette = (
+    <TrackPalette
+      // Keyed on the model, so the open kind resets with the entries rather
+      // than pointing at a group that no longer exists.
+      key={graphAuthoring ? "graph" : "positional"}
+      entries={paletteEntries}
+      mode={graphAuthoring ? "graph" : "positional"}
+      armed={armed}
+      onArm={setArmed}
+      onDragStart={startPaletteDrag}
+    />
   );
 
   return (
@@ -3554,12 +3394,7 @@ const ENDPLATE_TAB = 5; // ballast-shoulder band width, inches
           </span>
         ) : piecesMode ? (
           <>
-            <PiecePalette
-              library={partLibrary}
-              armed={armedPart}
-              onArm={setArmedPart}
-              onDragStart={startPartDrag}
-            />
+            {palette}
             <span className="text-gray-500">
               {armedPart
                 ? isFlexSpec(armedPart)
@@ -3612,7 +3447,12 @@ const ENDPLATE_TAB = 5; // ballast-shoulder band width, inches
           ) : (
             <>
               {trackMenu}
-              {turnoutPalette}
+              {palette}
+              {/* Only the WARNING lives with the palette. Sharing a bar with the
+                  track controls, its old standing hint sat alongside the track
+                  hint and the owner got two paragraphs telling them different
+                  things; the one hint below now says whichever is true. */}
+              {dropWarn && <span className="font-medium text-amber-700">{dropWarn}</span>}
               {!editSpurTrack && mainPath.length >= 2 && onMainPathChange && (
                 <button type="button" onClick={() => onMainPathChange([])} className={btn}>
                   Straighten
@@ -3628,8 +3468,10 @@ const ENDPLATE_TAB = 5; // ballast-shoulder band width, inches
                 </button>
               )}
               <span className="text-gray-500">
-                {armedPalette
-                  ? "Click a track to drop the turnout there — it lands with a short spur you drag to size. Esc to put it down."
+                {armed
+                  ? armed.action?.how === "crossover"
+                    ? "Click the main where the crossover goes — the side you click is the side the parallel track runs. Esc to put it down."
+                    : "Click a track to drop the turnout there — it lands with a short spur you drag to size. Esc to put it down."
                   : editSpurTrack
                     ? "Drag the spur's points ○ to bend/rotate (◇ to curve · Alt-click to remove). The throat stays on its turnout."
                     : mainPath.length < 2 && centerline.length < 2
@@ -3644,7 +3486,7 @@ const ENDPLATE_TAB = 5; // ballast-shoulder band width, inches
                   have silently deleted the whole #199 conversion path for every
                   legacy module in the database. `RebuildAsPieces` self-gates
                   (null once a module is already built from pieces). */}
-              {!armedPalette && !editSpurTrack && rebuildOffer}
+              {!armed && !editSpurTrack && rebuildOffer}
             </>
           )
         ) : (
@@ -3689,27 +3531,16 @@ const ENDPLATE_TAB = 5; // ballast-shoulder band width, inches
         </div>
       </div>
 
+      {/* ONE drag ghost, for whatever the one palette is dragging. It says the
+          same thing the button said — glyph and label together — so what is in
+          the hand is never in doubt mid-drag. */}
       {paletteDrag && (
         <div
-          className="pointer-events-none fixed z-50 flex h-8 w-10 items-center justify-center rounded border border-blue-500 bg-white/95 text-blue-700 shadow-md"
+          className="pointer-events-none fixed z-50 flex items-center gap-1 rounded border border-blue-500 bg-white/95 px-2 py-1 text-[11px] text-blue-700 shadow-md"
           style={{ left: paletteDrag.x + 12, top: paletteDrag.y + 12 }}
         >
-          <TurnoutGlyph kind={paletteDrag.kind} className="h-4 w-6" />
-        </div>
-      )}
-      {partDrag && (
-        <div
-          className="pointer-events-none fixed z-50 rounded border border-blue-500 bg-white/95 px-2 py-1 text-[11px] text-blue-700 shadow-md"
-          style={{ left: partDrag.x + 12, top: partDrag.y + 12 }}
-        >
-          {(() => {
-            const part = partLibrary.find((p) => p.id === partDrag.spec.partId);
-            if (!part) return partDrag.spec.partId;
-            // The ghost says the same thing the button said — including the
-            // hand, so what is being dragged is never in doubt mid-drag.
-            const hand = pieceHand(part, partDrag.spec.flipped);
-            return `${part.name}${hand ? (hand === "left" ? " LH" : " RH") : ""}`;
-          })()}
+          <PieceGlyph name={paletteDrag.entry.glyph} className="h-3.5 w-5 shrink-0" />
+          {paletteDrag.entry.label}
         </div>
       )}
       <svg
