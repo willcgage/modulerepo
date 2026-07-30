@@ -3298,13 +3298,33 @@ const ENDPLATE_TAB = 5; // ballast-shoulder band width, inches
     selectable: boolean;
   }[] = [
     // The main, drawn as segments so a wye leaves a gap (no straight-through).
-    ...mainSegments.map((pts, i) => ({
-      id: `__main__${i}`,
-      selId: MAIN_TRACK_ID,
-      pts,
-      main: true,
-      selectable: true,
-    })),
+    //
+    // ⛔ NOT ON A GRAPH-BUILT MODULE. Its pieces ARE the track, and the main
+    // would be drawn from `centerline` — which, for a module carrying no
+    // geometry and no `mainPath`, is a STRAIGHT LINE INVENTED BY A FALLBACK
+    // (`dims.geometry_type || "straight"` in editor.tsx). Will reported it: lay
+    // pieces on a new module, drag them anywhere, and a full-width mainline
+    // sits across the board refusing to follow them — because it was never
+    // derived from them in the first place.
+    //
+    // v0.15.16 already decided a fresh module has NO auto-derived main; the
+    // `|| "straight"` coercion defeats that. Fixing it there reaches endplate
+    // poses, the footprint and the layout map, so it is its own change. This
+    // stops the ink.
+    //
+    // ⚠️ This also makes the derived main UNSELECTABLE on a graph module,
+    // because `trackLines` drives hit-testing as well as rendering. That is the
+    // same rule `track1D`/`edit1D` already enforce: under ADR 0001 the 1-D
+    // document is an OUTPUT, not something an owner drags.
+    ...(graphAuthoring
+      ? []
+      : mainSegments.map((pts, i) => ({
+          id: `__main__${i}`,
+          selId: MAIN_TRACK_ID,
+          pts,
+          main: true,
+          selectable: true,
+        }))),
     ...trackPaths.map((t) => ({ id: t.id, pts: t.pts, main: false, selectable: true })),
     // A wye's mirrored second route draws as a (non-selectable) band.
     ...wyeMirrorLegs.map((w) => ({ id: w.id, pts: w.pts, main: false, selectable: false })),
