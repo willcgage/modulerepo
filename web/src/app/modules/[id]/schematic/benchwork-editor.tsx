@@ -1233,14 +1233,67 @@ export function BenchworkEditor({
     // joined because they never positioned it in the first place.
     if (t.id !== MAIN2_TRACK_ID)
       return lanePath(centerline, t.fromPos, t.toPos, t.lane, 24, pinches);
+    /**
+     * ⭐ THE FLEX BENDS OFF THE RAIL END — it doesn't start at the lane.
+     *
+     * The join above was made ALONG the main and nowhere else: `l.join` was
+     * projected to a position, which throws away how far off the main the leg
+     * actually ended, and the body was then drawn at the FULL lane offset from
+     * that position. So the two met in x and stood 0.52″ apart in y on FMN-0075
+     * — the gap Will pointed at. It is bigger on a #10, whose rail ends lower.
+     *
+     * Neither half was wrong on its own: #189 deliberately ends the drawn leg at
+     * the part's own diverging rail (running it out until parallel drew 10.79″
+     * of turnout for a 6.00″ part), and this assumed reaching the same position
+     * meant meeting. They were true at different times.
+     *
+     * So carry on from where the rail really ends, along the direction the leg
+     * is really pointing, until the lane is reached — which is what the owner's
+     * flex does. ⚠️ NO new constant and no eased curve: the leg leaves straight
+     * at the frog angle, so continuing straight is tangent-continuous by
+     * construction and there is no drawing convention to invent.
+     */
+    const rampFromRail = (l: { leg: Pt[] }): { at: Pt; pos: number } | null => {
+      const n = l.leg.length;
+      if (n < 2) return null;
+      const end = l.leg[n - 1];
+      const prev = l.leg[n - 2];
+      const len = Math.hypot(end.x - prev.x, end.y - prev.y) || 1;
+      const ux = (end.x - prev.x) / len;
+      const uy = (end.y - prev.y) / len;
+      const off = (p: Pt) => projectToCenterline(centerline, p).dist;
+      const target = Math.abs(laneOffset(t.lane));
+      const have = off(end);
+      if (have >= target - 0.01) return null; // already out at the lane
+      // Offset gained per inch along the leg's heading — exact on a straight
+      // main, which is every module in the catalogue today.
+      const rate = off({ x: end.x + ux, y: end.y + uy }) - have;
+      if (rate <= 0.001) return null; // running parallel; it never gets there
+      const d = (target - have) / rate;
+      const at = { x: end.x + ux * d, y: end.y + uy * d };
+      return { at, pos: projectToCenterline(centerline, at).pos };
+    };
     let from = t.fromPos;
     let to = t.toPos;
+    let head: Pt | null = null;
+    let tail: Pt | null = null;
     for (const l of legsByTrack.get(t.id) ?? []) {
       const jp = projectToCenterline(centerline, l.join).pos;
-      if (Math.abs(from - jp) <= Math.abs(to - jp)) from = jp;
-      else to = jp;
+      const r = rampFromRail(l);
+      const west = Math.abs(from - jp) <= Math.abs(to - jp);
+      if (west) {
+        from = r ? r.pos : jp;
+        if (r) head = l.leg[l.leg.length - 1];
+      } else {
+        to = r ? r.pos : jp;
+        if (r) tail = l.leg[l.leg.length - 1];
+      }
     }
-    return lanePath(centerline, from, to, t.lane, 24, pinches);
+    // `lanePath` always runs west→east, so the west leg's rail end goes in
+    // front and the east leg's on the end.
+    const body = lanePath(centerline, from, to, t.lane, 24, pinches);
+    if (!body.length) return body;
+    return [...(head ? [head] : []), ...body, ...(tail ? [tail] : [])];
   };
 
   /** A wye's mirrored second route — the leg forced to the opposite side, then
@@ -1906,40 +1959,20 @@ export function BenchworkEditor({
     commitMain(next);
   };
 
-  // --- Main 2 path editing (#131) — mirrors Main 1, endplate-pinned ------------
-  // ⛔ "NO THROAT" WAS TRUE OF ONLY ONE SHAPE. A full double main runs endplate
-  // to endplate and is pinned at both, which is what this was written for. A
-  // TRANSITION module's Main 2 begins at the End-of-Double-Track turnout — it
-  // has a throat, exactly like a spur — and because nothing said so its first
-  // point was the one handle on the board that could be dragged anywhere. Drag
-  // it and the flex is cut to the path you drew, so the run simply starts short
-  // of the turnout and never reaches it (Will, FMN-0075, 2026-07-30).
+  // --- Main 2 path editing (#131) — mirrors Main 1, endplate-pinned, no throat ---
   const main2Track_ = tracks.find((t) => t.id === MAIN2_TRACK_ID);
   const isDoubleMain = !!main2Track_;
   /** Edit Main 2 when it's selected under the Track (or Select) tool. */
   const editingMain2 =
     isDoubleMain && edit1D && selection?.kind === "track" && selection.id === MAIN2_TRACK_ID;
-  const commitMain2 = (next: BenchworkPoint[]) => {
-    // ⭐ THE SAME SNAP A SPUR'S ENDS GET (#189). Main 2 was the one drawn track
-    // whose ends never went through it, so bringing it near the turnout it
-    // leaves from did nothing and the gap stayed open. `snapToTurnoutRail` only
-    // ever takes hold of a rail belonging to a turnout that diverges to THIS
-    // track, so it cannot join Main 2 to something it doesn't come from.
-    const pts = next.map((pt) => ({ ...pt }));
-    if (pts.length >= 2) {
-      for (const i of [0, pts.length - 1]) {
-        const at = snapToTurnoutRail(pts[i], MAIN2_TRACK_ID);
-        if (at) pts[i] = { ...pts[i], x: at.x, y: at.y };
-      }
-    }
+  const commitMain2 = (next: BenchworkPoint[]) =>
     onMain2PathChange?.(
-      pts.map((pt) => ({
+      next.map((pt) => ({
         x: round(pt.x),
         y: round(pt.y),
         ...(pt.bulge ? { bulge: round(pt.bulge) } : {}),
       })),
     );
-  };
   /** Seed Main 2's control points from where it runs today — its lane offset
    * from Main 1 across its own extent — so bending starts from the current
    * shape. */
@@ -2057,21 +2090,14 @@ export function BenchworkEditor({
       if (tp.pts.length < 2) continue;
       ends.push(tp.pts[0], tp.pts[tp.pts.length - 1]);
     }
-    // ⛔ MAIN 2 IS ONLY JOINED BY DERIVATION WHILE IT IS DERIVED. Excluding it
-    // outright was right when it always ran at its lane offset from Main 1 —
-    // then it met its turnout by construction and a ring would have been a lie.
-    // A HAND-DRAWN Main 2 is wherever the owner put it, so it can dangle like
-    // any other track, and suppressing the ring hid the one signal that says so.
-    // Read from `tracks`, the same source `trackPaths` draws from — whose ends
-    // are already in `ends` above, authored path included.
-    const m2 = tracks.find((t) => t.id === MAIN2_TRACK_ID);
-    const main2Drawn = !!m2?.path && m2.path.length >= 2;
     return turnoutRailEnds.filter(
       (r) =>
-        (main2Drawn || r.trackId !== MAIN2_TRACK_ID) &&
+        // Main 2 stays joined by derivation (see laneBody), so it is never
+        // dangling and must not be flagged as something to go and fix.
+        r.trackId !== MAIN2_TRACK_ID &&
         !ends.some((e) => Math.hypot(e.x - r.at.x, e.y - r.at.y) <= RAIL_SNAP_INCHES),
     );
-  }, [turnoutRailEnds, trackPaths, tracks]);
+  }, [turnoutRailEnds, trackPaths]);
 
   /**
    * Every rail joint to draw — where a piece of track ends and the next begins.

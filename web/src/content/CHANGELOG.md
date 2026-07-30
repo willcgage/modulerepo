@@ -8,9 +8,9 @@ Headings are `version — date` (YYYY-MM-DD).
 ## v0.51.0 — 2026-07-30
 
 ### Fixed
-- **A hand-drawn second main now meets the turnout it leaves from.** On a module that goes from single to double track, Main 2 starts at the End of Double Track turnout — but its first point was the one handle on the board you could drag anywhere, so it was easy to leave the second main starting an inch or two short of the turnout with a gap where the rails should join. The flex is cut to the line you drew, so it never reached across.
+- **The second main now bends off the turnout's rail instead of starting beside it.** On a module that goes from single to double track, Main 2 was drawn starting at its full track spacing from Main 1 — while the turnout's diverging rail ends a little short of that, because a turnout is drawn its real length and no longer. The two met along the board but not across it, so there was a step where the rails should join: about half an inch on a #6, and more on a #10, which climbs more gently.
 
-  Now that end **snaps onto the turnout's rail** when you bring it close, exactly as a siding's throat already did. And if it still isn't connected, the open ring that means *"your track belongs here, drag it over"* appears on the turnout's rail — it used to be hidden for Main 2 on the assumption that Main 2 always met its turnout automatically, which stopped being true the moment you bent one by hand.
+  Main 2 now starts **where the turnout's rail actually ends** and runs on at the same angle until it reaches its lane — which is what the flex track in your hand does. Nothing about your module changes; this is how it was always drawn, corrected.
 
 ## v0.50.0 — 2026-07-30
 
