@@ -434,9 +434,15 @@ export function BenchworkEditor({
   const svgRef = useRef<SVGSVGElement | null>(null);
   const dragRef = useRef<
     | { kind: "vertex" | "edge"; i: number }
-    | { kind: "mainVertex" | "mainEdge"; i: number }
-    | { kind: "main2Vertex" | "main2Edge"; i: number }
-    | { kind: "spurVertex" | "spurEdge"; id: string; i: number }
+    | { kind: "mainVertex"; i: number }
+    | { kind: "main2Vertex"; i: number }
+    | { kind: "spurVertex"; id: string; i: number }
+    /** ⭐ `end` says WHICH HALF of the stretch this handle bends — the near one
+     * (`bulge`) or the far one (`bulgeEnd`). Two per edge, because flex is
+     * normally cut to make an S. */
+    | { kind: "main2Edge"; i: number; end: "start" | "end" }
+    | { kind: "spurEdge"; id: string; i: number; end: "start" | "end" }
+    | { kind: "mainEdge"; i: number; end: "start" | "end" }
     | { kind: "turnout"; id: string }
     | { kind: "trackEnd"; id: string; end: "from" | "to" }
     | { kind: "sectionBreak"; i: number }
@@ -1968,17 +1974,6 @@ export function BenchworkEditor({
   const editingMain =
     edit1D && selection?.kind === "track" && selection.id === MAIN_TRACK_ID;
   /** Midpoint handle for mainline edge i (open path, no wrap). */
-  const mainEdgeHandle = (i: number): Pt => {
-    const p0 = editMain[i];
-    const p1 = editMain[i + 1];
-    const dx = p1.x - p0.x;
-    const dy = p1.y - p0.y;
-    const c = Math.hypot(dx, dy) || 1;
-    return {
-      x: (p0.x + p1.x) / 2 + (-dy / c) * (p0.bulge ?? 0),
-      y: (p0.y + p1.y) / 2 + (dx / c) * (p0.bulge ?? 0),
-    };
-  };
   const addMainVertex = (pt: Pt) => {
     if (editMain.length < 2) return;
     let best = 0;
@@ -2038,17 +2033,65 @@ export function BenchworkEditor({
     ];
   };
   const editMain2 = main2Path.length >= 1 ? main2Path : seedMain2();
-  const main2EdgeHandle = (i: number): Pt => {
-    const p0 = editMain2[i];
-    const p1 = editMain2[i + 1];
+  /**
+   * ⭐ TWO BEND HANDLES PER STRETCH OF TRACK, not one (Will, 2026-07-30).
+   *
+   * A length of flex is most often cut to step across to a line parallel to the
+   * one it left — out of a turnout and into its lane, round something and back.
+   * That is an S, and it needs curvature BOTH ways: one handle is one arc and
+   * can only ever bow one way. The near handle bows the first half of the
+   * stretch, the far handle the second (`bulge` / `bulgeEnd`, pkg 0.116.0).
+   *
+   * ⚠️ The far handle STARTS WHERE THE NEAR ONE IS (`bulgeEnd ?? bulge`), so a
+   * stretch that has only ever been bowed one way shows both handles on the arc
+   * it already draws, and grabbing the far one doesn't make the track jump.
+   * Until it is moved, `bulgeEnd` stays unset and the edge is the same circular
+   * arc it always was.
+   */
+  const BEND_AT = { start: 1 / 3, end: 2 / 3 } as const;
+  const bendHandle = (
+    pts: BenchworkPoint[],
+    i: number,
+    end: "start" | "end",
+  ): Pt => {
+    const p0 = pts[i];
+    const p1 = pts[i + 1];
     const dx = p1.x - p0.x;
     const dy = p1.y - p0.y;
     const c = Math.hypot(dx, dy) || 1;
-    return {
-      x: (p0.x + p1.x) / 2 + (-dy / c) * (p0.bulge ?? 0),
-      y: (p0.y + p1.y) / 2 + (dx / c) * (p0.bulge ?? 0),
-    };
+    const t = BEND_AT[end];
+    const b = (end === "start" ? p0.bulge : (p0.bulgeEnd ?? p0.bulge)) ?? 0;
+    return { x: p0.x + dx * t + (-dy / c) * b, y: p0.y + dy * t + (dx / c) * b };
   };
+  /** How far the pointer has pulled this half of the stretch off its chord. */
+  const bendFromPointer = (
+    pts: BenchworkPoint[],
+    i: number,
+    end: "start" | "end",
+    p: Pt,
+  ): number => {
+    const p0 = pts[i];
+    const p1 = pts[i + 1];
+    const dx = p1.x - p0.x;
+    const dy = p1.y - p0.y;
+    const c = Math.hypot(dx, dy) || 1;
+    const t = BEND_AT[end];
+    const ax = p0.x + dx * t;
+    const ay = p0.y + dy * t;
+    return (p.x - ax) * (-dy / c) + (p.y - ay) * (dx / c);
+  };
+  /** Write a dragged bend back onto its point, keeping the two halves' meanings
+   * apart: a straight far half is `0`, which is a different statement from the
+   * `undefined` that means "this edge has one bend". */
+  const withBend = (
+    pt: BenchworkPoint,
+    end: "start" | "end",
+    value: number,
+  ): BenchworkPoint => {
+    const b = Math.abs(value) < 0.5 ? 0 : value;
+    return end === "start" ? { ...pt, bulge: b } : { ...pt, bulgeEnd: b };
+  };
+
   const addMain2Vertex = (pt: Pt) => {
     if (editMain2.length < 2) return;
     let best = 0;
@@ -2312,17 +2355,6 @@ export function BenchworkEditor({
   const removeSpurVertex = (t: CanvasTrack, i: number) => {
     if (i <= 0 || i >= editSpur.length - 1) return;
     commitSpur(t, editSpur.filter((_, j) => j !== i));
-  };
-  const spurEdgeHandle = (pts: BenchworkPoint[], i: number): Pt => {
-    const p0 = pts[i];
-    const p1 = pts[i + 1];
-    const dx = p1.x - p0.x;
-    const dy = p1.y - p0.y;
-    const c = Math.hypot(dx, dy) || 1;
-    return {
-      x: (p0.x + p1.x) / 2 + (-dy / c) * (p0.bulge ?? 0),
-      y: (p0.y + p1.y) / 2 + (dx / c) * (p0.bulge ?? 0),
-    };
   };
   const addSpurVertex = (t: CanvasTrack, pt: Pt) => {
     if (editSpur.length < 2) return;
@@ -2884,16 +2916,9 @@ export function BenchworkEditor({
         next[d.i] = { ...next[d.i], x: p.x, y: p.y };
         setReadout(`${fmt(p.x)}, ${fmt(p.y)}″`);
       } else {
-        const p0 = editSpur[d.i];
-        const p1 = editSpur[d.i + 1];
-        const dx = p1.x - p0.x;
-        const dy = p1.y - p0.y;
-        const c = Math.hypot(dx, dy) || 1;
-        const mx = (p0.x + p1.x) / 2;
-        const my = (p0.y + p1.y) / 2;
-        const bulge = (p.x - mx) * (-dy / c) + (p.y - my) * (dx / c);
-        next[d.i] = { ...next[d.i], bulge: Math.abs(bulge) < 0.5 ? 0 : bulge };
-        setReadout(`bow ${fmt(Math.abs(bulge))}″`);
+        const bend = bendFromPointer(editSpur, d.i, d.end, p);
+        next[d.i] = withBend(next[d.i], d.end, bend);
+        setReadout(`bow ${fmt(Math.abs(bend))}″`);
       }
       commitSpur(editSpurTrack, next);
       return;
@@ -2905,16 +2930,9 @@ export function BenchworkEditor({
         next[d.i] = { ...next[d.i], x: p.x, y: p.y };
         setReadout(`${fmt(p.x)}, ${fmt(p.y)}″`);
       } else {
-        const p0 = editMain[d.i];
-        const p1 = editMain[d.i + 1];
-        const dx = p1.x - p0.x;
-        const dy = p1.y - p0.y;
-        const c = Math.hypot(dx, dy) || 1;
-        const mx = (p0.x + p1.x) / 2;
-        const my = (p0.y + p1.y) / 2;
-        const bulge = (p.x - mx) * (-dy / c) + (p.y - my) * (dx / c);
-        next[d.i] = { ...next[d.i], bulge: Math.abs(bulge) < 0.5 ? 0 : bulge };
-        setReadout(`bow ${fmt(Math.abs(bulge))}″`);
+        const bend = bendFromPointer(editMain, d.i, d.end, p);
+        next[d.i] = withBend(next[d.i], d.end, bend);
+        setReadout(`bow ${fmt(Math.abs(bend))}″`);
       }
       commitMain(next);
       return;
@@ -2925,16 +2943,9 @@ export function BenchworkEditor({
         next[d.i] = { ...next[d.i], x: p.x, y: p.y };
         setReadout(`${fmt(p.x)}, ${fmt(p.y)}″`);
       } else {
-        const p0 = editMain2[d.i];
-        const p1 = editMain2[d.i + 1];
-        const dx = p1.x - p0.x;
-        const dy = p1.y - p0.y;
-        const c = Math.hypot(dx, dy) || 1;
-        const mx = (p0.x + p1.x) / 2;
-        const my = (p0.y + p1.y) / 2;
-        const bulge = (p.x - mx) * (-dy / c) + (p.y - my) * (dx / c);
-        next[d.i] = { ...next[d.i], bulge: Math.abs(bulge) < 0.5 ? 0 : bulge };
-        setReadout(`bow ${fmt(Math.abs(bulge))}″`);
+        const bend = bendFromPointer(editMain2, d.i, d.end, p);
+        next[d.i] = withBend(next[d.i], d.end, bend);
+        setReadout(`bow ${fmt(Math.abs(bend))}″`);
       }
       commitMain2(next);
       return;
@@ -4346,26 +4357,36 @@ const ENDPLATE_TAB = 5; // ballast-shoulder band width, inches
         {/* --- Mainline edit handles — bend/drag the main once it's armed (#192) --- */}
         {mainHandlesOn && editMain.length >= 2 && (
           <>
-            {editMain.slice(0, -1).map((_, i) => {
-              const h = mainEdgeHandle(i);
-              return (
-                <rect
-                  key={`me${i}`}
-                  x={h.x - r * 0.9}
-                  y={sy(h.y) - r * 0.9}
-                  width={r * 1.8}
-                  height={r * 1.8}
-                  fill={editMain[i].bulge ? "#7c3aed" : "#fff"}
-                  stroke="#7c3aed"
-                  strokeWidth={r * 0.35}
-                  transform={`rotate(45 ${h.x} ${sy(h.y)})`}
-                  style={{ cursor: "grab" }}
-                  onPointerDown={(e) => beginDrag(e, { kind: "mainEdge", i })}
-                >
-                  <title>Drag to bow this stretch of mainline into a curve</title>
-                </rect>
-              );
-            })}
+            {editMain
+              .slice(0, -1)
+              .flatMap((_, i) =>
+                (["start", "end"] as const).map((end) => ({ i, end })),
+              )
+              .map(({ i, end }) => {
+                const h = bendHandle(editMain, i, end);
+                const set = end === "start" ? editMain[i].bulge : editMain[i].bulgeEnd;
+                return (
+                  <rect
+                    key={`me${i}${end}`}
+                    x={h.x - r * 0.9}
+                    y={sy(h.y) - r * 0.9}
+                    width={r * 1.8}
+                    height={r * 1.8}
+                    fill={set ? "#7c3aed" : "#fff"}
+                    stroke="#7c3aed"
+                    strokeWidth={r * 0.35}
+                    transform={`rotate(45 ${h.x} ${sy(h.y)})`}
+                    style={{ cursor: "grab" }}
+                    onPointerDown={(e) => beginDrag(e, { kind: "mainEdge", i, end })}
+                  >
+                    <title>
+                      {end === "start"
+                        ? "Drag to bend the near half of this stretch of mainline"
+                        : "Drag to bend the far half of this stretch of mainline"}
+                    </title>
+                  </rect>
+                );
+              })}
             {editMain.map((p, i) => (
               <circle
                 key={`mv${i}`}
@@ -4392,26 +4413,37 @@ const ENDPLATE_TAB = 5; // ballast-shoulder band width, inches
         {/* --- Main 2 edit handles — bend the second main (#131) --- */}
         {editingMain2 && !pendingTrack && editMain2.length >= 2 && (
           <>
-            {editMain2.slice(0, -1).map((_, i) => {
-              const h = main2EdgeHandle(i);
-              return (
-                <rect
-                  key={`m2e${i}`}
-                  x={h.x - r * 0.9}
-                  y={sy(h.y) - r * 0.9}
-                  width={r * 1.8}
-                  height={r * 1.8}
-                  fill={editMain2[i].bulge ? "#7c3aed" : "#fff"}
-                  stroke="#7c3aed"
-                  strokeWidth={r * 0.35}
-                  transform={`rotate(45 ${h.x} ${sy(h.y)})`}
-                  style={{ cursor: "grab" }}
-                  onPointerDown={(e) => beginDrag(e, { kind: "main2Edge", i })}
-                >
-                  <title>Drag to bow this stretch of Main 2 into a curve</title>
-                </rect>
-              );
-            })}
+            {editMain2
+              .slice(0, -1)
+              .flatMap((_, i) =>
+                (["start", "end"] as const).map((end) => ({ i, end })),
+              )
+              .map(({ i, end }) => {
+                const h = bendHandle(editMain2, i, end);
+                const set =
+                  end === "start" ? editMain2[i].bulge : editMain2[i].bulgeEnd;
+                return (
+                  <rect
+                    key={`m2e${i}${end}`}
+                    x={h.x - r * 0.9}
+                    y={sy(h.y) - r * 0.9}
+                    width={r * 1.8}
+                    height={r * 1.8}
+                    fill={set ? "#7c3aed" : "#fff"}
+                    stroke="#7c3aed"
+                    strokeWidth={r * 0.35}
+                    transform={`rotate(45 ${h.x} ${sy(h.y)})`}
+                    style={{ cursor: "grab" }}
+                    onPointerDown={(e) => beginDrag(e, { kind: "main2Edge", i, end })}
+                  >
+                    <title>
+                      {end === "start"
+                        ? "Drag to bend the near half of this stretch — with the far handle bent the other way, that is the S a length of flex makes"
+                        : "Drag to bend the far half of this stretch"}
+                    </title>
+                  </rect>
+                );
+              })}
             {editMain2.map((p, i) => (
               <circle
                 key={`m2v${i}`}
@@ -4438,26 +4470,38 @@ const ENDPLATE_TAB = 5; // ballast-shoulder band width, inches
         {/* --- Spur edit handles (Track tool) — bend/rotate the selected spur --- */}
         {editSpurTrack && !pendingTrack && editSpur.length >= 2 && (
           <>
-            {editSpur.slice(0, -1).map((_, i) => {
-              const h = spurEdgeHandle(editSpur, i);
-              return (
-                <rect
-                  key={`se${i}`}
-                  x={h.x - r * 0.9}
-                  y={sy(h.y) - r * 0.9}
-                  width={r * 1.8}
-                  height={r * 1.8}
-                  fill={editSpur[i].bulge ? "#0d9488" : "#fff"}
-                  stroke="#0f766e"
-                  strokeWidth={r * 0.35}
-                  transform={`rotate(45 ${h.x} ${sy(h.y)})`}
-                  style={{ cursor: "grab" }}
-                  onPointerDown={(e) => beginDrag(e, { kind: "spurEdge", id: editSpurTrack.id, i })}
-                >
-                  <title>Drag to bow this stretch into a curve</title>
-                </rect>
-              );
-            })}
+            {editSpur
+              .slice(0, -1)
+              .flatMap((_, i) =>
+                (["start", "end"] as const).map((end) => ({ i, end })),
+              )
+              .map(({ i, end }) => {
+                const h = bendHandle(editSpur, i, end);
+                const set = end === "start" ? editSpur[i].bulge : editSpur[i].bulgeEnd;
+                return (
+                  <rect
+                    key={`se${i}${end}`}
+                    x={h.x - r * 0.9}
+                    y={sy(h.y) - r * 0.9}
+                    width={r * 1.8}
+                    height={r * 1.8}
+                    fill={set ? "#0d9488" : "#fff"}
+                    stroke="#0f766e"
+                    strokeWidth={r * 0.35}
+                    transform={`rotate(45 ${h.x} ${sy(h.y)})`}
+                    style={{ cursor: "grab" }}
+                    onPointerDown={(e) =>
+                      beginDrag(e, { kind: "spurEdge", id: editSpurTrack.id, i, end })
+                    }
+                  >
+                    <title>
+                      {end === "start"
+                        ? "Drag to bend the near half of this stretch — with the far handle bent the other way, that is the S a length of flex makes"
+                        : "Drag to bend the far half of this stretch"}
+                    </title>
+                  </rect>
+                );
+              })}
             {editSpur.map((p, i) => (
               <circle
                 key={`sv${i}`}

@@ -5,6 +5,15 @@ Headings are `version — date` (YYYY-MM-DD).
 
 ---
 
+## v0.54.0 — 2026-07-30
+
+### Changed
+- **Every stretch of track now has two bend handles, so you can draw an S.** There was one ◆ per stretch, and one bend is one arc — it could only ever bow one way. But a length of flex is most often cut to do exactly the opposite: step across to a line parallel to the one it left, out of a turnout and into its lane, or around something and back. That shape needs to bend both ways.
+
+  The **near ◆ bends the first half** of a stretch and the **far ◆ the second**. Pull them opposite ways and you get the S; pull them the same way and you get the bow you have always had. This applies to the mainline, the second main and any siding or spur you have drawn.
+
+  Nothing about your existing track changes. A stretch you have already bowed keeps its exact shape, and its second handle sits on the curve where you left it, so picking it up doesn't move anything until you drag it.
+
 ## v0.53.0 — 2026-07-30
 
 ### Fixed
