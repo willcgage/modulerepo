@@ -5,6 +5,15 @@ Headings are `version — date` (YYYY-MM-DD).
 
 ---
 
+## v0.53.0 — 2026-07-30
+
+### Fixed
+- **A track you drew now draws where you drew it — the second main included.** Bending Main 2 by hand looked like it did nothing: the line stayed where the app had put it, and dragging its points seemed to have no effect. The shape *was* being saved — its length in the panel followed your drag the whole time — but the board kept drawing the second main at its standard offset instead of along your line. So the drawing and the saved module quietly disagreed, and the one you could see was not the one being kept.
+
+  Any track carrying a shape you drew is now drawn to that shape. Main 2's ends also **snap onto the turnout's rail** when you bring them close, the way a siding's throat already did, and if an end is left unconnected the open ring appears on the rail to say so.
+
+  ⚠️ **If you bent Main 2 before this release, it may jump** — to where your saved shape actually is, which may not be where the board has been showing it. Drag its ends back (they will snap), or press **Straighten (back to parallel)** to go back to the derived line.
+
 ## v0.52.0 — 2026-07-30
 
 ### Fixed

@@ -431,7 +431,15 @@ export function SchematicEditor({
           // Where the spur's throat snaps (its turnout on the main), + its
           // authored 2-D path when drawn (#2d-track stage C).
           throatPos: throatOf.get(t.id),
-          path: et?.path,
+          // ⭐ ANY TRACK THAT WAS DRAWN DRAWS AS DRAWN — mains included (Will,
+          // 2026-07-30). `et` is an `extraTracks` lookup and Main 2 is a MAIN,
+          // so it never matched: a bent Main 2 was stored, its length was read
+          // back into the inspector, and the canvas quietly drew the derived
+          // lane body instead. The handles looked dead and the document drifted
+          // away from the picture with nothing on screen to show it.
+          path: t.id === MAIN2_TRACK_ID && state.main2Path.length >= 2
+            ? state.main2Path
+            : et?.path,
           // The canvas needs BOTH to work out a crossover pinch (#180): the role
           // says which tracks are crossovers, and the part says what spacing it
           // was built to. Dropping either here is silent — `crossoverPinches`
@@ -441,7 +449,7 @@ export function SchematicEditor({
           crossoverPartId: et?.crossoverPartId ?? t.crossoverPartId ?? undefined,
         };
       });
-  }, [doc, state.lengthInches, state.extraTracks, state.turnouts]);
+  }, [doc, state.lengthInches, state.extraTracks, state.turnouts, state.main2Path]);
   /**
    * The two mains as list entries. They aren't `extraTracks` — the main IS the
    * module's centre-line — so the Objects pane has to be told about them
