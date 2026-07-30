@@ -5,6 +5,16 @@ Headings are `version — date` (YYYY-MM-DD).
 
 ---
 
+## v0.48.0 — 2026-07-29
+
+### Changed
+- **There is one Track button now.** The Pieces tool has folded into Track (T) — laying the parts your track is built from isn't a different job from building track, so it isn't a different button. `P` still takes you to Track, the way `W` does.
+
+  **Your module decides which way T works, because it already knows.** A module that carries track you drew the old way keeps exactly what it had: draw the main, bend a siding, drop a turnout, and the offer to rebuild it as pieces now sits on that same bar. A module built from pieces — and every module you start from now on — gets the parts palette instead, and its derived mainline and sidings are no longer draggable: they're what the pieces add up to, so the pieces are where you change them.
+
+### Added
+- **Drag along where the track goes and the run fills with flex.** A 96″ main is four lengths of 30″ flex with three rail joints in it, and now that's one gesture instead of four placements — the run is cut into buyable lengths, the ticks in the preview show you where the joints land, and the pieces meet exactly. Click instead of dragging and you still get the single piece you always did.
+
 ## v0.47.1 — 2026-07-28
 
 ### Added

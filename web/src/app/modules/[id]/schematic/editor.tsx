@@ -1810,7 +1810,9 @@ export function SchematicEditor({
         else if (e.key === "w" || e.key === "W") setTool("track");
         else if (e.key === "s" || e.key === "S") setTool("signal");
         else if (e.key === "i" || e.key === "I") setTool("industry");
-        else if (e.key === "p" || e.key === "P") setTool("pieces");
+        // P still works too: it was the Pieces tool's key, and Track now owns
+        // laying pieces (#198 step 4) — same courtesy as W above.
+        else if (e.key === "p" || e.key === "P") setTool("track");
         else if (e.key === "Escape") {
           setSelection(null);
           setPendingTrack(null);
@@ -2199,15 +2201,15 @@ const TOOL_GROUPS: RailTool[][] = [
       key: "T",
       label: "Track",
       glyph: "═",
-      // ⭐ ONE JOB. A turnout is a thing you put on track, not a separate
-      // activity, so its palette lives in this tool rather than in a rail
-      // button of its own.
-      hint: "Build track — draw the main, bend a siding, drop a turnout (T)",
+      // ⭐ ONE JOB, AND NOW ONE BUTTON FOR IT. A turnout is a thing you put on
+      // track, not a separate activity, so its palette lives here rather than in
+      // a rail button of its own — and laying track as the PIECES it is built
+      // from (ADR 0001) is not a separate activity either, so the Pieces tool
+      // (P) folded in here too (#198 step 4). The MODULE decides which of the
+      // two models this click means; see `graphAuthoring` in benchwork-editor.
+      hint: "Build track — lay the pieces, or draw the main and drop a turnout (T)",
     },
     { id: "signal", key: "S", label: "Signal", glyph: "⚑", hint: "Drop a signal / control point on the main (S)" },
-    // ⭐ ADR 0001 — track built from the parts it is made of. Sits with the
-    // other track tools because that is what it is, not a mode apart.
-    { id: "pieces", key: "P", label: "Pieces", glyph: "⛓", hint: "Lay track as real pieces — they snap end to end (P)" },
   ],
   [{ id: "industry", key: "I", label: "Industry", glyph: "▢", hint: "Place an industry on a track (I)" }],
 ];

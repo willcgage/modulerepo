@@ -8,6 +8,7 @@
 - **Amended by:**
   - [ADR 0002](0002-owner-initiated-conversion.md) (2026-07-28) — an owner may convert one module, having been shown the cost. Narrows "no auto-migration"; answers open question 1.
   - [ADR 0003](0003-an-assembly-is-one-piece.md) (2026-07-28) — a double crossover is one piece, not four turnouts.
+  - [ADR 0005](0005-one-track-tool-the-module-says-which-model.md) (2026-07-29) — one Track tool; the module says which model it is built from, and new modules are graph-built. Bounds "two authoring paths coexist for a long time" below.
 
 ## Context
 
