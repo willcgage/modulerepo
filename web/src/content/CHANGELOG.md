@@ -5,6 +5,13 @@ Headings are `version — date` (YYYY-MM-DD).
 
 ---
 
+## v0.52.0 — 2026-07-30
+
+### Fixed
+- **The second main now curves onto its lane instead of turning a corner.** The previous release got Main 2 to start at the turnout's rail, but it then ran straight at the frog angle and turned square onto the lane — about 9½° on a #6, in one step. Real flex can't do that, and it showed as a kink a few inches past the turnout.
+
+  It now eases the way the rail actually bends: straight at the frog angle out of the turnout, then flattening onto the lane, arriving parallel. It's the same curve the app has always used to work out where a diverging route reaches the next track over — the turnout keeps its true length, and the flex beyond it does the bending, which is what happens on the board.
+
 ## v0.51.0 — 2026-07-30
 
 ### Fixed
