@@ -8,9 +8,11 @@ Headings are `version — date` (YYYY-MM-DD).
 ## v0.51.0 — 2026-07-30
 
 ### Fixed
-- **The second main now bends off the turnout's rail instead of starting beside it.** On a module that goes from single to double track, Main 2 was drawn starting at its full track spacing from Main 1 — while the turnout's diverging rail ends a little short of that, because a turnout is drawn its real length and no longer. The two met along the board but not across it, so there was a step where the rails should join: about half an inch on a #6, and more on a #10, which climbs more gently.
+- **The second main now bends off the turnout's rail instead of starting beside it.** On a module that goes from single to double track, Main 2 was drawn starting at its full track spacing from Main 1 — while the turnout's diverging rail ends a little short of that, because a turnout is drawn its real length and no longer. The two met along the board but not across it, so there was a step where the rails should join — about half an inch.
 
   Main 2 now starts **where the turnout's rail actually ends** and runs on at the same angle until it reaches its lane — which is what the flex track in your hand does. Nothing about your module changes; this is how it was always drawn, corrected.
+
+  The step was about half an inch whatever the turnout — a #10 is a longer part and climbs at a gentler angle, and the two very nearly cancel. What differs is how far the flex runs before it's up at the lane: roughly 3″ on a #6, 5″ on a #10.
 
 ## v0.50.0 — 2026-07-30
 
