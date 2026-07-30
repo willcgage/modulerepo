@@ -1810,6 +1810,11 @@ export function BenchworkEditor({
         x: round(p.x),
         y: round(p.y),
         ...(p.bulge ? { bulge: round(p.bulge) } : {}),
+        // ⚠️ CARRIED THROUGH, AND KEPT WHEN ZERO. `bulgeEnd` is the far half's own
+        // bend; zero says that half is deliberately straight, which is not the same
+        // as an edge with only one bend. Dropping it here is how the first attempt
+        // silently lost every S the moment it was committed.
+        ...(Number.isFinite(p.bulgeEnd) ? { bulgeEnd: round(p.bulgeEnd!) } : {}),
       })),
     );
 
@@ -1866,6 +1871,11 @@ export function BenchworkEditor({
         x: round(p.x),
         y: round(p.y),
         ...(p.bulge ? { bulge: round(p.bulge) } : {}),
+        // ⚠️ CARRIED THROUGH, AND KEPT WHEN ZERO. `bulgeEnd` is the far half's own
+        // bend; zero says that half is deliberately straight, which is not the same
+        // as an edge with only one bend. Dropping it here is how the first attempt
+        // silently lost every S the moment it was committed.
+        ...(Number.isFinite(p.bulgeEnd) ? { bulgeEnd: round(p.bulgeEnd!) } : {}),
       })),
     );
   /** Remove a mainline bend point (never the two endplate endpoints). */
@@ -2014,6 +2024,11 @@ export function BenchworkEditor({
         x: round(pt.x),
         y: round(pt.y),
         ...(pt.bulge ? { bulge: round(pt.bulge) } : {}),
+        // ⚠️ CARRIED THROUGH, AND KEPT WHEN ZERO. `bulgeEnd` is the far half's own
+        // bend; zero says that half is deliberately straight, which is not the same
+        // as an edge with only one bend. Dropping it here is how the first attempt
+        // silently lost every S the moment it was committed.
+        ...(Number.isFinite(pt.bulgeEnd) ? { bulgeEnd: round(pt.bulgeEnd!) } : {}),
       })),
     );
   };
@@ -2343,6 +2358,9 @@ export function BenchworkEditor({
       x: round(p.x),
       y: round(p.y),
       ...(p.bulge ? { bulge: round(p.bulge) } : {}),
+      // ⚠️ CARRIED THROUGH, AND KEPT WHEN ZERO — see the note on the other
+      // commits. A siding's S dies right here if this line goes missing.
+      ...(Number.isFinite(p.bulgeEnd) ? { bulgeEnd: round(p.bulgeEnd!) } : {}),
     }));
     const snapped = snapToTurnoutRail(pts[0], t.id);
     if (snapped) pts[0] = { ...pts[0], x: round(snapped.x), y: round(snapped.y) };
