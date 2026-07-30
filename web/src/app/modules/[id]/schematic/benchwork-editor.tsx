@@ -3646,7 +3646,7 @@ const ENDPLATE_TAB = 5; // ballast-shoulder band width, inches
             measured, so its absence means the library has a gap, not that the
             turnout is small. Same LOD gate as the rails — below that the whole
             turnout is a few pixels and the strip would only muddy it. */}
-        {railsVisible &&
+        {!graphAuthoring && railsVisible &&
           turnoutPts.map((t) =>
             t.body ? (
               <polygon
@@ -3667,7 +3667,7 @@ const ENDPLATE_TAB = 5; // ballast-shoulder band width, inches
         {/* RAIL JOINTS — a tick across the rails where one piece of track ends
             and the next begins. Same LOD gate as the rails: below it the whole
             turnout is a few pixels and joint marks would only be grit. */}
-        {railsVisible &&
+        {!graphAuthoring && railsVisible &&
           trackJoints.map((j, i) => {
             const h = RAIL_GAUGE_INCHES * 0.85; // just past the railheads
             return (
@@ -3694,7 +3694,8 @@ const ENDPLATE_TAB = 5; // ballast-shoulder band width, inches
             a 96″ module opens at a zoom where the rails don't resolve — so
             gating them showed none of the thing the model is for. The tick keeps
             a minimum on-screen length for the same reason. */}
-        {flexJoints.map((j, i) => {
+        {!graphAuthoring &&
+          flexJoints.map((j, i) => {
           const h = Math.max(RAIL_GAUGE_INCHES * 0.85, 3 / scale);
           return (
             <line
@@ -3714,7 +3715,8 @@ const ENDPLATE_TAB = 5; // ballast-shoulder band width, inches
           );
         })}
         {/* Turnout rails with nothing joined to them — drag a track end here. */}
-        {danglingRailEnds.map((r) => (
+        {!graphAuthoring &&
+          danglingRailEnds.map((r) => (
           <circle
             key={`dangle${r.turnoutId}-${r.trackId}`}
             cx={r.at.x}
@@ -3794,7 +3796,7 @@ const ENDPLATE_TAB = 5; // ballast-shoulder band width, inches
           />
         )}
         {/* Siding / spur end handles — drag along the main to reposition */}
-        {onTrackEndMove &&
+        {!graphAuthoring && onTrackEndMove &&
           trackEnds.map((h) => (
             <circle
               key={`end${h.id}${h.end}`}
@@ -3811,7 +3813,8 @@ const ENDPLATE_TAB = 5; // ballast-shoulder band width, inches
             </circle>
           ))}
         {/* Turnouts — drag along the track to set their position */}
-        {turnoutPts.map((t) => {
+        {!graphAuthoring &&
+          turnoutPts.map((t) => {
           const on = selection?.kind === "turnout" && selection.id === t.id;
           const node = on ? "#0284c7" : "#475569";
           return (
