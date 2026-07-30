@@ -24,6 +24,8 @@ import {
   MAIN_TRACK_ID,
   MAIN2_TRACK_ID,
   stateToDoc,
+  implicitCrossings,
+  type ImplicitCrossing,
   docToState,
   graphToDoc,
   docToGraph,
@@ -278,6 +280,12 @@ export function SchematicEditor({
   }, [state, dims]);
 
   const doc = useMemo(() => stateToDoc(state, recordNumber), [state, recordNumber]);
+  /** Crossings the drawing implies and the document never declared — a spur
+   * thrown past Main 2 is drawn straight through it, and that is a diamond
+   * somebody has to build (Will, 2026-07-30). Flagged, never created: crossing
+   * geometry isn't modelled yet, so inventing the part would be inventing
+   * measurements nobody took. */
+  const undeclaredCrossings = useMemo(() => implicitCrossings(doc), [doc]);
   const isDouble = state.configA === "double" || state.configB === "double";
   // Derived endplate poses (#175 phase 1b) — the auto-computed geometry the
   // owner can override for shapes the fields can't express (wye/loop/other).
@@ -2191,6 +2199,7 @@ export function SchematicEditor({
             mainlineDouble={isDouble}
             mainlineLocked={lockedConfigs.a || lockedConfigs.b}
             endplates={poses.map((p) => ({ id: p.id, config: p.trackConfig }))}
+            undeclaredCrossings={undeclaredCrossings}
           />
         </aside>
       </div>
@@ -5547,6 +5556,7 @@ function ObjectsList({
   mainlineDouble,
   mainlineLocked,
   endplates,
+  undeclaredCrossings,
 }: {
   state: EditorState;
   selection: Selection | null;
@@ -5573,6 +5583,8 @@ function ObjectsList({
   mainlineDouble: boolean;
   mainlineLocked: boolean;
   endplates: { id: string; config?: string }[];
+  /** Crossings the drawing implies that nobody authored (#crossings). */
+  undeclaredCrossings: ImplicitCrossing[];
 }) {
   /** Corners are keyed by index, everything else by id — compare accordingly.
    * A flex piece needs BOTH: several pieces share one track id (#193). */
@@ -5607,6 +5619,15 @@ function ObjectsList({
       )}
     </button>
   );
+
+  /** What to call a track in prose — the same words its row carries, so a
+   * warning about "Main 2" names the row the owner can see. */
+  const namedTrack = (id: string) => {
+    const main = mains.find((m) => m.id === id);
+    if (main) return main.label;
+    const i = state.extraTracks.findIndex((t) => t.id === id);
+    return i >= 0 ? trackLabel(state.extraTracks[i], i) : id;
+  };
 
   /** A run's rows: the track itself, then the lengths of flex it's made of. */
   const trackRows = (id: string, label: string, sel: Selection, sub?: string) => {
@@ -5744,6 +5765,25 @@ function ObjectsList({
         {state.crossings.map((x) =>
           row(x.id, x.name || x.id, { kind: "crossing", id: x.id }, `${Math.round(x.pos * 10) / 10}″`),
         )}
+        {/* Track drawn through track with nothing at the junction. Reported here
+            because this is the list an owner would come to to fix it — and the
+            position named is the TURNOUT's, never the diamond's: that sits a
+            lead beyond, which this document doesn't measure. */}
+        {undeclaredCrossings.map((c) => (
+          <p
+            key={`${c.turnoutId}·${c.crossesTrackId}`}
+            className="mx-2 my-1 rounded-md border border-amber-300 bg-amber-50 p-2 text-[11px] text-amber-800"
+            role="status"
+          >
+            <span className="font-medium">
+              {namedTrack(c.trackId)} is drawn through {namedTrack(c.crossesTrackId)}.
+            </span>{" "}
+            It leaves the turnout at {Math.round(c.atInches * 10) / 10}″ and has to cross{" "}
+            {namedTrack(c.crossesTrackId)} to reach its own side — that junction is a diamond, and
+            nothing here records one. Add a crossing, or start this track from{" "}
+            {namedTrack(c.crossesTrackId)} instead.
+          </p>
+        ))}
       </Group>
 
       <Group

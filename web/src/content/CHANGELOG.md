@@ -5,6 +5,13 @@ Headings are `version — date` (YYYY-MM-DD).
 
 ---
 
+## v0.50.0 — 2026-07-30
+
+### Added
+- **Track drawn through track is now flagged.** Put a turnout on Main 1 of a double-track module and the siding it feeds lands on the far side of Main 2 — so the route to it has to cross Main 2, and that junction is a diamond: real trackwork you would have to buy or build, and something a dispatcher has to protect. The schematic used to draw the crossing and say nothing about it. Now it says so, in the **Crossings** list: which track is drawn through which, and the turnout it leaves from.
+
+  **It is a note, not a correction.** Nothing is added to your module and nothing moves. If the crossing is real, add it; if it isn't what you meant, start that track from Main 2 instead. The position quoted is the **turnout's**, not the diamond's — where the diamond actually sits depends on the turnout's lead, and that is a measurement the drawing doesn't record, so it isn't invented here.
+
 ## v0.49.0 — 2026-07-30
 
 ### Changed
