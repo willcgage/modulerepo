@@ -26,7 +26,9 @@ import {
   type TrackPiece,
   type TurnoutKind,
   fitFlexBetween,
+  flexPieces,
   insertIntoRun,
+  maxFlexPieceInches,
   pieceHand,
   snapPiece,
 } from "@willcgage/module-schematic";
@@ -63,6 +65,10 @@ const CAR_INCHES = 3.3;
  * once that would be thinner than the real railhead the real width takes over —
  * otherwise zooming in made rails ever finer instead of resolving into rail. */
 const RAILHEAD_INCHES = 0.03;
+/** How much of a drag counts as "I meant a RUN", not "I meant a click" (#198
+ * step 4). Shorter than one piece of anything, so a click on a flex part still
+ * lays the single 12″ piece it always did. */
+const FILL_MIN_INCHES = 2;
 
 /** A rail joint — where one piece of track ends and the next begins. `nx`/`ny`
  * is the unit normal, so the tick draws ACROSS the rails. */
@@ -333,10 +339,22 @@ export type CanvasTool =
    * the armed turnout, and edits the track when nothing is armed. */
   | "track"
   | "industry"
-  | "signal"
-  /** ⭐ ADR 0001 — lay track as the PIECES it is built from. A module authored
-   * this way derives the same ordinary document; nothing else changes. */
-  | "pieces";
+  | "signal";
+/**
+ * ⛔ THERE IS NO `"pieces"` TOOL ANY MORE (#198 step 4, Will 2026-07-29).
+ *
+ * ADR 0001 made track a graph of placed pieces and the 1-D document a
+ * derivation, but the two ways of building it were two rail buttons — so every
+ * feature after it (crossings, slips, signals, industries) would have been built
+ * and tested twice, once per idiom. That dual-model tax is what left "the 1-D
+ * positional renderer is a different code path from all the graph work", which
+ * is where the 2026-07-29 crossover bug was hiding.
+ *
+ * **T is now the only track button, and the MODULE says which model it is
+ * built from** — see `graphAuthoring` in {@link BenchworkEditor}. New modules
+ * are graph-built; a module that already carries positional track keeps the
+ * 1-D affordances it was drawn with. `P` still selects Track, the way `W` does.
+ */
 
 /** A sibling section, drawn as faint context behind the board being edited. */
 type ContextOutline = { id: string; name?: string; outline: { x: number; y: number }[] };
@@ -598,6 +616,12 @@ export function BenchworkEditor({
   /** Draw-to-create in progress: the throat turnout it diverges from + live end. */
   const placeRef = useRef<{ start: Pt; end: Pt; turnoutId: string } | null>(null);
   const [placePreview, setPlacePreview] = useState<{ start: Pt; end: Pt } | null>(null);
+  /** A fill-a-run drag in progress (#198 step 4): the flex part armed, where the
+   * run starts, and where the pointer has got to. */
+  const fillRef = useRef<{ spec: PieceSpec; start: Pt; end: Pt } | null>(null);
+  const [fillPreview, setFillPreview] = useState<{ spec: PieceSpec; start: Pt; end: Pt } | null>(
+    null,
+  );
   const [showLegend, setShowLegend] = useState(false);
   /** The turnout armed in the palette — a canvas click drops this one, and it's
    * what a palette drag carries (#turnout-palette). */
@@ -1919,6 +1943,49 @@ export function BenchworkEditor({
   };
   /** The path the Track tool edits when no spur is selected — the authored one, or a fresh seed. */
   const editMain = mainPath.length >= 1 ? mainPath : seedMain();
+
+  // ─── WHICH MODEL IS THIS MODULE BUILT FROM? (#198 step 4) ──────────────────
+  /**
+   * Anything on this board that only the POSITIONAL model can hold: a mainline
+   * the owner drew by hand, a siding/spur/Main 2, or a turnout placed at a `pos`.
+   *
+   * ⚠️ **NOT `centerline.length < 2`.** The scoped plan keyed a blank module on
+   * that, and it is never true: `geometry.type` falls back to `"straight"` for
+   * derivation (editor.tsx, #103), so EVERY module with a length derives a
+   * two-point centre-line whether or not anybody drew one. Keying on it would
+   * have made every new module 1-D — the exact outcome the decision below
+   * exists to prevent — and it would have looked right, because on a legacy
+   * module the answer is the same either way.
+   *
+   * ⚠️ `tracks` here already EXCLUDES Main 1 (the editor filters
+   * `MAIN_TRACK_ID` out), so this asks about track someone placed, not about the
+   * main every module implicitly has.
+   */
+  const authored1D = mainPath.length >= 2 || tracks.length > 0 || turnouts.length > 0;
+  /**
+   * ⭐ ADR 0001 + Will 2026-07-29: **a module is EITHER graph-built or 1-D, and
+   * it says which by what it already has. NEW modules are graph-built.**
+   *
+   * Pieces win when there are any — a rebuilt module derives tracks and
+   * turnouts, so `authored1D` goes true the moment it is converted, and the
+   * derived document must never take the graph's authoring rights away.
+   */
+  const graphAuthoring = pieces.length > 0 || !authored1D;
+  /** T on a graph-built module: the parts palette lays real pieces. */
+  const piecesMode = tool === "track" && graphAuthoring;
+  /**
+   * T on a module drawn positionally: draw/bend the main, place turnouts by
+   * `pos`, offer the rebuild.
+   *
+   * ⛔ The 1-D affordances hang off THIS, not off `tool === "track"`, so a
+   * graph-built module cannot edit its own DERIVED document — under ADR 0001
+   * the 1-D doc is an output, and letting an owner drag it would put two
+   * authorities on the same track with no rule for which wins.
+   */
+  const track1D = tool === "track" && !graphAuthoring;
+  /** Where the 1-D reshape handles are live at all. Select shows them too (#192
+   * — selecting a track arms it), so it has to answer the same question. */
+  const edit1D = !graphAuthoring && (tool === "track" || tool === "select");
   /**
    * Is Main 1 armed for editing? SELECTING it arms it, under Select or Track,
    * the same gesture as every other track (#192) — Main 2 already worked that
@@ -1930,9 +1997,7 @@ export function BenchworkEditor({
    * it just isn't the ONLY way in any more.
    */
   const editingMain =
-    (tool === "track" || tool === "select") &&
-    selection?.kind === "track" &&
-    selection.id === MAIN_TRACK_ID;
+    edit1D && selection?.kind === "track" && selection.id === MAIN_TRACK_ID;
   /** Midpoint handle for mainline edge i (open path, no wrap). */
   const mainEdgeHandle = (i: number): Pt => {
     const p0 = editMain[i];
@@ -1966,10 +2031,7 @@ export function BenchworkEditor({
   const isDoubleMain = !!main2Track_;
   /** Edit Main 2 when it's selected under the Track (or Select) tool. */
   const editingMain2 =
-    isDoubleMain &&
-    (tool === "track" || tool === "select") &&
-    selection?.kind === "track" &&
-    selection.id === MAIN2_TRACK_ID;
+    isDoubleMain && edit1D && selection?.kind === "track" && selection.id === MAIN2_TRACK_ID;
   const commitMain2 = (next: BenchworkPoint[]) =>
     onMain2PathChange?.(
       next.map((pt) => ({
@@ -2027,7 +2089,7 @@ export function BenchworkEditor({
 
   // --- Spur path editing (Track tool) — the selected editable spur ------------
   const editSpurTrack =
-    selection?.kind === "track" && (tool === "track" || tool === "select")
+    selection?.kind === "track" && edit1D
       ? tracks.find(
           (t) =>
             t.id === selection.id &&
@@ -2035,14 +2097,14 @@ export function BenchworkEditor({
             // In Select, only a *drawn* spur (with a path) gets reshape handles,
             // so you can drag it to resize/reorient; a plain spur keeps its
             // along-main ○ end handles. In Track, any editable spur is shapeable.
-            (tool === "track" || (t.path != null && t.path.length >= 2)),
+            (track1D || (t.path != null && t.path.length >= 2)),
         )
       : undefined;
   /** Are Main 1's handles live? Either it's selected, or the Track tool is up
    * with nothing else claiming the handles (the original route, #192). */
   const mainHandlesOn =
     !pendingTrack &&
-    (editingMain || (tool === "track" && !selection && !editSpurTrack && !editingMain2));
+    (editingMain || (track1D && !selection && !editSpurTrack && !editingMain2));
   /**
    * Every rail end a turnout offers to connect to — the end of its diverging
    * leg, for each turnout on the board.
@@ -2342,10 +2404,35 @@ export function BenchworkEditor({
       if (onDropSignal && centerline.length >= 2) onDropSignal(posFrom(toLocal(e)));
       return;
     }
-    // Track tool: a background click bends whichever track is armed — the
-    // selected spur, Main 2, or Main 1 (mainline + spur editing are one tool) —
-    // UNLESS a turnout is armed in the palette, in which case it lands there.
-    if (tool === "track") {
+    // ⭐ T ON A GRAPH-BUILT MODULE LAYS PIECES. An armed part lands where you
+    // click; DRAGGING a flex part fills the whole run you dragged (see
+    // `fillRun`). Clicking bare board with nothing armed means "select nothing",
+    // same as Select.
+    if (piecesMode) {
+      if (armedPart) {
+        // A flex part is laid by the RUN, not by the piece, so a press only
+        // starts the gesture — `onUp` decides whether it was a drag (fill) or a
+        // click (lay one, as before).
+        if (isFlexSpec(armedPart)) {
+          const at = toLocal(e);
+          fillRef.current = { spec: armedPart, start: at, end: at };
+          setFillPreview({ spec: armedPart, start: at, end: at });
+          svgRef.current?.setPointerCapture?.(e.pointerId);
+          return;
+        }
+        layPiece(armedPart, toLocal(e));
+        return;
+      }
+      onSelect?.(null);
+      panRef.current = { from: toLocal(e), view: { ...vbBox }, tentative: true, moved: false };
+      svgRef.current?.setPointerCapture?.(e.pointerId);
+      return;
+    }
+    // Track tool on a module drawn POSITIONALLY: a background click bends
+    // whichever track is armed — the selected spur, Main 2, or Main 1 (mainline
+    // + spur editing are one tool) — UNLESS a turnout is armed in the palette,
+    // in which case it lands there.
+    if (track1D) {
       if (armedPalette && centerline.length >= 2) {
         const xo = crossoverSpecForPalette(armedPalette);
         if (xo) {
@@ -2383,18 +2470,6 @@ export function BenchworkEditor({
     // there, so the drag was doing nothing, and it's the gesture people reach
     // for first (#188). A press that never moves is still a click, and a
     // background click still means "select nothing"; `onUp` decides which.
-    // Pieces tool: an armed part lays where you click. Clicking bare board with
-    // nothing armed means "select nothing", same as Select.
-    if (tool === "pieces") {
-      if (armedPart) {
-        layPiece(armedPart, toLocal(e));
-        return;
-      }
-      onSelect?.(null);
-      panRef.current = { from: toLocal(e), view: { ...vbBox }, tentative: true, moved: false };
-      svgRef.current?.setPointerCapture?.(e.pointerId);
-      return;
-    }
     if (tool === "select") {
       svgRef.current?.setPointerCapture?.(e.pointerId);
       panRef.current = { from: toLocal(e), view: { ...vbBox }, tentative: true, moved: false };
@@ -2653,6 +2728,24 @@ export function BenchworkEditor({
         minX: pan.view.minX - dx,
         minY: pan.view.minY - dy,
       });
+      return;
+    }
+
+    // Fill-a-run: the pointer is the far end of the run being laid. The read-out
+    // says how many pieces it will actually take, because that is the number the
+    // gesture exists to collapse — and the one an owner is buying.
+    if (fillRef.current) {
+      const pt = toLocal(e);
+      setHover(pt);
+      fillRef.current = { ...fillRef.current, end: pt };
+      setFillPreview({ spec: fillRef.current.spec, start: fillRef.current.start, end: pt });
+      const len = Math.hypot(pt.x - fillRef.current.start.x, pt.y - fillRef.current.start.y);
+      const n = flexPieces({
+        fromPos: 0,
+        toPos: len,
+        maxPieceInches: maxFlexPieceInches(fillRef.current.spec.partId, partLibrary),
+      }).length;
+      setReadout(`${fmt(len)}″ · ${n} piece${n === 1 ? "" : "s"}`);
       return;
     }
 
@@ -2942,6 +3035,74 @@ export function BenchworkEditor({
     onSelect?.({ kind: "piece", id: fresh.id });
   };
 
+  /** Is the armed part FLEX — the one product that is laid by the run? */
+  const isFlexSpec = (spec: PieceSpec) =>
+    partLibrary.find((p) => p.id === spec.partId)?.kind === "flex";
+
+  /**
+   * ⭐ FILL A RUN WITH FLEX — the gesture that makes graph authoring affordable.
+   *
+   * ⛔ **THIS SHIPS WITH THE P→T FOLD, NOT AFTER IT.** `maxFlexPieceInches` is
+   * 30″, so a new module's 96″ main is FOUR pieces and FMN-0064's 386″ main is
+   * fourteen. Making graph authoring the default without this would replace a
+   * two-click mainline with fourteen placements — worse than what it replaces,
+   * and owners would have been right to say so.
+   *
+   * Drag along where the track goes; the run is cut into buyable lengths by
+   * **`flexPieces`, the package function the #199 rebuild already uses**. Not a
+   * second implementation of the same computation: a run cut by hand and a run
+   * cut by the rebuild must agree piece for piece, and the only way to promise
+   * that is to call the same function.
+   *
+   * Consecutive pieces are laid at exactly their neighbour's end, so they are
+   * connected BY CONSTRUCTION — `buildTrackGraph` joins joints within a
+   * hundredth of an inch and these are coincident. Nothing to snap, nothing to
+   * miss.
+   */
+  const fillRun = (spec: PieceSpec, from: Pt, to: Pt) => {
+    if (!onPiecesChange) return;
+    const total = Math.hypot(to.x - from.x, to.y - from.y);
+    const cuts = flexPieces({
+      fromPos: 0,
+      toPos: total,
+      maxPieceInches: maxFlexPieceInches(spec.partId, partLibrary),
+    });
+    if (!cuts.length) return;
+
+    // ⭐ THE RUN'S START GOES THROUGH `snapPiece` LIKE EVERY OTHER PLACEMENT, so
+    // there is one answer to "did that connect?" — the package's. When it takes
+    // an open joint the run is re-aimed along THAT joint's heading and keeps the
+    // length that was dragged: the start and the direction come from the rail it
+    // continues, the length from the hand. Dragging roughly along the rail is
+    // then enough, which is the whole point of the gesture.
+    const head = newPiece(spec, from, pieces, partLibrary.find((p) => p.id === spec.partId));
+    const aimed = { ...head, rotationDeg: (Math.atan2(to.y - from.y, to.x - from.x) * 180) / Math.PI };
+    const snapped = snapPiece({ ...aimed, lengthInches: cuts[0].lengthInches }, pieces, partLibrary, grabInches)?.piece;
+    const origin: Pt = snapped ? { x: snapped.x, y: snapped.y } : { x: from.x, y: from.y };
+    const rotationDeg = snapped ? snapped.rotationDeg : aimed.rotationDeg;
+    const rad = rotationDeg * DEG;
+    const ux = Math.cos(rad);
+    const uy = Math.sin(rad);
+
+    const taken = new Set(pieces.map((p) => p.id));
+    let n = 1;
+    const laid: TrackPiece[] = cuts.map((f) => {
+      while (taken.has(`p${n}`)) n += 1;
+      const id = `p${n}`;
+      taken.add(id);
+      return {
+        id,
+        partId: spec.partId,
+        x: origin.x + ux * f.fromPos,
+        y: origin.y + uy * f.fromPos,
+        rotationDeg,
+        lengthInches: f.lengthInches,
+      };
+    });
+    onPiecesChange([...pieces, ...laid], { commit: true });
+    onSelect?.({ kind: "piece", id: laid[laid.length - 1].id });
+  };
+
   /** Replace one piece, keeping the rest. */
   const putPiece = (next: TrackPiece, commit = false) =>
     onPiecesChange?.(pieces.map((p) => (p.id === next.id ? next : p)), { commit });
@@ -2970,6 +3131,18 @@ export function BenchworkEditor({
   };
 
   const onUp = (e: React.PointerEvent) => {
+    // Fill-a-run: releasing lays it. A press that never travelled is still a
+    // CLICK, and a click lays one piece — the gesture it always was.
+    if (fillRef.current) {
+      const { spec, start, end } = fillRef.current;
+      fillRef.current = null;
+      setFillPreview(null);
+      svgRef.current?.releasePointerCapture?.(e.pointerId);
+      setReadout(null);
+      if (Math.hypot(end.x - start.x, end.y - start.y) >= FILL_MIN_INCHES) fillRun(spec, start, end);
+      else layPiece(spec, start);
+      return;
+    }
     // Draw-to-create: releasing finishes the new track.
     if (placeRef.current) {
       const { start, end, turnoutId } = placeRef.current;
@@ -3153,19 +3326,19 @@ const ENDPLATE_TAB = 5; // ballast-shoulder band width, inches
           e.stopPropagation();
           onAddIndustry(line.main ? "main" : line.id, posFrom(toLocal(e)));
         }
-      : // Turnout / Signal / Pieces tools: don't intercept — let the click fall
+      : // Turnout / Signal / piece-laying: don't intercept — let the click fall
         // through to the background handler, which drops on the nearest track
         // (#63/#53) or lays the armed part (ADR 0001).
         //
-        // ⚠️ THE PIECES TOOL HAD TO BE ADDED HERE TOO, and forgetting it made
-        // the tool useless on any module that already has track — which is
-        // nearly all of them. The piece layer stands aside while a part is
-        // armed, but the POSITIONAL track drawn underneath had its own click
-        // handler, so laying a piece over an existing main just selected the
-        // main. Verified on a real module before it was noticed.
-        !(tool === "track" && armedPalette) &&
+        // ⚠️ PIECE-LAYING HAD TO BE ADDED HERE TOO, and forgetting it made it
+        // useless on any module that already has track — which is nearly all of
+        // them. The piece layer stands aside while a part is armed, but the
+        // POSITIONAL track drawn underneath had its own click handler, so laying
+        // a piece over an existing main just selected the main. Verified on a
+        // real module before it was noticed.
+        !(track1D && armedPalette) &&
           tool !== "signal" &&
-          tool !== "pieces" &&
+          !piecesMode &&
           line.selectable &&
           onSelect
         ? (e: React.PointerEvent) => {
@@ -3359,7 +3532,7 @@ const ENDPLATE_TAB = 5; // ballast-shoulder band width, inches
             Click the main to drop a signal (a block control point) · then set its
             direction and side in the inspector.
           </span>
-        ) : tool === "pieces" ? (
+        ) : piecesMode ? (
           <>
             <PiecePalette
               library={partLibrary}
@@ -3369,28 +3542,34 @@ const ENDPLATE_TAB = 5; // ballast-shoulder band width, inches
             />
             <span className="text-gray-500">
               {armedPart
-                ? "Click the board to lay it. Ends snap to open joints, and dropping one ON a run cuts the run to take it."
+                ? isFlexSpec(armedPart)
+                  ? "Drag along where the track goes and the whole run fills with flex — or click to lay one piece. Ends snap to open joints."
+                  : "Click the board to lay it. Ends snap to open joints, and dropping one ON a run cuts the run to take it."
                 : "Drag a part onto the board — or click one, then click the board."}
             </span>
-            {/* ⚠️ SAY WHY THE TRACK ALREADY HERE CANNOT BE JOINED — and now
-                offer the way out. Pieces snap to other PIECES; a mainline drawn
-                with the Track tool is the positional model and has no joints at
-                all, so a piece dropped against it simply sits there. Silence
-                read as a broken snap and an owner reported it twice (#199).
-                The rebuild is the answer to it: convert the board's track to
-                pieces and there is something to join. */}
+            {/* ⚠️ SAY WHY THE TRACK ALREADY DRAWN HERE CANNOT BE JOINED — and
+                offer the way out. Pieces snap to other PIECES; the mainline on
+                screen is the POSITIONAL model and has no joints at all, so a
+                piece dropped against it simply sits there. Silence read as a
+                broken snap and an owner reported it twice (#199). The rebuild is
+                the answer: convert the board's track to pieces and there is
+                something to join.
+                ⚠️ It no longer says "drawn with the Track tool". A module with
+                nothing authored on it reaches this bar too (that is what makes
+                it graph-built), and its mainline is DERIVED from the geometry —
+                nobody drew it. The sentence has to be true of both. */}
             {centerline.length >= 2 && pieces.length === 0 && (
               <>
                 <span className="font-medium text-amber-700">
-                  The mainline here was drawn with the Track tool. Pieces join
-                  other pieces, so they can&rsquo;t connect to it until it is
-                  rebuilt.
+                  The mainline drawn here is this module&rsquo;s positional
+                  model. Pieces join other pieces, so they can&rsquo;t connect to
+                  it until it is rebuilt.
                 </span>
                 {rebuildOffer}
               </>
             )}
           </>
-        ) : tool === "track" ? (
+        ) : track1D ? (
           pendingTrack ? (
             <>
               {turnouts.length < (pendingTrack === "siding" ? 2 : 1) ? (
@@ -3437,6 +3616,15 @@ const ENDPLATE_TAB = 5; // ballast-shoulder band width, inches
                       ? "Draw the mainline — click near one end of the board, then the other. Then drag a point ○ to move it, or an edge ◇ to curve it."
                       : "Drag the mainline's points ○ · edge ◇ to curve · click the line to add a bend · Alt-click to remove. Click a siding or spur to edit it."}
               </span>
+              {/* ⭐ THE REBUILD OFFER HAD TO REACH THIS BAR TOO, and that is the
+                  one part of this fold that no type error would have caught. It
+                  used to live ONLY in the Pieces tool's bar — but a module with
+                  sidings and turnouts and no pieces is exactly the module the
+                  parts palette is no longer shown on, so leaving it there would
+                  have silently deleted the whole #199 conversion path for every
+                  legacy module in the database. `RebuildAsPieces` self-gates
+                  (null once a module is already built from pieces). */}
+              {!armedPalette && !editSpurTrack && rebuildOffer}
             </>
           )
         ) : (
@@ -3513,7 +3701,7 @@ const ENDPLATE_TAB = 5; // ballast-shoulder band width, inches
         className={`min-h-0 flex-1 touch-none rounded-md border border-gray-300 bg-white ${
           spaceHeld
             ? "cursor-grab"
-            : tool === "pieces"
+            : piecesMode
               ? armedPart
                 ? "cursor-crosshair"
                 : "cursor-grab"
@@ -4353,6 +4541,52 @@ const ENDPLATE_TAB = 5; // ballast-shoulder band width, inches
           </g>
         )}
 
+        {/* Fill-a-run in progress: the run, with a tick at every joint it will
+            be cut at. The ticks are the point — they say "this is FOUR pieces
+            of flex with three rail joints", which is what the run really is and
+            what the derived document will carry. */}
+        {fillPreview && (
+          <g pointerEvents="none">
+            <line
+              x1={fillPreview.start.x}
+              y1={sy(fillPreview.start.y)}
+              x2={fillPreview.end.x}
+              y2={sy(fillPreview.end.y)}
+              stroke="#1d4ed8"
+              strokeWidth={world(1.5)}
+              strokeDasharray={`${world(3)} ${world(2)}`}
+            />
+            {(() => {
+              const dx = fillPreview.end.x - fillPreview.start.x;
+              const dy = fillPreview.end.y - fillPreview.start.y;
+              const len = Math.hypot(dx, dy);
+              if (!(len > 0)) return null;
+              const ux = dx / len;
+              const uy = dy / len;
+              const h = RAIL_GAUGE_INCHES * 1.6;
+              return flexPieces({
+                fromPos: 0,
+                toPos: len,
+                maxPieceInches: maxFlexPieceInches(fillPreview.spec.partId, partLibrary),
+              }).map((f) => {
+                const cx = fillPreview.start.x + ux * f.toPos;
+                const cy = fillPreview.start.y + uy * f.toPos;
+                return (
+                  <line
+                    key={`fill${f.index}`}
+                    x1={cx - uy * h}
+                    y1={sy(cy + ux * h)}
+                    x2={cx + uy * h}
+                    y2={sy(cy - ux * h)}
+                    stroke="#1d4ed8"
+                    strokeWidth={world(1)}
+                  />
+                );
+              });
+            })()}
+          </g>
+        )}
+
         {/* ⭐ THE PIECES (ADR 0001) — drawn OVER the positional track, not
             instead of it. A module can carry both while the graph is being laid,
             and hiding one would be deciding the coexistence question by drawing
@@ -4371,10 +4605,10 @@ const ENDPLATE_TAB = 5; // ballast-shoulder band width, inches
             library={partLibrary}
             selected={selection?.kind === "piece" ? selection.id : null}
             scale={scale}
-            laying={tool === "pieces" && !!armedPart}
+            laying={piecesMode && !!armedPart}
             onSelect={(id) => onSelect?.(id ? { kind: "piece", id } : null)}
             onPieceDown={(id, e) => {
-              if (tool !== "pieces" && tool !== "select") return;
+              if (!piecesMode && tool !== "select") return;
               const piece = pieces.find((x) => x.id === id);
               if (!piece || !onPiecesChange) return;
               const at = toLocal(e);
