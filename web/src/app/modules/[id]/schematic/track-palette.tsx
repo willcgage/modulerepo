@@ -383,7 +383,7 @@ function emptyKindReason(kind: PaletteKind, mode: PaletteMode): string {
       case "bumper":
         return "A bumper closes a joint, and a drawn module has no joints. Rebuild it as pieces to place one.";
       case "crossing":
-        return "A crossing (diamond) is added from the Objects list — its geometry isn't modelled yet, so it can't be dropped on the board.";
+        return "A crossing (diamond) on a drawn module is added from the Objects list, where it sits at a position along a track — the palette lays measured parts, and no crossing product has been measured yet.";
       case "slip":
         return "Slips aren't modelled yet: a slip is two crossings and four sets of points in one moulding.";
       default:
@@ -395,13 +395,34 @@ function emptyKindReason(kind: PaletteKind, mode: PaletteMode): string {
       return "No sectional straight products in the library yet. A straight IS its length, so there is no honest generic — the numbers have to come from a real product (Admin → Track parts).";
     case "curve":
       return "No sectional curve products in the library yet. A curve IS its radius and arc, so there is no honest generic — the numbers have to come from a real product (Admin → Track parts).";
+    // ⚠️ NOT "not modelled yet" — that was true until the package learned a
+    // diamond (0.115.0), and it is exactly the kind of copy that outlives the
+    // gap it describes. `partGeometryGap` now returns null for a crossing that
+    // carries an angle and an overall length, so the ONLY thing still missing
+    // is a real product's measurements.
     case "crossing":
-      return "A crossing (diamond) isn't modelled yet — it needs its angle and its landmarks before one can be placed.";
+      return "No crossing products in the library yet. A crossing IS the angle its two tracks cross at, and that geometry is modelled — one becomes placeable as soon as a real product's angle and length are recorded (Admin → Track parts).";
     case "slip":
       return "Slips aren't modelled yet: a slip is two crossings and four sets of points in one moulding.";
     default:
       return "Nothing here yet.";
   }
+}
+
+/**
+ * Why a chip is greyed. TWO different questions hide behind one grey — "we have
+ * no parts of this kind at all" and "we have some and none of them can be
+ * placed" — and only the first is {@link emptyKindReason}'s.
+ *
+ * ⚠️ Pointing it at both is what made the **Curved turnout** chip say "Nothing
+ * here yet" while the panel underneath listed Atlas's curved turnout with a
+ * perfectly good reason beside it. A tooltip that contradicts the panel it opens
+ * is worse than no tooltip.
+ */
+function chipReason(entries: PaletteEntry[], kind: PaletteKind, mode: PaletteMode): string {
+  if (entries.length === 0) return emptyKindReason(kind, mode);
+  const reasons = [...new Set(entries.filter((e) => e.blocked).map((e) => e.blocked!))];
+  return reasons.join(" · ") || emptyKindReason(kind, mode);
 }
 
 // ─── The component ───────────────────────────────────────────────────────────
@@ -448,7 +469,7 @@ export function TrackPalette({
             type="button"
             onClick={() => setOpenKind(k.kind)}
             aria-pressed={shown.kind === k.kind}
-            title={k.any ? undefined : emptyKindReason(k.kind, mode)}
+            title={k.any ? undefined : chipReason(k.entries, k.kind, mode)}
             className={`rounded-full border px-2 py-0.5 text-[11px] transition ${
               shown.kind === k.kind
                 ? "border-blue-600 bg-blue-600 text-white"

@@ -5,6 +5,13 @@ Headings are `version — date` (YYYY-MM-DD).
 
 ---
 
+## v0.54.1 — 2026-07-30
+
+### Fixed
+- **The parts palette no longer says crossings aren't modelled — they are.** Picking **Crossing** told you the geometry didn't exist yet. It does: a crossing is the angle its two tracks cross at, and the app has understood that since the last package release. What is actually missing is a **measured product** — nobody has recorded a real crossing's angle and length — and one becomes placeable the moment somebody does. The palette now says that instead.
+
+- **A greyed chip no longer claims there is nothing there when there is.** Hovering **Curved turnout** read *"Nothing here yet"*, while selecting it listed Atlas's curved turnout with the real reason beside it — that only its two radii are published, not its points and frog. The hover now gives that same reason, so it agrees with the panel it opens.
+
 ## v0.54.0 — 2026-07-30
 
 ### Changed
