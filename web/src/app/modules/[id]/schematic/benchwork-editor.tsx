@@ -665,6 +665,11 @@ export function BenchworkEditor({
     forceSide?: 1 | -1,
   ): {
     leg: Pt[];
+    /** The FLEX from the end of the moulding, eased onto the lane the diverging
+     * track runs at — null when it is already there (or there is no lane to
+     * reach). The turnout stops where the part stops; this is the owner's track
+     * closing the difference, which is what bends on a real board. */
+    arrival: Pt[] | null;
     frog: Pt;
     frogV: [Pt, Pt];
     outline: Pt[][] | null;
@@ -955,8 +960,56 @@ export function BenchworkEditor({
       const d = Math.hypot(b.x - a.x, b.y - a.y) || 1;
       return { x: b.x, y: b.y, nx: -(b.y - a.y) / d, ny: (b.x - a.x) / d };
     })();
+    /**
+     * ⭐ THE FLEX BEYOND THE MOULDING, EASED ONTO THE LANE IT FEEDS.
+     *
+     * The leg stops at the end of the part (#189) — correctly, a turnout is as
+     * long as the turnout is. But the track it feeds runs at a lane offset the
+     * rail hasn't reached yet, and something has to cover the difference. That
+     * something is the owner's FLEX, and flex bends: carrying straight on at the
+     * frog angle and then turning square onto the lane leaves a corner no rail
+     * can take (9.46° on a #6 — Will spotted it on FMN-0075).
+     *
+     * ⭐ `turnoutClosure` ALREADY MODELS EXACTLY THIS, and has all along:
+     * "straight at the frog angle for `a`, then ease the slope from 1/N to ZERO
+     * over `b`, arriving parallel at the target". Giving it `arriveAtInches`
+     * yields a profile that matches the leg's own angle where the moulding ends
+     * (both are still in the straight stretch there, so the tangents agree
+     * exactly) and flattens to parallel at the lane. No corner at either end,
+     * and no new constant — the ease defaults to the lead.
+     *
+     * ⚠️ This is the geometry #189 took OFF the leg, because running the leg
+     * itself to parallel drew 10.79″ of turnout for a 6.00″ part. It was never
+     * wrong, it was only on the wrong object: the turnout keeps its true length
+     * and the FLEX does the bending, which is what happens on the board.
+     */
+    const arrivalTo = (targetOffset: number): Pt[] | null => {
+      const from = cl.offsetAt(span);
+      if (!(targetOffset > from + 0.01)) return null; // already out at the lane
+      const ecl = turnoutClosure(effN, {
+        leadInches: leadIn,
+        arriveAtInches: targetOffset,
+      });
+      if (!Number.isFinite(ecl.span) || !(ecl.span > span)) return null;
+      const out: Pt[] = [];
+      // Sampled at least as finely as the leg itself (16), so the ease reads as
+      // a curve rather than as the polygon it is.
+      const n = 24;
+      for (let i = 0; i <= n; i++) {
+        const s = span + ((ecl.span - span) * i) / n;
+        const p = sampleAt(host, Math.max(0, relThroat + toward * s));
+        const off = side * ecl.offsetAt(s);
+        out.push({ x: p.x + off * p.nx, y: p.y + off * p.ny });
+      }
+      return out;
+    };
+    const divergeLane = tracks.find((x) => x.id === t.divergeTrack)?.lane;
+    const arrival =
+      divergeLane == null ? null : arrivalTo(Math.abs(laneOffset(divergeLane)));
+
     return {
       leg,
+      arrival,
       frog,
       outline,
       body,
@@ -1006,7 +1059,7 @@ export function BenchworkEditor({
     // the ramp's end — they aren't any more (#173).
     const map = new Map<
       string,
-      { throat: Pt; frog: Pt; frogV: [Pt, Pt]; join: Pt; leg: Pt[]; outline: Pt[][] | null; body: Pt[] | null; throughJoints: Joint[]; divergeJoint: Joint; turnoutId: string }[]
+      { throat: Pt; frog: Pt; frogV: [Pt, Pt]; join: Pt; leg: Pt[]; arrival: Pt[] | null; outline: Pt[][] | null; body: Pt[] | null; throughJoints: Joint[]; divergeJoint: Joint; turnoutId: string }[]
     >();
     if (centerline.length >= 2) {
       for (const t of turnouts) {
@@ -1024,6 +1077,7 @@ export function BenchworkEditor({
           divergeJoint: r.divergeJoint,
           join: r.leg[r.leg.length - 1],
           leg: r.leg,
+          arrival: r.arrival,
           turnoutId: t.id,
         });
         map.set(t.divergeTrack, list);
@@ -1253,47 +1307,29 @@ export function BenchworkEditor({
      * at the frog angle, so continuing straight is tangent-continuous by
      * construction and there is no drawing convention to invent.
      */
-    const rampFromRail = (l: { leg: Pt[] }): { at: Pt; pos: number } | null => {
-      const n = l.leg.length;
-      if (n < 2) return null;
-      const end = l.leg[n - 1];
-      const prev = l.leg[n - 2];
-      const len = Math.hypot(end.x - prev.x, end.y - prev.y) || 1;
-      const ux = (end.x - prev.x) / len;
-      const uy = (end.y - prev.y) / len;
-      const off = (p: Pt) => projectToCenterline(centerline, p).dist;
-      const target = Math.abs(laneOffset(t.lane));
-      const have = off(end);
-      if (have >= target - 0.01) return null; // already out at the lane
-      // Offset gained per inch along the leg's heading — exact on a straight
-      // main, which is every module in the catalogue today.
-      const rate = off({ x: end.x + ux, y: end.y + uy }) - have;
-      if (rate <= 0.001) return null; // running parallel; it never gets there
-      const d = (target - have) / rate;
-      const at = { x: end.x + ux * d, y: end.y + uy * d };
-      return { at, pos: projectToCenterline(centerline, at).pos };
-    };
     let from = t.fromPos;
     let to = t.toPos;
-    let head: Pt | null = null;
-    let tail: Pt | null = null;
+    let head: Pt[] | null = null;
+    let tail: Pt[] | null = null;
     for (const l of legsByTrack.get(t.id) ?? []) {
       const jp = projectToCenterline(centerline, l.join).pos;
-      const r = rampFromRail(l);
+      // Where the eased arrival hands over to the plain lane run.
+      const end = l.arrival?.[l.arrival.length - 1];
+      const handover = end ? projectToCenterline(centerline, end).pos : jp;
       const west = Math.abs(from - jp) <= Math.abs(to - jp);
       if (west) {
-        from = r ? r.pos : jp;
-        if (r) head = l.leg[l.leg.length - 1];
+        from = handover;
+        head = l.arrival;
       } else {
-        to = r ? r.pos : jp;
-        if (r) tail = l.leg[l.leg.length - 1];
+        to = handover;
+        tail = l.arrival;
       }
     }
-    // `lanePath` always runs west→east, so the west leg's rail end goes in
-    // front and the east leg's on the end.
+    // `lanePath` always runs west→east, so the west leg's arrival goes in front
+    // and the east leg's on the end, reversed to keep the run in one direction.
     const body = lanePath(centerline, from, to, t.lane, 24, pinches);
     if (!body.length) return body;
-    return [...(head ? [head] : []), ...body, ...(tail ? [tail] : [])];
+    return [...(head ?? []), ...body, ...(tail ? [...tail].reverse() : [])];
   };
 
   /** A wye's mirrored second route — the leg forced to the opposite side, then
