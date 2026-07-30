@@ -5,6 +5,19 @@ Headings are `version — date` (YYYY-MM-DD).
 
 ---
 
+## v0.49.0 — 2026-07-30
+
+### Changed
+- **One palette, for every kind of track piece.** Building track used to mean four different pickers in three different styles — a role menu, a frog-number dropdown, a row of unlabelled icons, and a separate palette of products — and which ones you saw depended on how your module was built. Now there is one palette, grouped the way you would describe your own trackwork: straights, curves, flex, turnouts, curved turnouts, wyes, crossings, crossovers, slips and bumpers.
+
+  **Every entry is a thing you could own, and says so.** Pick a kind and you get the real products in it, by manufacturer, left-hand and right-hand as separate buttons. Anything that cannot be placed yet is still listed, greyed out, **with the reason written underneath** rather than hidden in a tooltip — so "where is my Fast Tracks #6" has an answer on screen.
+
+- **The `Turnout #` dropdown is gone.** Choosing "Atlas #7 LH" has already said #7, so a second control that could disagree with the part had to go. If you do not know the make, say that out loud instead: every kind has a **Generic — make unknown** group, and picking "#6 RH" from it drops exactly what the old dropdown did — a #6, drawn from its frog number, claiming no product.
+
+  **Naming a real product now records it.** Drop an "Atlas #7 LH" on a module you drew the old way and the turnout keeps that part, the same as if you had chosen it in the turnout’s own panel afterwards — so it draws at that product’s measured length. A crossover you name records its product on the connector, where its track spacing belongs.
+
+- **Nothing a drawn module could do has been taken away.** Turnouts, wyes, curved turnouts and single and double crossovers are all still placeable at every frog number the old dropdown offered — and now at the sizes the real product ranges cover as well.
+
 ## v0.48.0 — 2026-07-29
 
 ### Changed

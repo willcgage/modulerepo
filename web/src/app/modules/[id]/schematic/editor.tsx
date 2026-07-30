@@ -1,7 +1,23 @@
 "use client";
 
 import { partsByManufacturer, crossoverParts } from "./part-library";
+import { FROG_NUMBERS } from "./track-palette";
 import { RebuildAsPieces } from "./rebuild-as-pieces";
+
+/**
+ * The frog number a turnout gets when NOBODY WAS ASKED — the Objects list's
+ * "+ Turnout", and the transition turnout the app derives when a drawn second
+ * main is snapped onto an endplate. Both create a turnout with no gesture that
+ * could have named a part.
+ *
+ * ⭐ IT IS NO LONGER A CONTROL (#198 step 5). The `Turnout #` dropdown that used
+ * to hold this went with the one palette: every turnout an owner places
+ * deliberately now says its own frog number on the button they clicked, and a
+ * second control that could disagree with the part is a contradiction you could
+ * author. #6 because that is the standard's floor for a main line — and the
+ * turnout inspector's own size field is right there to change it.
+ */
+const DEFAULT_TURNOUT_SIZE = 6;
 import { Fragment, useCallback, useEffect, useMemo, useRef, useState, useTransition } from "react";
 import Link from "next/link";
 import {
@@ -191,8 +207,6 @@ export function SchematicEditor({
   /** Draw-to-create: a track role armed from the + Track menu, waiting to be
    * drawn on the canvas (#51). null = not placing. */
   const [pendingTrack, setPendingTrack] = useState<"siding" | "spur" | null>(null);
-  /** The frog number the Turnout (W) tool drops (#52). */
-  const [turnoutSize, setTurnoutSize] = useState(6);
   /** Car-type choices, seeded from the server + grown by suggestions. */
   const [carTypeOptions, setCarTypeOptions] = useState<CarTypeOption[]>(carTypes);
   const addCarTypeOption = (o: CarTypeOption) =>
@@ -1360,7 +1374,7 @@ export function SchematicEditor({
         onTrack: MAIN_TRACK_ID,
         divergeTrack: diverge,
         kind: "right",
-        size: turnoutSize,
+        size: DEFAULT_TURNOUT_SIZE,
       });
     });
   }
@@ -1371,7 +1385,7 @@ export function SchematicEditor({
    * (the old draw-to-create re-projected the drawn end and changed the length).
    * The stub is selected so its end handle is right there to pull out. */
   const onDropTurnout = (
-    spec: { kind: TurnoutKind; curved?: boolean },
+    spec: { kind: TurnoutKind; curved?: boolean; size: number; partId?: string },
     onTrack: string,
     pos: number,
   ) => {
@@ -1400,7 +1414,12 @@ export function SchematicEditor({
         onTrack,
         divergeTrack: spId,
         kind: spec.kind,
-        size: turnoutSize,
+        // ⭐ THE PALETTE ENTRY ANSWERS BOTH QUESTIONS (#198 step 5). "Atlas #7
+        // LH" has already said #7, so there is no second control to disagree
+        // with it — and naming the part here is exactly what the turnout
+        // inspector's own Part picker does one click later (#187).
+        size: spec.size,
+        ...(spec.partId ? { partId: spec.partId } : {}),
         ...(spec.curved ? { curved: true } : {}),
       });
     });
@@ -1418,6 +1437,8 @@ export function SchematicEditor({
   const onDropCrossover = (p: {
     hand?: "left" | "right";
     double?: boolean;
+    size: number;
+    partId?: string;
     side: 1 | -1;
     posA: number;
     posB: number;
@@ -1472,9 +1493,12 @@ export function SchematicEditor({
           path: fwd ? [p.hostA, p.parB] : [p.hostB, p.parA],
           moduleTrackId: null,
           trackName: "Crossover",
+          // The product goes on the CONNECTOR — its track spacing is what
+          // pinches the pair, and that belongs to the pair, not to a turnout.
+          ...(p.partId ? { crossoverPartId: p.partId } : {}),
         });
       const swp = (id: string, pos: number, onTrack: string, diverge: string, kind: TurnoutKind) =>
-        s.turnouts.push({ id, name: "Crossover", pos, onTrack, divergeTrack: diverge, kind, size: turnoutSize });
+        s.turnouts.push({ id, name: "Crossover", pos, onTrack, divergeTrack: diverge, kind, size: p.size });
       if (p.double) {
         conn(xoA, true);
         conn(xoB, false);
@@ -1581,7 +1605,7 @@ export function SchematicEditor({
           // Main 2 extends toward the double end (touchesA = double at A/west).
           kind:
             (touchesA ? -1 : 1) === (s.mainsSwapped ? -1 : 1) ? "left" : "right",
-          size: turnoutSize,
+          size: DEFAULT_TURNOUT_SIZE,
         });
         const cpId = nextId("cp", s.controlPoints.map((c) => c.id));
         s.controlPoints.push({
@@ -2086,8 +2110,6 @@ export function SchematicEditor({
                 flexCutsByTrack={flexCutsByTrack}
                 onTrackEndDrop={mergeAbutting}
                 onTurnoutDrop={onTurnoutDrop}
-                turnoutSize={turnoutSize}
-                onTurnoutSizeChange={setTurnoutSize}
                 onTrackPathChange={(id, path) =>
                   patch((s) => {
                     const t = s.extraTracks.find((x) => x.id === id);
@@ -4083,7 +4105,7 @@ function Inspector({
                     part can leave behind a frog number the list doesn't carry
                     (Atlas's wye is a #2.5), and a select with no matching
                     option renders blank, which reads as "unset" (#187). */}
-                {[...new Set([4, 5, 6, 7, 8, 10, t.size ?? 6])]
+                {[...new Set([...FROG_NUMBERS, t.size ?? DEFAULT_TURNOUT_SIZE])]
                   .sort((a, b) => a - b)
                   .map((n) => (
                     <option key={n} value={n}>#{n}</option>
