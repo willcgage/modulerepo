@@ -5756,6 +5756,7 @@ function ObjectsList({
       <Group
         title="Crossings"
         count={state.crossings.length}
+        warn={undeclaredCrossings.length}
         actions={
           <button type="button" onClick={add.crossing} className={addBtn}>
             + Crossing
@@ -5811,22 +5812,34 @@ function ObjectsList({
 function Group({
   title,
   count,
+  warn = 0,
   actions,
   children,
 }: {
   title: string;
   count: number;
+  /** Things in this group that need attention but are NOT objects in the
+   * document — kept apart from `count` because that badge means "this many
+   * exist", and a warning about a crossing nobody authored must not be counted
+   * as a crossing. It opens the group and marks it: a section that stays shut
+   * because it holds no objects would hide the very thing it is warning about. */
+  warn?: number;
   actions?: React.ReactNode;
   children: React.ReactNode;
 }) {
   return (
-    <details open={count > 0} className="group mb-1">
+    <details open={count > 0 || warn > 0} className="group mb-1">
       <summary className="flex cursor-pointer select-none list-none items-center gap-1.5 rounded px-1 py-1 text-xs font-medium text-gray-700 hover:bg-gray-50">
         <span className="text-gray-400 transition-transform group-open:rotate-90">▸</span>
         {title}
         {count > 0 && (
           <span className="rounded-full bg-gray-100 px-1.5 text-[10px] font-medium text-gray-600">
             {count}
+          </span>
+        )}
+        {warn > 0 && (
+          <span className="rounded-full bg-amber-100 px-1.5 text-[10px] font-medium text-amber-800">
+            ⚠ {warn}
           </span>
         )}
         {actions && <span className="ml-auto flex gap-1">{actions}</span>}
