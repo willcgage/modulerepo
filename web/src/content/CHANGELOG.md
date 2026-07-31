@@ -5,6 +5,13 @@ Headings are `version — date` (YYYY-MM-DD).
 
 ---
 
+## v0.57.2 — 2026-07-31
+
+### Changed
+- **Housekeeping, no change to what the board draws.** Where a turnout's diverging route goes — and, crucially, where its rail *ends* — was worked out inside the board itself, so nothing else in the app could ask that question. It now lives in the shared track model, which is the groundwork for a route knowing that its own flex starts where the turnout stops rather than at the frog inside it. Every drawn line is unchanged.
+
+---
+
 ## v0.57.1 — 2026-07-31
 
 ### Changed

@@ -6,8 +6,7 @@ import {
   samplePath,
   divergeSideForHand,
   turnoutClosure,
-  leadInchesForSize,
-  pastFrogInchesForSize,
+  turnoutDivergingLeg,
   partOutlineAtFrog,
   crossoverAssembly,
   partExtent,
@@ -770,22 +769,6 @@ export function BenchworkEditor({
     const side =
       forceSide ?? (crossoverLeg ? geoSide : ((handSide || undefined) ?? geoSide));
     const size = t.size && t.size > 0 ? t.size : 6;
-    // A curved turnout sweeps over a LONGER leg so its diverging route reads as a
-    // pronounced arc (carrying the curve well past a bare frog, per the curved-
-    // turnout prototype) instead of a subtle bow; a straight turnout uses the
-    // nominal points→frog length.
-    // The RAMP: how far the diverging route runs to reach one full track spacing
-    // — its slope is the frog ratio 1:N, so this is what makes the leg leave at
-    // the right angle. It is NOT points→frog (that mistake put the throat a whole
-    // ramp-length back, so facing turnouts 11″ apart drew overlapping, #173).
-    const L = size * LANE_SPACING_INCHES * (t.curved ? 2.2 : 1);
-    // The CLOSURE: points start ON the stock rail, reach one GAUGE of lateral at
-    // the frog (where the inner rails truly cross, so the frog lands exactly on
-    // `pos`), and leave at the frog angle 1/N. A curved turnout stretches the
-    // whole thing so its diverging route reads as a pronounced arc.
-    const stretch = t.curved ? 2.2 : 1;
-    // A wye splits SYMMETRICALLY — each route takes HALF the divergence, i.e.
-    // each leg leaves at half the frog angle, which is a #2N.
     const effN = t.kind === "wye" ? size * 2 : size;
     /**
      * ⭐⭐ A CROSSOVER'S TURNOUTS ARE NOT GENERIC TURNOUTS, so they must not take
@@ -810,27 +793,42 @@ export function BenchworkEditor({
       return part ? crossoverAssembly(part) : null;
     })();
     const crossoverLeadIn = crossoverGeom?.pointsToFrogInches ?? null;
-    // The lead comes from the PARTS LIBRARY when a real part matches this frog
-    // number — an Atlas code 55 #7 is drawn at its measured 3⅜″, not a formula.
-    // Sizes with no part fall back to the per-frog rule (#179 stage 3).
-    const leadIn = crossoverLeadIn ?? leadInchesForSize(effN, partLibrary) * stretch;
-    // ⚠️ NO `arriveAtInches`, and NO ease. The closure is points → frog, then
-    // straight at the frog angle: the part's own diverging rail and nothing
-    // more.
-    //
-    // It used to be run until the route ARRIVED PARALLEL with the track it fed,
-    // so the rails wouldn't kink at the join. That was sound geometry solving
-    // the wrong problem — on a #7 it drew 10.79″ of turnout-shaped route for a
-    // part that is 6.00″ long, which is why turnouts read as enormous. The gap
-    // between the end of the moulding and the owner's track is REAL: it is
-    // their flex track, and they close it by dragging the track's end onto the
-    // turnout's rail (#189).
-    const cl = turnoutClosure(effN, { leadInches: leadIn });
-    const lead = Math.min(L, cl.lead);
-    // Walk the host from the throat so the leg follows the mainline's curvature,
-    // laying the closure's lateral offset on the normal. Sampled finely enough
-    // that the curve near the points reads as a curve.
-    const steps = 16;
+    /**
+     * ⭐⭐ THE LEG ITSELF NOW COMES FROM THE PACKAGE (#226).
+     *
+     * All of this used to be computed here — the lead, the closure, the body
+     * span, the crossover cap, the walk — which meant the only way to know where
+     * a turnout's rail actually ENDS was to be this canvas. The snap that joins
+     * track to a turnout, the ring that says nothing is joined, and the flex
+     * derivation that has to know a route starts at the RAIL rather than at the
+     * frog were therefore three answers to one question, and two of them did not
+     * exist.
+     *
+     * ⚠️ The HOST stays here, deliberately: which polyline a turnout sits on is a
+     * fact about the module's shape (its centre-line, its lane pinches, a spur's
+     * authored path), not about the turnout. `sampleAt` is passed in.
+     */
+    const legGeom = turnoutDivergingLeg({
+      sampleAt: (rel) => sampleAt(host, rel),
+      relFrogInches: relFrog,
+      toward,
+      side: side as 1 | -1,
+      size,
+      wye: t.kind === "wye",
+      curved: t.curved,
+      library: partLibrary,
+      leadOverrideInches: crossoverLeadIn,
+      // ⚠️ The gap is the PART's own spacing, never re-measured off the host —
+      // through a crossover the mains pinch, so the normal is tilted (#225). The
+      // projection fallback is kept for a hand-built pair that names no product.
+      meetAtSpacingInches: crossoverLeg
+        ? (crossoverGeom?.spacingInches ??
+           Math.abs((far.x - m.x) * m.nx + (far.y - m.y) * m.ny))
+        : null,
+      steps: 16,
+    });
+    const cl = { offsetAt: legGeom.offsetAt };
+    const lead = legGeom.leadInches;
     const relThroat = relFrog - toward * lead;
     /** A point `s` inches past the POINTS, along the host. */
     const at = (s: number): Pt => {
@@ -838,72 +836,10 @@ export function BenchworkEditor({
       const off = side * cl.offsetAt(s);
       return { x: p.x + off * p.nx, y: p.y + off * p.ny };
     };
-    // The leg runs to the END OF THE PART — the frog plus however much moulding
-    // continues past it — and stops. Nothing here reaches for the track it
-    // feeds: a turnout is as long as the turnout is.
-    //
-    // `pastFrogInchesForSize` interpolates across the measured parts exactly as
-    // the lead does, because a turnout has to be drawn SOME length and a
-    // reasoned interpolation is the honest floor. That is a different claim from
-    // `partExtent`, which refuses to guess — the tie strip (which asserts "this
-    // part stops HERE") is still only drawn where a part was actually measured.
-    const bodySpan = lead + pastFrogInchesForSize(effN, partLibrary) * stretch;
-    /**
-     * ⚠️ A CROSSOVER LEG STOPS WHERE IT MEETS ITS PARTNER (#196).
-     *
-     * Every other leg runs the turnout's whole body, which is right: a turnout
-     * is as long as the turnout is (#189). But a crossover has a turnout facing
-     * it across the gap, and each body reaches 0.607″ laterally on a #6 while
-     * only half the 1.09″ gap — 0.545″ — is available before the other one
-     * arrives. Two full bodies want 1.208″ of a 1.09″ gap, so they OVERSHOOT
-     * each other and the band bridging them slopes backwards: the diagonal went
-     * up past centre and then came back down.
-     *
-     * Past the frog the closure is straight at 1/N, so the distance at which it
-     * has reached a given offset is exact, not fitted: `lead + (offset − gauge)
-     * × N`. Capping there makes both legs arrive at the midpoint together and
-     * the diagonal hold one angle.
-     *
-     * Never LENGTHENS a leg — `Math.min` — so a turnout whose body is already
-     * shorter than the meeting point is untouched, and nothing else on the board
-     * changes.
-     */
-    const span = (() => {
-      if (!crossoverLeg) return bodySpan;
-      /**
-       * ⚠️ THE GAP IS THE PART'S OWN TRACK SPACING, not something to re-measure
-       * off the host.
-       *
-       * Projecting the connector's far end onto `m`'s normal reads the gap
-       * correctly only while the host is parallel to the track it crosses to.
-       * Through a crossover it is NOT: the mains PINCH from the module's 1.125″
-       * lane to the assembly's 1.09″, and Main 1 holds the centre-line so Main 2
-       * does all the moving. Its normal is therefore tilted, and because the far
-       * end is ~4.4″ away along the track, a tilt too small to see multiplies
-       * into a real error — the two halves of one diagonal computed different
-       * spans and missed each other by 0.044″ at the scissors (Will, 2026-07-30).
-       *
-       * ⭐ Both turnouts of a pair now derive the SAME span from the SAME
-       * published number, so they arrive at the midpoint together by
-       * construction instead of by two measurements happening to agree.
-       */
-      const gap =
-        crossoverGeom?.spacingInches ??
-        Math.abs((far.x - m.x) * m.nx + (far.y - m.y) * m.ny);
-      const half = gap / 2;
-      if (!(half > RAIL_GAUGE_INCHES)) return bodySpan;
-      return Math.min(bodySpan, lead + (half - RAIL_GAUGE_INCHES) * effN);
-    })();
-    const leg: Pt[] = [];
-    for (let i = 0; i <= steps; i++) leg.push(at((span * i) / steps));
-    // The frog — `pos` marks it (#132), and the closure is built so the rails
-    // cross exactly there.
-    // ⚠️ NOT at(lead). `at` walks the DIVERGING CENTRE-LINE, which is one full
-    // gauge out at the frog — that is the definition of the lead. But the frog
-    // is where the two INNER RAILS cross, and those meet HALF a gauge off the
-    // through centre-line: the through route's inner rail sits at +g/2, the
-    // diverging route's inner rail at d−g/2, and d = g there. Using at(lead)
-    // put the marker and the V's apex 0.177″ off the rails they mark.
+    // The span, the body, the crossover cap and the walk are the package's now
+    // (see `turnoutDivergingLeg` above) — what is left here is the drawing.
+    const span = legGeom.spanInches;
+    const leg: Pt[] = legGeom.points;
     const frog = (() => {
       const p = sampleAt(host, Math.max(0, relThroat + toward * lead));
       const off = side * (RAIL_GAUGE_INCHES / 2);
@@ -1035,7 +971,7 @@ export function BenchworkEditor({
       const from = cl.offsetAt(span);
       if (!(targetOffset > from + 0.01)) return null; // already out at the lane
       const ecl = turnoutClosure(effN, {
-        leadInches: leadIn,
+        leadInches: legGeom.closureLeadInches,
         arriveAtInches: targetOffset,
       });
       if (!Number.isFinite(ecl.span) || !(ecl.span > span)) return null;
