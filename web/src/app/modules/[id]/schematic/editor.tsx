@@ -44,6 +44,7 @@ import {
   endplateTrackOffsetInches,
   pathLengthInches,
   measuredAlongPath,
+  turnoutDivergingLeg,
   checkEndplateWidth,
   flexPieces,
   flexUsage,
@@ -549,6 +550,9 @@ export function SchematicEditor({
    */
   const flexByTrack = useMemo(() => {
     const tracks = doc.tracks ?? [];
+    // The module's centre-line — the host a turnout on the main sits on. Needed
+    // to place a turnout's rail end relative to the route it feeds (#235).
+    const center = footprint.centerline;
     // Where each track ends up, for the facing rule — the end of a diverging
     // track furthest from its turnout is the way that turnout points.
     const extentOf = (id: string) => {
@@ -658,6 +662,65 @@ export function SchematicEditor({
       for (const x of state.crossings)
         if (x.trackA === t.id || x.trackB === t.id)
           occupied.push({ fromPos: x.pos, toPos: x.pos });
+      /** How many of the spans above are things SITTING ON this run, whose
+       *  positions are absolute inches from A. Kept apart from the moulding
+       *  deduction below, which is expressed in the run's own frame. */
+      const onTrackSpans = occupied.length;
+
+      /**
+       * ⭐⭐ A ROUTE DOES NOT BEGIN AT THE FROG — it begins where the turnout's
+       * RAIL ENDS, and the difference is not flex (#235).
+       *
+       * A turnout's `pos` marks its FROG (#132), and a route to an endplate is
+       * authored starting at that point — so its first ~1.5″ on a #6 lie INSIDE
+       * the turnout. Nothing deducted that: `occupied` above only covers turnouts
+       * whose `onTrack` IS this run, and the turnout here sits on the MAIN and
+       * merely diverges into it. So an owner reading the panel was told to buy
+       * flex for track the turnout already provides.
+       *
+       * ⭐ SELF-CORRECTING, which is what makes it safe. The deduction is what is
+       * LEFT of the moulding after the route's own start is accounted for:
+       * a path drawn from the frog gives back the whole rail length, one already
+       * snapped onto the rail gives back ZERO, and anything between is
+       * proportional. So it cannot double-count a route the owner has connected
+       * by hand — which is exactly how a naive "always subtract" would have made
+       * 20.6″ into 19.0″.
+       *
+       * ⭐ The magnitude comes from the PACKAGE's own leg — `turnoutDivergingLeg`
+       * measured on a straight host. How far a rail end sits from its turnout's
+       * position is a property of the PART, not of which way it faces or which
+       * side it throws, so no facing/hand derivation is duplicated here.
+       */
+      if (alongPath && t.path && t.path.length >= 2 && center.length >= 2) {
+        const feeder = state.turnouts.find((sw) => sw.divergeTrack === t.id);
+        // Only a turnout on the MAIN, whose `pos` is arc length along the
+        // centre-line we have. Anything else and we cannot place it: fail closed.
+        if (feeder && (feeder.onTrack ?? MAIN_TRACK_ID) === MAIN_TRACK_ID) {
+          const size = feeder.size ?? 6;
+          const named = feeder.partId ? partLibrary.find((p) => p.id === feeder.partId) : undefined;
+          const leg = turnoutDivergingLeg({
+            sampleAt: (rel) => ({ x: rel, y: 0, nx: 0, ny: 1 }),
+            relFrogInches: 0,
+            toward: 1,
+            side: 1,
+            size,
+            wye: feeder.kind === "wye",
+            curved: feeder.curved,
+            library: partLibrary,
+            leadOverrideInches: named ? partExtent(named)?.behindFrog ?? null : null,
+          });
+          // Straight-line from the turnout's position to its rail end — the same
+          // distance a track end has to close to snap onto it (#189).
+          const railFromPos = Math.hypot(leg.railEnd.x, leg.railEnd.y);
+          const posPt = sampleAt(center, feeder.pos);
+          const start = t.path[0];
+          const startFromPos = Math.hypot(start.x - posPt.x, start.y - posPt.y);
+          const inside = Math.max(0, railFromPos - startFromPos);
+          // Below a hundredth there is nothing to say, and a zero-length span
+          // would put a rail joint on the throat.
+          if (inside > 0.01) occupied.push({ fromPos: 0, toPos: inside });
+        }
+      }
 
       const f = state.flexByTrack?.[t.id];
       const partId = f?.partId ?? DEFAULT_FLEX_PART_ID;
@@ -673,8 +736,13 @@ export function SchematicEditor({
        *
        * In practice this is empty — a route to an endplate is a single run from
        * its turnout to the face — so the ordinary case derives.
+       *
+       * ⚠️ Counts only the spans of things SITTING ON the run. The moulding
+       * deduction added afterwards is expressed in the run's OWN frame — it
+       * starts at 0, the throat — so it is placeable by construction and must
+       * not make the run uncuttable.
        */
-      const unmapped = alongPath && occupied.length > 0;
+      const unmapped = alongPath && onTrackSpans > 0;
       out[t.id] = {
         partId,
         authored: f?.cuts != null,
@@ -711,6 +779,7 @@ export function SchematicEditor({
     state.mainPath,
     state.main2Path,
     partLibrary,
+    footprint,
   ]);
 
   /**

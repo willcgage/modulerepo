@@ -5,6 +5,17 @@ Headings are `version — date` (YYYY-MM-DD).
 
 ---
 
+## v0.58.0 — 2026-07-31
+
+### Fixed
+- **A route to a third endplate no longer asks you to buy flex for track its turnout already provides.** A turnout's position marks its **frog** — the V where the rails cross — which sits a little way *inside* the part. A route drawn from that point therefore starts inside the turnout, and its first inch and a half on a #6 is moulding, not track you lay. The board was counting all of it as flex.
+
+  On the test module the route is still 22.2″ long, because that is the line that was drawn — but it now reports **20.6″ of flex**, which is what you would actually cut.
+
+  The deduction is what is *left* of the turnout's rail after your own track's starting point is accounted for. So if you have already dragged the route's end onto the turnout's rail, nothing is deducted twice: both ways of drawing it give the same answer. Nothing about your saved document changes — only the figure the panel reports.
+
+---
+
 ## v0.57.2 — 2026-07-31
 
 ### Changed
