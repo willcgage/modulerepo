@@ -199,6 +199,28 @@ export function SchematicEditor({
   storedParts?: StoredTrackPart[];
 }) {
   const [state, setState] = useState<EditorState>(initial);
+  /**
+   * ⭐⭐ HAS A PERSON ACTUALLY EDITED THIS MODULE? (#222)
+   *
+   * Autosave used to fire on "the serialisation differs", which is not the same
+   * question and nearly cost FMN-0078 its crossover: `docToState` rounded the
+   * authored positions as the module LOADED, the derived doc therefore didn't
+   * match the stored one, and a write was scheduled a second later with nobody
+   * having touched anything (#220). It landed before the undo stack existed, so
+   * the app's own safety net couldn't reach it and the module needed SQL.
+   *
+   * That rounding is fixed, but the rule that turned it into data loss was the
+   * general one. **A difference is not a reason to write.** Every mutation entry
+   * point sets this — the same four that already guard `readOnly`, plus undo/redo
+   * — and the debounce below refuses to schedule anything until one of them has.
+   * A load-time transformation now changes what you SEE and waits to be asked.
+   */
+  const userEdited = useRef(false);
+  const markEdited = () => {
+    userEdited.current = true;
+  };
+  /** So the round-trip warning below is said once per module, not once a render. */
+  const warnedRoundTrip = useRef(false);
   /** The parts library this board draws with — admin-maintained parts folded
    * over the compiled-in ones (the same library, later). */
   const partLibrary = useMemo(() => partLibraryWith(storedParts), [storedParts]);
@@ -256,6 +278,9 @@ export function SchematicEditor({
     syncHist();
   };
   const restore = (snap: Snap) => {
+    // Undo and redo ARE user edits — putting a module back the way it was is a
+    // decision that has to persist (#222). Nothing else here reaches `restore`.
+    markEdited();
     setState(snap.state);
     setDims(snap.dims);
     lastEditAt.current = 0; // the next edit starts a fresh history entry
@@ -770,6 +795,7 @@ export function SchematicEditor({
     // disabled one by one (miss one and autosave writes to an owner's module).
     // The server actions stay owner-only regardless.
     if (readOnly) return;
+    markEdited();
     snapshot();
     setState((prev) => {
       const next = structuredClone(prev);
@@ -820,6 +846,11 @@ export function SchematicEditor({
    */
   const setPieces = (next: TrackPiece[], opts?: { commit?: boolean }) => {
     if (readOnly) return;
+    // ⚠️ Marked on EVERY call, not just a commit (#222). Mid-gesture calls
+    // deliberately skip `snapshot()` so a drag is one undo entry — but they do
+    // change the document, and a drag that ends without a commit would otherwise
+    // leave a real edit that could never be saved.
+    markEdited();
     if (opts?.commit) snapshot();
     setState((prev) => {
       // ⚠️ The start is DERIVED every time, not remembered. The walk runs one way
@@ -861,6 +892,7 @@ export function SchematicEditor({
     const conv = docToGraph(doc, answers, partLibrary);
     if (!conv.graph) return;
     const { doc: derived } = deriveGraphDoc({ ...doc, graph: conv.graph }, partLibrary);
+    markEdited();
     snapshot();
     // Straight to `docToState` rather than through {@link deriveFromPieces},
     // because the graph being adopted is not in the state yet — this is the one
@@ -894,6 +926,7 @@ export function SchematicEditor({
     // Dimensions persist via updateModuleDimensions, a separate path from the
     // doc — so read-only has to stop here too, not just in patch().
     if (readOnly) return;
+    markEdited();
     snapshot();
     const next = { ...dims, ...p };
     setDims(next);
@@ -1759,6 +1792,11 @@ export function SchematicEditor({
 
   const runSave = useCallback(async () => {
     if (readOnly) return; // inspect-only: never write someone else's module
+    // The same invariant as the debounce, stated where the write happens (#222).
+    // The Save button is disabled without an edit, but "nothing writes this
+    // module unless a person changed it" is worth being true at the call site
+    // rather than only upstream of it.
+    if (!userEdited.current) return;
     if (savingRef.current) return; // in flight; its finally re-checks
     const target = { ...sigRef.current };
     if (target.doc === savedSig.current.doc && target.dims === savedSig.current.dims) {
@@ -1792,10 +1830,30 @@ export function SchematicEditor({
     }
   }, [moduleId, readOnly]);
 
-  // Debounce: settle 1s after the last change, then persist.
+  // Debounce: settle 1s after the last EDIT, then persist.
   useEffect(() => {
     if (docSig === savedSig.current.doc && dimsSig === savedSig.current.dims) {
       if (!savingRef.current) setSaveState("saved");
+      return;
+    }
+    // ⭐⭐ A DIFFERENCE IS NOT A REASON TO WRITE (#222). Reaching here means the
+    // document this editor would save differs from the one it loaded — which is
+    // a necessary condition for saving, never a sufficient one. Until somebody
+    // edits something, a difference means the LOAD changed the module, and the
+    // honest response to that is to show it and leave the stored copy alone.
+    // #220 is what this costs when it's the other way round.
+    if (!userEdited.current) {
+      // Say it once. A module that doesn't round-trip is a DEFECT to surface,
+      // not a change to persist — #220 went unnoticed until a crossover visibly
+      // disagreed with its own geometry.
+      if (!warnedRoundTrip.current) {
+        warnedRoundTrip.current = true;
+        console.warn(
+          `[schematic] This module does not round-trip: loading it produced a different ${
+            docSig !== savedSig.current.doc ? "document" : "set of dimensions"
+          } from the one stored. Nothing has been saved (modulerepo#222).`,
+        );
+      }
       return;
     }
     setSaveState((s) => (s === "saving" ? s : "unsaved"));

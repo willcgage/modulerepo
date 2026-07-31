@@ -5,6 +5,15 @@ Headings are `version — date` (YYYY-MM-DD).
 
 ---
 
+## v0.54.3 — 2026-07-30
+
+### Changed
+- **Your module is saved when you change it — and not otherwise.** Until now the app saved whenever the module it was holding differed in any way from the one it loaded, whether or not anyone had touched it. That sounds like the same thing, and almost always is. It wasn't in one case that mattered: a module whose measurements were altered as it *loaded* looked changed, so it was written back — before there was anything to undo. That is what blunted a crossover's measurements in the previous release.
+
+  Saving now waits for an actual edit. Open a module, look at it, change your mind and leave: nothing is written. Move a turnout, rename a track, undo something — saved a second later, exactly as before.
+
+  If a module ever does come out of loading different from the way it was stored, the app now leaves the stored copy alone and says so in the browser console, instead of quietly making the change permanent.
+
 ## v0.54.2 — 2026-07-30
 
 ### Fixed
