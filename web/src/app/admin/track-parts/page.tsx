@@ -280,7 +280,10 @@ export default async function TrackPartsPage({
                   {ext ? (
                     <span className="text-green-700">
                       draws its own extent — {ext.aheadOfPoints.toFixed(3)}″ of turnout past
-                      the points, {ext.pastFrog.toFixed(3)}″ past the frog
+                      the points
+                      {ext.frogKnown
+                        ? `, ${ext.pastFrog.toFixed(3)}″ past the frog`
+                        : " — but no frog reading, so it cannot be placed against a turnout's position yet"}
                     </span>
                   ) : (
                     <span className="text-amber-700">
