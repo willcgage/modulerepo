@@ -1202,7 +1202,14 @@ export function SchematicEditor({
         pos: midX,
         side: "up",
         config: "single",
-        kind: "branch",
+        // ⭐⭐ A ROUTE THAT REACHES AN ENDPLATE IS A **MAIN** (#181, restated by
+        // Will on FMN-0068 2026-07-30: *"this is not a branch since FD would
+        // decide that. It is still a mainline since it goes to an endplate."*).
+        // Whether it is operationally a branch line is a question about the
+        // LAYOUT, and only Free-Dispatcher can see the layout. The module's own
+        // fact is narrower and certain: there is an endplate here and track
+        // reaches it. `label` is still the owner's word for it.
+        kind: "main",
         trackId: null,
       });
       // ⚠️ NO pose override. This used to write one — `snapPoseToOutline(outline)
@@ -3748,18 +3755,17 @@ function Inspector({
                   <option value="double">Double</option>
                 </select>
               </label>
-              <label className="block text-xs font-medium text-gray-600">
-                Route is a…
-                <select
-                  value={branch.kind ?? "branch"}
-                  onChange={(e) => patch((s) => (s.branches[bi].kind = e.target.value as "branch" | "main"))}
-                  className={`mt-0.5 ${inp}`}
-                >
-                  <option value="branch">Branch line</option>
-                  <option value="main">Diverging main</option>
-                </select>
-              </label>
             </div>
+            {/* ⛔ THE "Route is a… Branch line / Diverging main" SELECT IS GONE.
+                It asked the module to declare something it cannot know. Whether
+                this route is a branch line is a fact about the LAYOUT — which
+                railroad owns it, where it goes — and only Free-Dispatcher can
+                see that. What the module knows is that an endplate is here and
+                track reaches it, and a route reaching an endplate is a MAIN
+                (#181/#183, restated by Will on FMN-0068, 2026-07-30).
+                ⚠️ Old docs that stored `kind: "branch"` are READ unchanged —
+                nothing is auto-migrated (standing constraint). They keep their
+                stored value until their owner saves. */}
             <p className="text-[11px] text-gray-400">
               Drag the endplate on the board to place it on a fascia, then draw
               track to it. Track must cross square and run straight for 4″ from
@@ -5219,9 +5225,11 @@ function Inspector({
           />
         </label>
         <p className="rounded-md bg-gray-50 px-2 py-1.5 text-xs text-gray-600">
-          Branch route to <span className="font-medium">endplate {epId}</span>.
-          Drag its bend handles on the board to match the build; it meets the
-          endplate square, straight for 4″ from the face (Free-moN §2.0).
+          A main to <span className="font-medium">endplate {epId}</span> — it
+          reaches an end of the module, so it is a route out, whatever the
+          layout beyond makes of it. Drag its handles on the board to match the
+          build; it meets the endplate square, straight for 4″ from the face
+          (Free-moN §2.0).
         </p>
         {flexBlock(t.id)}
       </>,
@@ -5235,7 +5243,7 @@ function Inspector({
               for (const b of s.branches) if (b.trackId === removed) b.trackId = null;
             }
           }),
-        label: "Remove branch route",
+        label: "Remove this route",
       },
     );
   }
