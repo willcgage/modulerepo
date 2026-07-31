@@ -5,6 +5,17 @@ Headings are `version — date` (YYYY-MM-DD).
 
 ---
 
+## v0.59.1 — 2026-07-31
+
+### Fixed
+- **A route to a third endplate no longer gets told it crosses Main 2 when it doesn't.** The board worked out which side of the mainline such a route leaves on from the turnout's *hand* — but a route to an endplate doesn't run along the module at all, it runs across it, so there was no direction for the hand to answer about and it answered anyway. On a right-hand turnout it guessed the wrong side, and the crossing check then reported a diamond with Main 2 that isn't there.
+
+  The endplate settles it: the route has to reach the plate, so the side it leaves on is the side the plate is on. That is also what the rest of the board was already using, so the warning and the drawing now agree.
+
+  A route that genuinely does cross Main 2 is still reported.
+
+---
+
 ## v0.59.0 — 2026-07-31
 
 ### Fixed
