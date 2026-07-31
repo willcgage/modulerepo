@@ -5,6 +5,20 @@ Headings are `version — date` (YYYY-MM-DD).
 
 ---
 
+## v0.57.0 — 2026-07-31
+
+### Fixed
+- **A route that runs to a third endplate is now cut into lengths of flex like any other track.** It reported its real length in the last release but still showed *"its lengths of flex aren't worked out yet"* — because it was being measured along the *module*, and a route that leaves the main and crosses the board covers almost none of the module's length. On the test module it runs 22.2″ of real track between two points that are both 27.8″ from endplate A.
+
+  It is measured along **itself** now: nothing at the turnout, its full drawn length at the endplate face. So the panel tells you how many lengths of flex the route takes and where the rail joints fall, and the joints are drawn on the line you actually drew rather than collapsed onto the turnout.
+
+  If something sits on the route whose position was recorded along the module, the route is left uncut and the panel says so — a joint nobody has checked is worse than no joint.
+
+### Changed
+- **The board stops deciding what a route *is* from the word stored on it.** A route out and a return loop are both drawn as a path across the board, and the editor was reading the label to tell them apart — so a return loop was told it ran to "endplate ?", and a route out was still called a branch. It asks the shape now and says which of the two it has. What a route means for operations stays the layout's business, not the module's.
+
+---
+
 ## v0.56.4 — 2026-07-30
 
 ### Fixed

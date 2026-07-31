@@ -43,6 +43,7 @@ import {
   endplateCentreOffsetInches,
   endplateTrackOffsetInches,
   pathLengthInches,
+  measuredAlongPath,
   checkEndplateWidth,
   flexPieces,
   flexUsage,
@@ -563,15 +564,13 @@ export function SchematicEditor({
      * record put "15.2″ · drawn" next to a 17.4″ piece: two lengths for one
      * track. The drawn line is the physical truth, so it wins.
      *
-     * EXCEPT a branch route, which is drawn across the board rather than along
-     * it — its path length is real, but nothing yet maps a position on it back
-     * to the module, so its joints would land in the wrong place. Left alone,
-     * and its panel says so.
+     * A run measured along its OWN path (a route across the board) never gets
+     * here — it is parameterised in route-local inches below, where 0 is its
+     * throat rather than endplate A.
      */
     const runLengthOf = (id: string, ext: { from: number; to: number }) => {
       const posExtent = Math.abs(ext.to - ext.from);
       const et = state.extraTracks.find((x) => x.id === id);
-      if (et?.role === "branch") return posExtent;
       const drawn =
         id === MAIN_TRACK_ID
           ? state.mainPath
@@ -588,16 +587,41 @@ export function SchematicEditor({
         partId: string;
         authored: boolean;
         runInches: number;
+        /** True when this run's positions are arc length along its own drawn
+         * path rather than inches from endplate A — see {@link measuredAlongPath}.
+         * The canvas needs it to place the joints: a route-local cut is already
+         * an arc length on the polyline it draws, so projecting it back onto the
+         * main (what `toHostRel` does) would collapse it to nothing. */
+        alongPath: boolean;
+        /** Set when the run was deliberately left uncut because something sits
+         * on it whose position cannot be expressed in this run's frame. */
+        unmapped: boolean;
       }
     > = {};
     for (const t of tracks) {
       const claimed = extentOf(t.id)!;
+      /**
+       * ⭐⭐ WHICH AXIS THIS RUN IS MEASURED ALONG (#226).
+       *
+       * A route to a third endplate crosses the board, so the stretch of MODULE
+       * it covers is degenerate — FMN-0068's runs 27.8 → 27.8 — and cutting it
+       * against that axis asks `flexPieces` for the joints in a zero-length run,
+       * which is why it returned none. Its positions are arc length along the
+       * line the owner drew: 0 at the throat, `pathLengthInches` at the endplate.
+       *
+       * ⭐ The two measure the SAME polyline — `pathLengthInches` and the
+       * canvas's `hostPointsOf` both go through `samplePath` — so a cut at 30 is
+       * 30″ along the drawn route on screen, with no conversion in between.
+       */
+      const alongPath = measuredAlongPath(t);
       // Measured from the run's start, so a drawn run that stops short of what
       // its record claims is cut to what was actually drawn.
-      const ext = {
-        from: claimed.from,
-        to: claimed.from + runLengthOf(t.id, claimed) * (claimed.to < claimed.from ? -1 : 1),
-      };
+      const ext = alongPath
+        ? { from: 0, to: pathLengthInches(t.path) }
+        : {
+            from: claimed.from,
+            to: claimed.from + runLengthOf(t.id, claimed) * (claimed.to < claimed.from ? -1 : 1),
+          };
       // What this run gives up to parts. A turnout's moulding is only known for
       // a MEASURED part — `turnoutOccupiedSpan` returns null otherwise, and a
       // guessed body would put a rail joint on track nobody has checked (#189).
@@ -637,40 +661,43 @@ export function SchematicEditor({
 
       const f = state.flexByTrack?.[t.id];
       const partId = f?.partId ?? DEFAULT_FLEX_PART_ID;
+      /**
+       * ⛔ NOTHING ON A ROUTE-LOCAL RUN CAN BE POSITIONED ALONG IT — yet.
+       *
+       * A turnout's `pos` is absolute inches from endplate A (#132, the owner's
+       * call), and mapping that onto a route that crosses the board means
+       * projecting it back onto the main: the very collapse this frame exists to
+       * escape. So the position of anything sitting on such a route is genuinely
+       * unknown, and a guessed one would put a rail joint on track nobody has
+       * checked (#189). Leave the run uncut and let the panel say why.
+       *
+       * In practice this is empty — a route to an endplate is a single run from
+       * its turnout to the face — so the ordinary case derives.
+       */
+      const unmapped = alongPath && occupied.length > 0;
       out[t.id] = {
         partId,
         authored: f?.cuts != null,
+        alongPath,
+        unmapped,
         /**
-         * ⭐⭐ A ROUTE TO AN ENDPLATE IS AS LONG AS THE LINE THAT WAS DRAWN.
-         *
-         * It runs ACROSS the board, so `toPos − fromPos` is the stretch of
-         * MODULE it covers — 27.8 to 27.8 on FMN-0068, i.e. **zero**, reported
-         * as "0″" for 22″ of real track (Will, 2026-07-30). Its length was never
-         * unknown; it was being measured along the wrong axis. `pathLengthInches`
-         * is the same function every other drawn run already uses.
-         *
-         * ⚠️ THE CUTS ARE STILL NOT DERIVED, deliberately, and this does not
-         * change that: `ext` is untouched, so `flexPieces` still gets a
-         * zero-length run and returns nothing. Where a joint FALLS needs a
-         * position along the route, and `toHostRel` maps positions by projecting
-         * onto the main — which collapses to zero for a square exit. Reporting a
-         * true length is a different claim from knowing where to cut it, and the
-         * panel goes on saying the flex isn't worked out.
+         * ⭐⭐ ONE COMPUTATION OF "HOW LONG IS THIS RUN" — `ext`, whichever frame
+         * it was built in. A route to an endplate used to need its own copy of
+         * this, because `ext` was always along the module and always zero for it
+         * (#229 fixed the number and left the duplicate). Two computations of one
+         * quantity is exactly how that fix missed the Objects row (#230); now the
+         * frame is decided once, above, and everything reads it.
          */
-        runInches: (() => {
-          const et = state.extraTracks.find((x) => x.id === t.id);
-          const drawn = et?.role === "branch" ? et.path : null;
-          return drawn && drawn.length >= 2
-            ? pathLengthInches(drawn)
-            : Math.abs(ext.to - ext.from);
-        })(),
-        pieces: flexPieces({
-          fromPos: ext.from,
-          toPos: ext.to,
-          maxPieceInches: maxFlexPieceInches(partId, partLibrary),
-          occupied,
-          cuts: f?.cuts ?? null,
-        }),
+        runInches: Math.abs(ext.to - ext.from),
+        pieces: unmapped
+          ? []
+          : flexPieces({
+              fromPos: ext.from,
+              toPos: ext.to,
+              maxPieceInches: maxFlexPieceInches(partId, partLibrary),
+              occupied,
+              cuts: f?.cuts ?? null,
+            }),
       };
     }
     return out;
@@ -686,15 +713,24 @@ export function SchematicEditor({
     partLibrary,
   ]);
 
-  /** Just the joint positions, for the canvas to draw a tick at each. */
+  /**
+   * Just the joint positions, for the canvas to draw a tick at each.
+   *
+   * ⚠️ EACH ENTRY CARRIES THE FRAME ITS POSITIONS ARE IN. A bare `number[]` was
+   * fine while every run was measured from endplate A; a route-local cut is arc
+   * length along the track's own path, and the two are not interchangeable —
+   * feeding one to the other's sampler is silently wrong rather than obviously
+   * wrong. Shipping the number without the frame is how a new field reaches the
+   * model but not the code that draws it.
+   */
   const flexCutsByTrack = useMemo(() => {
-    const out: Record<string, number[]> = {};
+    const out: Record<string, { cuts: number[]; alongPath: boolean }> = {};
     for (const [id, f] of Object.entries(flexByTrack)) {
       // Only the joints BETWEEN two pieces of flex — where a piece meets a
       // turnout or a crossing the part already draws its own (#189), and where
       // it meets the end of the run there's an endplate, not a joint.
       const cuts = f.pieces.filter((p) => p.toEnd === "piece").map((p) => p.toPos);
-      if (cuts.length) out[id] = cuts;
+      if (cuts.length) out[id] = { cuts, alongPath: f.alongPath };
     }
     return out;
   }, [flexByTrack]);
@@ -3270,7 +3306,7 @@ function Inspector({
   /** Each run cut into lengths of flex track, by track id (#193). */
   flex: Record<
     string,
-    { pieces: FlexPiece[]; partId: string; authored: boolean; runInches: number }
+    { pieces: FlexPiece[]; partId: string; authored: boolean; runInches: number; alongPath: boolean; unmapped: boolean }
   >;
   partLibrary: TrackPart[];
   dims: ModuleDimensions;
@@ -4975,24 +5011,24 @@ function Inspector({
     if (!f) return null;
     const u = flexUsage(f.pieces);
     const part = flexPartFor(f.partId, partLibrary);
-    // A branch route is drawn ACROSS the board rather than along it, so there's
-    // no run here to cut into lengths. Say that and nothing else — a product
-    // chooser would imply it changes something.
-    //
-    // ⚠️ GATED ON WHAT IS TRUE, NOT ON A ZERO. This used to key off
-    // `runInches < 0.01`, which only held while such a route reported no length
-    // at all. The moment it reported its real drawn length (#226) the test fell
-    // through to the ordinary flex panel, and the module announced "No flex on
-    // this run — the parts fill it" — which is not what is happening. Nothing
-    // has been cut because nothing yet maps a position along a cross-board
-    // route back to the module.
-    const et = state.extraTracks.find((x) => x.id === trackId);
-    const crossesTheBoard = et?.role === "branch" && (et.path?.length ?? 0) >= 2;
-    if (crossesTheBoard || f.runInches < 0.01)
+    /**
+     * ⚠️ GATED ON WHAT IS TRUE, NOT ON A ZERO — the rule that had to be learned
+     * twice here. This first keyed off `runInches < 0.01`, which held only
+     * BECAUSE the length was broken; when #229 gave the route its real length the
+     * test fell through and the module announced "No flex on this run — the parts
+     * fill it", which was false. It then keyed off `role === "branch"`, which is
+     * the owner's label rather than a fact about the run (#226).
+     *
+     * What is actually true: a run is uncuttable when something sits on it whose
+     * position cannot be expressed in the run's own frame. A route across the
+     * board is no longer that by default — it is cut along itself now.
+     */
+    if (f.unmapped || f.runInches < 0.01)
       return (
         <p className="border-t border-gray-100 pt-2 text-xs text-gray-500">
-          This route is drawn as a path rather than measured along the module, so its lengths of
-          flex aren&rsquo;t worked out yet.
+          {f.unmapped
+            ? "Something sits on this route whose position is recorded along the module, not along the route, so its lengths of flex aren’t worked out."
+            : "This run has no length yet, so its lengths of flex aren’t worked out."}
         </p>
       );
     return (
@@ -5237,12 +5273,21 @@ function Inspector({
     library: partLibrary,
   });
   const round1 = (v: number) => Math.round(v * 10) / 10;
-  // A branch route to a placed endplate (#170) is authored by its PATH (bend it
-  // on the board) and pinned to its endplate — it has no siding-style extent,
-  // kind or capacity to edit, so it gets its own compact inspector.
-  if (t.role === "branch") {
+  /**
+   * ⭐ A RUN AUTHORED BY ITS PATH GETS THE COMPACT INSPECTOR — because it has no
+   * siding-style extent, kind or capacity to edit, which is a fact about how it
+   * was drawn, not about what it is FOR.
+   *
+   * ⚠️ This used to ask `role === "branch"`. That is the owner's LABEL (#226 —
+   * what a route means operationally is the layout's question), and it was wrong
+   * at both ends: a return loop is drawn the same way and was told it ran to
+   * "endplate ?", while the same panel insisted a route out was a "branch". The
+   * geometry answers both — {@link measuredAlongPath} — and the copy now says
+   * which of the two this is instead of assuming.
+   */
+  if (measuredAlongPath(t)) {
     const bIdx = state.branches.findIndex((b) => b.trackId === t.id);
-    const epId = bIdx >= 0 ? String.fromCharCode(67 + bIdx) : "?";
+    const epId = bIdx >= 0 ? String.fromCharCode(67 + bIdx) : null;
     return shell(
       `Track · ${trackLabel(t, i)}`,
       <>
@@ -5255,11 +5300,22 @@ function Inspector({
           />
         </label>
         <p className="rounded-md bg-gray-50 px-2 py-1.5 text-xs text-gray-600">
-          A main to <span className="font-medium">endplate {epId}</span> — it
-          reaches an end of the module, so it is a route out, whatever the
-          layout beyond makes of it. Drag its handles on the board to match the
-          build; it meets the endplate square, straight for 4″ from the face
-          (Free-moN §2.0).
+          {epId ? (
+            <>
+              A main to <span className="font-medium">endplate {epId}</span> — it
+              reaches an end of the module, so it is a route out, whatever the
+              layout beyond makes of it. Drag its handles on the board to match
+              the build; it meets the endplate square, straight for 4″ from the
+              face (Free-moN §2.0).
+            </>
+          ) : (
+            <>
+              Drawn as a path across the board rather than measured along the
+              module, so it is authored by its shape — drag its handles to match
+              the build. Its length and its rail joints are measured along the
+              route itself.
+            </>
+          )}
         </p>
         {flexBlock(t.id)}
       </>,
@@ -5682,7 +5738,7 @@ function ObjectsList({
   /** Each run cut into lengths of flex track, by track id (#193). */
   flex: Record<
     string,
-    { pieces: FlexPiece[]; partId: string; authored: boolean; runInches: number }
+    { pieces: FlexPiece[]; partId: string; authored: boolean; runInches: number; alongPath: boolean; unmapped: boolean }
   >;
   mainlineDouble: boolean;
   mainlineLocked: boolean;
