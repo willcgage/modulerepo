@@ -5,6 +5,17 @@ Headings are `version — date` (YYYY-MM-DD).
 
 ---
 
+## v0.59.0 — 2026-07-31
+
+### Fixed
+- **A route to a third endplate can now actually take hold of the turnout it leaves from.** Track snaps to a turnout's diverging rail when you bring it near — but "near" was measured as a flat inch and a half from the *end of the rail*, and a route is created at the turnout's **frog**, which sits inside the part. On a #6 that start is 1.63″ from the rail end, on a #12 it is 3.04″ — both further than the allowance. So a route the board had just made could not connect to the turnout it had just been told it comes from, and showed an amber "nothing is joined here" ring for a gap you could not close without first dragging it away and back.
+
+  The allowance now includes how far the turnout itself reaches, so it means what it always read as: near enough to *this turnout* to be meant for it. Bigger turnouts get more room rather than less, which is the way round it should always have been.
+
+  A route you have deliberately parked well clear of its turnout still stays where you put it.
+
+---
+
 ## v0.58.0 — 2026-07-31
 
 ### Fixed

@@ -688,6 +688,10 @@ export function BenchworkEditor({
     /** The joint at the end of the diverging rail. Drawn only when something is
      * actually connected there; otherwise that spot gets a dangling ring. */
     divergeJoint: Joint;
+    /** How far this turnout REACHES — its position on the host to the end of its
+     * diverging rail. Non-zero for every turnout, because `pos` marks the frog
+     * and the frog is inside the part (#239). */
+    reachInches: number;
   } | null => {
     const dt = tracks.find((x) => x.id === t.divergeTrack);
     if (!dt) return null;
@@ -999,6 +1003,11 @@ export function BenchworkEditor({
       body,
       throughJoints,
       divergeJoint,
+      /** How far this turnout REACHES: its position on the host (`m`, the point a
+       * route is authored at) to the end of its diverging rail. A turnout's `pos`
+       * marks the FROG, which is inside the part, so this is non-zero for every
+       * turnout — 1.63″ on a #6, 3.04″ on a #12 (#239). */
+      reachInches: Math.hypot(leg[leg.length - 1].x - m.x, leg[leg.length - 1].y - m.y),
       frogV: [
         { x: frog.x + dHost.x * vLen, y: frog.y + dHost.y * vLen },
         { x: frog.x + dLeg.x * vLen, y: frog.y + dLeg.y * vLen },
@@ -1043,7 +1052,7 @@ export function BenchworkEditor({
     // the ramp's end — they aren't any more (#173).
     const map = new Map<
       string,
-      { throat: Pt; frog: Pt; frogV: [Pt, Pt]; join: Pt; leg: Pt[]; arrival: Pt[] | null; outline: Pt[][] | null; body: Pt[] | null; throughJoints: Joint[]; divergeJoint: Joint; turnoutId: string }[]
+      { throat: Pt; frog: Pt; frogV: [Pt, Pt]; join: Pt; leg: Pt[]; arrival: Pt[] | null; outline: Pt[][] | null; body: Pt[] | null; throughJoints: Joint[]; divergeJoint: Joint; turnoutId: string; reachInches: number }[]
     >();
     if (centerline.length >= 2) {
       for (const t of turnouts) {
@@ -1063,6 +1072,7 @@ export function BenchworkEditor({
           leg: r.leg,
           arrival: r.arrival,
           turnoutId: t.id,
+          reachInches: r.reachInches,
         });
         map.set(t.divergeTrack, list);
       }
@@ -2132,11 +2142,16 @@ export function BenchworkEditor({
    * all (#189).
    */
   const turnoutRailEnds = useMemo(() => {
-    const out: { at: Pt; trackId: string; turnoutId: string }[] = [];
+    const out: { at: Pt; trackId: string; turnoutId: string; reachInches: number }[] = [];
     for (const [trackId, legs] of legsByTrack) {
       for (const l of legs) {
         if (l.leg.length < 2) continue;
-        out.push({ at: l.leg[l.leg.length - 1], trackId, turnoutId: l.turnoutId });
+        out.push({
+          at: l.leg[l.leg.length - 1],
+          trackId,
+          turnoutId: l.turnoutId,
+          reachInches: l.reachInches,
+        });
       }
     }
     return out;
@@ -2147,15 +2162,38 @@ export function BenchworkEditor({
    * pixel would make that chore miserable. */
   const RAIL_SNAP_INCHES = 1.5;
 
-  /** The rail end a point should snap to, or null. Only ever the rail of a
+  /**
+   * The rail end a point should snap to, or null. Only ever the rail of a
    * turnout that diverges to THIS track — snapping to an unrelated turnout
-   * across the board would connect two things the owner never joined. */
+   * across the board would connect two things the owner never joined.
+   *
+   * ⭐⭐ THE ALLOWANCE COVERS THE TURNOUT'S OWN REACH (#239).
+   *
+   * A flat 1.5″ was measured from the RAIL END, but a route to an endplate is
+   * authored at the turnout's `pos` — and `pos` marks the FROG, which is inside
+   * the part. The rail end is therefore 1.63″ away on a #6 and 3.04″ on a #12:
+   * **further than the gate**. So a route the app had just created could not
+   * snap to the turnout it had just been told it diverges from, drew an amber
+   * "nothing is connected" ring, and only became snappable once the owner had
+   * dragged it at least a tenth of an inch — worse the bigger the turnout, which
+   * is the opposite of the intuition.
+   *
+   * Adding the turnout's reach makes the allowance measure what it always meant:
+   * *"near enough to this turnout to be meant for it"*, from the turnout, rather
+   * than from a rail end whose distance nobody was accounting for.
+   *
+   * ⚠️ NOT unconditional, deliberately. `commitSpur` applies this on every
+   * pointermove, so a snap with no limit would drag the throat straight back on
+   * every frame — which is precisely the *"I can't move the track"* bug #227
+   * fixed and the pin #189 deleted. A throat deliberately parked well clear of
+   * its turnout still stays where it was put.
+   */
   const snapToTurnoutRail = (p: Pt, trackId: string): Pt | null => {
     let best: { at: Pt; d: number } | null = null;
     for (const r of turnoutRailEnds) {
       if (r.trackId !== trackId) continue;
       const d = Math.hypot(r.at.x - p.x, r.at.y - p.y);
-      if (d <= RAIL_SNAP_INCHES && (!best || d < best.d)) best = { at: r.at, d };
+      if (d <= RAIL_SNAP_INCHES + r.reachInches && (!best || d < best.d)) best = { at: r.at, d };
     }
     return best?.at ?? null;
   };
