@@ -787,10 +787,33 @@ export function BenchworkEditor({
     // A wye splits SYMMETRICALLY — each route takes HALF the divergence, i.e.
     // each leg leaves at half the frog angle, which is a #2N.
     const effN = t.kind === "wye" ? size * 2 : size;
+    /**
+     * ⭐⭐ A CROSSOVER'S TURNOUTS ARE NOT GENERIC TURNOUTS, so they must not take
+     * a generic lead. The assembly publishes where its own points sit relative
+     * to its frogs — one gauge of lateral, `gauge / tan θ` along the track — and
+     * `pos` marks the FROG (#132). Drawing the leg from the per-frog formula
+     * instead started it in the wrong place: on FMN-0078's #6 the formula gives
+     * 3.297″ where the assembly says 2.124″, so every leg began 1.17″ outside
+     * its own point-set and the diagonal read as not meeting the frogs (Will,
+     * 2026-07-30). The frog itself was always right — it is pinned to `pos` — so
+     * only the throat moved, which is exactly why it looked like a gap rather
+     * than a misplaced turnout.
+     *
+     * ⭐ Nothing new is measured: `pointsToFrogInches` falls out of the angle the
+     * product already publishes. It also makes each leg exactly HALF the crossing
+     * run, which is what the package's own route geometry draws for the piece
+     * model — the two renderers now agree by derivation rather than by luck.
+     */
+    const crossoverLeadIn = (() => {
+      if (!crossoverLeg || !dt.crossoverPartId) return null;
+      const part = partLibrary.find((p) => p.id === dt.crossoverPartId);
+      const asm = part ? crossoverAssembly(part) : null;
+      return asm?.pointsToFrogInches ?? null;
+    })();
     // The lead comes from the PARTS LIBRARY when a real part matches this frog
     // number — an Atlas code 55 #7 is drawn at its measured 3⅜″, not a formula.
     // Sizes with no part fall back to the per-frog rule (#179 stage 3).
-    const leadIn = leadInchesForSize(effN, partLibrary) * stretch;
+    const leadIn = crossoverLeadIn ?? leadInchesForSize(effN, partLibrary) * stretch;
     // ⚠️ NO `arriveAtInches`, and NO ease. The closure is points → frog, then
     // straight at the frog angle: the part's own diverging rail and nothing
     // more.
