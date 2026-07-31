@@ -409,7 +409,7 @@ export function BenchworkEditor({
    * module, by track id (#193). The editor works these out (it owns the pieces
    * and the parts they're cut from); the canvas only has to place them, which
    * it does exactly as it places a turnout on its host. */
-  flexCutsByTrack?: Record<string, number[]>;
+  flexCutsByTrack?: Record<string, { cuts: number[]; alongPath: boolean }>;
   /** Selection is owned by the editor, which renders the inspector for it. */
   selection?: CanvasSelection | null;
   onSelect?: (s: CanvasSelection | null) => void;
@@ -2387,11 +2387,18 @@ export function BenchworkEditor({
    */
   const flexJoints = useMemo(() => {
     const out: Joint[] = [];
-    for (const [trackId, cuts] of Object.entries(flexCutsByTrack ?? {})) {
+    for (const [trackId, f] of Object.entries(flexCutsByTrack ?? {})) {
       const host = hostPointsOf(trackId);
       if (host.length < 2) continue;
-      for (const abs of cuts) {
-        const p = sampleAt(host, toHostRel(trackId, abs));
+      for (const abs of f.cuts) {
+        /**
+         * ⭐ A ROUTE-LOCAL CUT IS ALREADY AN ARC LENGTH ON THIS POLYLINE (#226),
+         * so it is sampled straight. Running it through `toHostRel` would project
+         * it back onto the main — which for a route that leaves at 90° collapses
+         * to zero, stacking every joint on the throat. The frame comes with the
+         * number precisely so this cannot be got wrong by omission.
+         */
+        const p = sampleAt(host, f.alongPath ? abs : toHostRel(trackId, abs));
         if (Number.isFinite(p.x) && Number.isFinite(p.y))
           out.push({ x: p.x, y: p.y, nx: p.nx, ny: p.ny });
       }
