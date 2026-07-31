@@ -5,6 +5,15 @@ Headings are `version — date` (YYYY-MM-DD).
 
 ---
 
+## v0.55.2 — 2026-07-30
+
+### Fixed
+- **You can drag the end of a track that meets a turnout.** Every point on a siding, spur or branch route could be dragged except the one at the turnout — the *throat*. It looked exactly like the other handles and simply refused to move, with nothing on screen to say why. If that was the end you reached for, the whole route felt stuck.
+
+  It moves now, like every other point. Bring it near the turnout's diverging rail and it still snaps onto it, exactly as it did before; leave it away from the turnout and it stays where you put it, and the open ring appears to show the two aren't joined.
+
+  This finishes a change from an earlier release: track stopped being welded to turnouts automatically, and was meant to snap by hand instead. The throat was the one place still holding on.
+
 ## v0.55.1 — 2026-07-30
 
 ### Fixed
