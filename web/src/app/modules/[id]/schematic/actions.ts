@@ -6,6 +6,7 @@ import { createClient } from "@/lib/supabase/server";
 import {
   inchesToScaleFeet,
   endplateWidthInches,
+  measuredAlongPath,
   type ModuleSchematicDoc,
 } from "@/lib/module-schematic";
 
@@ -106,9 +107,17 @@ export async function saveModuleSchematic(
     }
 
     // Sync the module's Track section (module_tracks) from the schematic tracks.
-    // A branch route to a placed endplate (#170) is through geometry, not a
-    // car-spotting track — it has no meaningful capacity (it can be zero-length
-    // along the main), so it lives only in the schematic doc, never module_tracks.
+    // A route drawn across the board (#170) is through geometry, not a
+    // car-spotting track — it has no meaningful capacity, so it lives only in the
+    // schematic doc, never module_tracks.
+    //
+    // ⭐ THE REASON IS THE ONE THIS COMMENT ALREADY GAVE: "it can be zero-length
+    // along the main". That is a fact about the geometry, and `measuredAlongPath`
+    // is exactly it (#226) — so the test now says it instead of asking the stored
+    // `role`, which is the owner's label and would have let a return loop through
+    // on a technicality. Capacity here is DERIVED from `toPos − fromPos`, which
+    // for such a track is zero; a zero capacity is what the CHECK constraint
+    // below rejects, so this exclusion is load-bearing, not tidiness.
     //
     // ⭐ A CROSSOVER CONNECTOR IS THE SAME KIND OF THING. You cannot stand cars
     // on a crossover — it is a way BETWEEN two mains, not a place to put a cut —
@@ -116,7 +125,7 @@ export async function saveModuleSchematic(
     // fail against `module_tracks_capacity_scale_feet_check`, which is how a
     // rebuilt module silently failed to save at all.
     const extraTracks = doc.tracks.filter(
-      (t) => t.role !== "main" && t.role !== "branch" && t.role !== "crossover",
+      (t) => t.role !== "main" && t.role !== "crossover" && !measuredAlongPath(t),
     );
     const keptIds: number[] = [];
     for (const t of extraTracks) {

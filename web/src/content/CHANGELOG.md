@@ -5,6 +5,13 @@ Headings are `version — date` (YYYY-MM-DD).
 
 ---
 
+## v0.57.1 — 2026-07-31
+
+### Changed
+- **Housekeeping, no change to what the board does.** The last two places that worked out what a route *is* by reading the word stored on it now measure its shape instead, like the rest of the editor already does. Same tracks drawn, same tracks saved — the reasoning is just no longer split between two different tests that could drift apart.
+
+---
+
 ## v0.57.0 — 2026-07-31
 
 ### Fixed
