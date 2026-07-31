@@ -5,6 +5,15 @@ Headings are `version — date` (YYYY-MM-DD).
 
 ---
 
+## v0.56.4 — 2026-07-30
+
+### Fixed
+- **A crossover whose two halves don't reach each other now says so.** The warning was exactly backwards: a correctly built crossover showed open rings on its crossing (fixed in the last release), while one with a turnout out of place showed **nothing at all**.
+
+  The reason was that when the two halves fall short, the board draws a band across the gap to keep the route looking continuous — and that band was then counted as the thing joining the rails. So the drawing covered the hole and the cover was taken as proof there was no hole.
+
+  A crossover's band no longer counts as a connection. Its rails are judged on whether they actually reach each other, which is what the warning is asking about. A crossover built right stays silent; one that isn't gets its rings back.
+
 ## v0.56.3 — 2026-07-30
 
 ### Fixed
