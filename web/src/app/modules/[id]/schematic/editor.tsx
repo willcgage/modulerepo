@@ -640,10 +640,30 @@ export function SchematicEditor({
       out[t.id] = {
         partId,
         authored: f?.cuts != null,
-        // A branch route (#170) is authored purely by its drawn PATH and has no
-        // along-module extent, so there's nothing here to cut. Recorded rather
-        // than left to read as "this run needs no track".
-        runInches: Math.abs(ext.to - ext.from),
+        /**
+         * ⭐⭐ A ROUTE TO AN ENDPLATE IS AS LONG AS THE LINE THAT WAS DRAWN.
+         *
+         * It runs ACROSS the board, so `toPos − fromPos` is the stretch of
+         * MODULE it covers — 27.8 to 27.8 on FMN-0068, i.e. **zero**, reported
+         * as "0″" for 22″ of real track (Will, 2026-07-30). Its length was never
+         * unknown; it was being measured along the wrong axis. `pathLengthInches`
+         * is the same function every other drawn run already uses.
+         *
+         * ⚠️ THE CUTS ARE STILL NOT DERIVED, deliberately, and this does not
+         * change that: `ext` is untouched, so `flexPieces` still gets a
+         * zero-length run and returns nothing. Where a joint FALLS needs a
+         * position along the route, and `toHostRel` maps positions by projecting
+         * onto the main — which collapses to zero for a square exit. Reporting a
+         * true length is a different claim from knowing where to cut it, and the
+         * panel goes on saying the flex isn't worked out.
+         */
+        runInches: (() => {
+          const et = state.extraTracks.find((x) => x.id === t.id);
+          const drawn = et?.role === "branch" ? et.path : null;
+          return drawn && drawn.length >= 2
+            ? pathLengthInches(drawn)
+            : Math.abs(ext.to - ext.from);
+        })(),
         pieces: flexPieces({
           fromPos: ext.from,
           toPos: ext.to,
