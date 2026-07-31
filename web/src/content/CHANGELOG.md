@@ -5,6 +5,15 @@ Headings are `version — date` (YYYY-MM-DD).
 
 ---
 
+## v0.56.0 — 2026-07-30
+
+### Changed
+- **A route that reaches an endplate is a main, and you're no longer asked to say otherwise.** When you placed a third endplate, the panel asked whether the route to it was a "Branch line" or a "Diverging main". That question is gone, and the route is a main.
+
+  The reason is that it was the wrong question to ask *here*. Whether a route is a branch line is a fact about the **layout** — who owns it, where it goes, what it does at the far end — and your module can't see any of that. What your module knows is narrower and certain: there is an endplate here, and track reaches it. That makes it a way out of the module, which is a main. What it becomes operationally is for the dispatcher to work out once your module is in a layout.
+
+  You still name it whatever you like — "Branch 1", "the CN connection" — and the name is what appears on the board. Nothing changes for modules you have already built: they keep exactly what they were saved with until you edit them.
+
 ## v0.55.2 — 2026-07-30
 
 ### Fixed
