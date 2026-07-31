@@ -2248,9 +2248,35 @@ export function BenchworkEditor({
     // and the drawing can never disagree about whether Main 2 is bent.
     const m2 = tracks.find((t) => t.id === MAIN2_TRACK_ID);
     const main2Drawn = !!m2?.path && m2.path.length >= 2;
+    /**
+     * ⭐⭐ TWO RAILS THAT MEET EACH OTHER ARE JOINED.
+     *
+     * A crossover's connector has a turnout at BOTH ends, and their legs run to
+     * the same point — the scissors on a double crossover, the middle of the gap
+     * on a single. Nothing is missing there, so a ring is a lie: FMN-0078 drew
+     * **four** of them stacked on its scissors, each saying "drag the track's
+     * end onto it" about a rail already met by the one coming the other way
+     * (Will, 2026-07-30).
+     *
+     * The old test only ever looked for a *drawn track's* endpoint nearby, so
+     * the one thing it could not recognise was a rail being met by another rail.
+     *
+     * ⚠️ SAME `trackId`, DIFFERENT turnout — that pairing IS the connector. A
+     * siding or spur has one turnout on it and can never satisfy this, so it
+     * still rings when its track is away. And the 1.5″ tolerance still applies:
+     * a crossover whose halves genuinely don't meet keeps its warning.
+     */
+    const metByItsPartner = (r: { at: Pt; trackId: string; turnoutId: string }) =>
+      turnoutRailEnds.some(
+        (o) =>
+          o.turnoutId !== r.turnoutId &&
+          o.trackId === r.trackId &&
+          Math.hypot(o.at.x - r.at.x, o.at.y - r.at.y) <= RAIL_SNAP_INCHES,
+      );
     return turnoutRailEnds.filter(
       (r) =>
         (main2Drawn || r.trackId !== MAIN2_TRACK_ID) &&
+        !metByItsPartner(r) &&
         !ends.some((e) => Math.hypot(e.x - r.at.x, e.y - r.at.y) <= RAIL_SNAP_INCHES),
     );
   }, [turnoutRailEnds, trackPaths, tracks]);
