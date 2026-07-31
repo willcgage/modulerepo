@@ -5,6 +5,13 @@ Headings are `version — date` (YYYY-MM-DD).
 
 ---
 
+## v0.56.3 — 2026-07-30
+
+### Fixed
+- **A crossover no longer says its rails are unconnected when they meet each other.** The open amber ring means "nothing is joined to this turnout's rail — bring your track to it". A crossover has a turnout at *both* ends of its connector, and their rails run to the same point in the middle — the scissors on a double crossover. They meet there; nothing is missing. But the check only knew how to spot a *drawn track's* end nearby, so the one thing it couldn't recognise was a rail being met by another rail — and a double crossover ended up with **four** rings stacked on its crossing, each asking you to connect something that was already connected.
+
+  Rails that meet each other now count as joined. A siding or spur is unaffected — it has one turnout, so it still rings when its track is away — and a crossover whose two halves genuinely don't reach each other keeps its warning.
+
 ## v0.56.2 — 2026-07-30
 
 ### Fixed
