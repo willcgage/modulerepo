@@ -804,12 +804,12 @@ export function BenchworkEditor({
      * run, which is what the package's own route geometry draws for the piece
      * model — the two renderers now agree by derivation rather than by luck.
      */
-    const crossoverLeadIn = (() => {
+    const crossoverGeom = (() => {
       if (!crossoverLeg || !dt.crossoverPartId) return null;
       const part = partLibrary.find((p) => p.id === dt.crossoverPartId);
-      const asm = part ? crossoverAssembly(part) : null;
-      return asm?.pointsToFrogInches ?? null;
+      return part ? crossoverAssembly(part) : null;
     })();
+    const crossoverLeadIn = crossoverGeom?.pointsToFrogInches ?? null;
     // The lead comes from the PARTS LIBRARY when a real part matches this frog
     // number — an Atlas code 55 #7 is drawn at its measured 3⅜″, not a formula.
     // Sizes with no part fall back to the per-frog rule (#179 stage 3).
@@ -870,7 +870,26 @@ export function BenchworkEditor({
      */
     const span = (() => {
       if (!crossoverLeg) return bodySpan;
-      const gap = Math.abs((far.x - m.x) * m.nx + (far.y - m.y) * m.ny);
+      /**
+       * ⚠️ THE GAP IS THE PART'S OWN TRACK SPACING, not something to re-measure
+       * off the host.
+       *
+       * Projecting the connector's far end onto `m`'s normal reads the gap
+       * correctly only while the host is parallel to the track it crosses to.
+       * Through a crossover it is NOT: the mains PINCH from the module's 1.125″
+       * lane to the assembly's 1.09″, and Main 1 holds the centre-line so Main 2
+       * does all the moving. Its normal is therefore tilted, and because the far
+       * end is ~4.4″ away along the track, a tilt too small to see multiplies
+       * into a real error — the two halves of one diagonal computed different
+       * spans and missed each other by 0.044″ at the scissors (Will, 2026-07-30).
+       *
+       * ⭐ Both turnouts of a pair now derive the SAME span from the SAME
+       * published number, so they arrive at the midpoint together by
+       * construction instead of by two measurements happening to agree.
+       */
+      const gap =
+        crossoverGeom?.spacingInches ??
+        Math.abs((far.x - m.x) * m.nx + (far.y - m.y) * m.ny);
       const half = gap / 2;
       if (!(half > RAIL_GAUGE_INCHES)) return bodySpan;
       return Math.min(bodySpan, lead + (half - RAIL_GAUGE_INCHES) * effN);
