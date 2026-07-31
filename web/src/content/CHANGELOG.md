@@ -5,6 +5,15 @@ Headings are `version — date` (YYYY-MM-DD).
 
 ---
 
+## v0.55.1 — 2026-07-30
+
+### Fixed
+- **The two halves of a crossover's diagonal now meet exactly.** Each of the two turnouts in a diagonal works out how far its rail should run by halving the gap to the track opposite. It measured that gap off its own mainline — which is fine while the two mains are parallel, but through a crossover they aren't: they squeeze together from the module's 1.125″ spacing to the crossover's own 1.09″, and the second main does all the moving. Measured from a main that is on the move, the gap came out slightly different for each of the pair, so the two halves of one diagonal ran to slightly different lengths and missed each other by about 0.04″ at the crossing.
+
+  Both now take the gap from the crossover's published track spacing, so they arrive at the middle together by construction rather than by two measurements happening to agree.
+
+  Far too small to see at normal zoom — this is only visible zoomed right in — but the two rails either did meet or they didn't.
+
 ## v0.55.0 — 2026-07-30
 
 ### Fixed
