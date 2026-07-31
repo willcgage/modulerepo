@@ -5,6 +5,15 @@ Headings are `version — date` (YYYY-MM-DD).
 
 ---
 
+## v0.59.2 — 2026-07-31
+
+### Changed
+- **A manufacturer's published measurements now count towards drawing a turnout's body.** The board would only draw a turnout's tie strip and its rail joints from figures somebody had measured with a rule, on the grounds that a *calculated* figure would be a guess dressed up as a fact. A manufacturer's own published specification isn't a guess, so it counts now — calculated figures still don't, which is why the generic turnouts still draw no body.
+
+  ⚠️ Nothing changes on any board yet: no Fast Tracks turnout publishes where its **points** sit along its length, and that is the number the drawing needs. What this does is halve the work — the overall length is already published, so one measurement off the real part now finishes the job instead of two.
+
+---
+
 ## v0.59.1 — 2026-07-31
 
 ### Fixed
