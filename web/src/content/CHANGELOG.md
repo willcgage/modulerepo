@@ -5,6 +5,15 @@ Headings are `version — date` (YYYY-MM-DD).
 
 ---
 
+## v0.55.0 — 2026-07-30
+
+### Fixed
+- **A double crossover's rails now start where the crossover actually starts.** The four turnouts in a crossover were drawn as if they were ordinary turnouts, working out where each diverging rail begins from a rule of thumb for the frog number rather than from the crossover's own published dimensions. On a #6 that rule says the rail begins 3.30″ before the frog; the real assembly says 2.12″. So every one of the four rails set off about 1.2″ too early, and the diagonals reached the middle without ever lining up on the frogs — which is what makes a crossover look like it doesn't join up.
+
+  The frogs themselves were always in the right place — they sit where you put the turnouts — so what looked like a gap was really the *other* end of each rail being wrong.
+
+  Each rail now begins exactly where the product's own geometry says its points are, and each diagonal comes out as exactly half the crossing, meeting its partner in the middle. Nothing about your module changes, and nothing new had to be measured: it comes from the crossing angle the manufacturer already publishes.
+
 ## v0.54.3 — 2026-07-30
 
 ### Changed
