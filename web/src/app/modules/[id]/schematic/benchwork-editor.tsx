@@ -2237,6 +2237,22 @@ export function BenchworkEditor({
     const ends: Pt[] = [];
     for (const tp of trackPaths) {
       if (tp.pts.length < 2) continue;
+      /**
+       * ⛔⛔ A CROSSOVER'S BAND DOES NOT GET A VOTE (#232).
+       *
+       * It is DERIVED from the two legs, not drawn by anyone. When they meet,
+       * `crossoverBody` returns an EMPTY band (#202) and contributes nothing.
+       * When they DON'T, it draws a bridge across the hole — and its endpoints
+       * then landed on both rail ends and were read as "something is connected
+       * here", which is the opposite of what the bridge means.
+       *
+       * The result was exactly backwards: FMN-0078 rang **four** times when its
+       * crossover was correct (fixed in #231) and went **silent** when a frog was
+       * moved 4″ out of place. A crossover leg's connection is decided by
+       * `metByItsPartner` — by whether the other half actually reaches it — and
+       * a band the renderer drew to cover the gap must not overrule that.
+       */
+      if (tracks.find((x) => x.id === tp.id)?.role === "crossover") continue;
       ends.push(tp.pts[0], tp.pts[tp.pts.length - 1]);
     }
     // ⛔ MAIN 2 IS ONLY JOINED BY DERIVATION WHILE IT IS DERIVED. Excluding it
