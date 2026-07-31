@@ -2972,7 +2972,15 @@ export function BenchworkEditor({
       if (!editSpurTrack || editSpurTrack.id !== d.id) return;
       const next = editSpur.map((pt) => ({ ...pt }));
       if (d.kind === "spurVertex") {
-        if (d.i === 0) return; // the throat stays snapped to the turnout
+        // ⭐ THE THROAT MOVES LIKE ANY OTHER POINT (#189, and Will again on
+        // FMN-0068 2026-07-30: *"I can't move the track"* — he had grabbed this
+        // handle). It used to return early "so the throat stays snapped to the
+        // turnout", which was the last survivor of the PIN that #189 deleted:
+        // the rule became *your track starts where you put it and SNAPS to the
+        // turnout's diverging rail within 1.5″*. `commitSpur` already applies
+        // exactly that snap to `pts[0]` — this guard just meant you could never
+        // reach it, on the one handle sitting where an owner naturally grabs to
+        // drag a route.
         next[d.i] = { ...next[d.i], x: p.x, y: p.y };
         setReadout(`${fmt(p.x)}, ${fmt(p.y)}″`);
       } else {
@@ -4568,10 +4576,13 @@ const ENDPLATE_TAB = 5; // ballast-shoulder band width, inches
                 cx={p.x}
                 cy={sy(p.y)}
                 r={r}
+                // The throat keeps its own fill — it IS a different thing, the
+                // end that meets the turnout — but it is no longer styled as
+                // undraggable, because it isn't (#226).
                 fill={i === 0 ? "#99f6e4" : "#fff"}
                 stroke="#0f766e"
                 strokeWidth={r * 0.4}
-                style={{ cursor: i === 0 ? "default" : "grab" }}
+                style={{ cursor: "grab" }}
                 onPointerDown={(e) => {
                   if (e.altKey) {
                     e.stopPropagation();
@@ -4579,7 +4590,11 @@ const ENDPLATE_TAB = 5; // ballast-shoulder band width, inches
                   } else beginDrag(e, { kind: "spurVertex", id: editSpurTrack.id, i });
                 }}
               >
-                <title>{i === 0 ? "Throat — snapped to the turnout" : "Drag to move · Alt-click to remove"}</title>
+                <title>
+                  {i === 0
+                    ? "Throat — drag to move; it snaps back onto the turnout's rail when you bring it close"
+                    : "Drag to move · Alt-click to remove"}
+                </title>
               </circle>
             ))}
           </>
