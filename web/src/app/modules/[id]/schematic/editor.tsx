@@ -707,7 +707,23 @@ export function SchematicEditor({
             wye: feeder.kind === "wye",
             curved: feeder.curved,
             library: partLibrary,
-            leadOverrideInches: named ? partExtent(named)?.behindFrog ?? null : null,
+            /**
+             * ⚠️ THE LEAD IS points→frog, WHICH IS THE DIFFERENCE OF THE TWO
+             * OFFSETS — not `behindFrog` on its own. `behindFrog` is measured
+             * from the frog to the near end of the TIE STRIP, so it carries the
+             * plain approach track before the points with it: on an Atlas #7
+             * that is 4.219″ where the lead is 3.594″, and 3.594″ is exactly what
+             * `leadInchesForSize(7)` independently gives. Passing the larger
+             * number put a named part's throat 0.625″ too far back.
+             *
+             * Guarded on `frogKnown`: without a frog reading there is no lead to
+             * override with, and the package's own interpolation is the honest
+             * answer.
+             */
+            leadOverrideInches: (() => {
+              const e = named ? partExtent(named) : null;
+              return e && e.frogKnown ? e.behindFrog - e.behindPoints : null;
+            })(),
           });
           // Straight-line from the turnout's position to its rail end — the same
           // distance a track end has to close to snap onto it (#189).

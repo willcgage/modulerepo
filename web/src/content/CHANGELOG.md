@@ -5,6 +5,19 @@ Headings are `version — date` (YYYY-MM-DD).
 
 ---
 
+## v0.60.0 — 2026-07-31
+
+### Added
+- **A Fast Tracks #6 turnout now draws its body and its rail joints.** Will measured his own build — tie end to point tips, 1.19″ — and with Fast Tracks' published overall length already on file, that one reading is enough for the board to say where the part physically starts and stops. A #6 gets its tie strip, and a rail joint at each end of the moulding on the through route.
+
+  ⚠️ It still won't cut the flex around it. That needs one more reading — tie end to the **apex of the frog V** — because a turnout's recorded position *is* its frog, and without it the board would place the part about 3¾″ from where it really sits. It declines rather than guess.
+
+### Fixed
+- **A turnout part with only some of its measurements no longer produces a confident wrong answer.** Measuring the points but not the frog was a case nothing had met before, and it quietly fell back to treating the frog as if it were the points — which would have moved a #6's rail end by 3½″. The board now keeps the two questions apart: what it knows, it draws; what it doesn't, it says so about.
+- **The parts backlog names the reading each part is actually missing** instead of "dimensions present but inconsistent".
+
+---
+
 ## v0.59.2 — 2026-07-31
 
 ### Changed
