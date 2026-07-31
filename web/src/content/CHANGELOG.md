@@ -5,6 +5,15 @@ Headings are `version — date` (YYYY-MM-DD).
 
 ---
 
+## v0.56.1 — 2026-07-30
+
+### Fixed
+- **A route to an endplate now shows how long it actually is, instead of 0″.** These routes run *across* the board rather than along it, and their length was being measured along the module — the distance between where the route starts and ends *as seen from endplate A*. For a route that leaves the main and heads for the fascia, those two are almost the same place, so the answer came out as zero. On the test module it read **0″** for **22.2″** of track.
+
+  It now measures the line you drew, which is what every other drawn track already does.
+
+  ⚠️ Its **flex lengths are still not worked out** — the panel goes on saying so. Knowing how long a route is and knowing where to cut it into lengths of flex are different questions: the second needs a way to say *how far along the route* a rail joint sits, and that doesn't exist yet for a route that crosses the board. The length is honest now; the cutting list is still blank rather than wrong.
+
 ## v0.56.0 — 2026-07-30
 
 ### Changed
