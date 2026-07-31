@@ -13,6 +13,7 @@ import {
   FREEMO_TRACK_SPACING_INCHES,
   laneOffsetAt,
   type LanePinch,
+  measuredAlongPath,
   moduleFeatures,
   samplePath,
   type ModuleSchematicDoc,
@@ -409,11 +410,17 @@ export function physicalSchematic(
     return { id: t.id, x: p.x, y: p.y };
   });
 
-  // --- Branch routes to placed endplates (#170) — an authored 2-D path that
-  //     leaves the main, so it's read straight off the doc, not the (frac,lane)
-  //     model that can't express a 90° exit. -------------------------------
+  // --- Routes drawn across the board — an authored 2-D path that leaves the
+  //     main, so it's read straight off the doc, not the (frac,lane) model that
+  //     can't express a 90° exit. ---------------------------------------------
+  //
+  // ⚠️ Asked of the GEOMETRY, not of the stored `role` (#226). A route out and a
+  // return loop are drawn this way for the same reason, and the label is the
+  // owner's; `measuredAlongPath` is the one definition of "this track's own path
+  // is the only axis it has". Every `role:"branch"` writer emits
+  // `fromPos === toPos`, so this selects exactly what the role test did.
   for (const t of doc.tracks ?? []) {
-    if (t.role !== "branch" || !t.path || t.path.length < 2) continue;
+    if (!measuredAlongPath(t) || !t.path || t.path.length < 2) continue;
     // Drawn exactly as authored — no pinning to the turnout (#189). If it starts
     // clear of the turnout, that gap is real, and the builder marks it.
     const pts = samplePath(t.path);
