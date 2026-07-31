@@ -4978,7 +4978,17 @@ function Inspector({
     // A branch route is drawn ACROSS the board rather than along it, so there's
     // no run here to cut into lengths. Say that and nothing else — a product
     // chooser would imply it changes something.
-    if (f.runInches < 0.01)
+    //
+    // ⚠️ GATED ON WHAT IS TRUE, NOT ON A ZERO. This used to key off
+    // `runInches < 0.01`, which only held while such a route reported no length
+    // at all. The moment it reported its real drawn length (#226) the test fell
+    // through to the ordinary flex panel, and the module announced "No flex on
+    // this run — the parts fill it" — which is not what is happening. Nothing
+    // has been cut because nothing yet maps a position along a cross-board
+    // route back to the module.
+    const et = state.extraTracks.find((x) => x.id === trackId);
+    const crossesTheBoard = et?.role === "branch" && (et.path?.length ?? 0) >= 2;
+    if (crossesTheBoard || f.runInches < 0.01)
       return (
         <p className="border-t border-gray-100 pt-2 text-xs text-gray-500">
           This route is drawn as a path rather than measured along the module, so its lengths of
@@ -5808,10 +5818,23 @@ function ObjectsList({
             what arms its handles (#192). They aren't `extraTracks` because the
             main IS the module's centre-line, so they're listed explicitly. */}
         {mains.map((m) => trackRows(m.id, m.label, { kind: "track", id: m.id }, m.sub))}
-        {state.extraTracks.map((t, i) =>
+        {state.extraTracks.map((t, i) => {
+          // ⭐⭐ ONE SOURCE FOR "HOW LONG IS THIS RUN": `flexByTrack.runInches`,
+          // the same number the flex panel and the cut list read. This row used
+          // to recompute it as `toPos − fromPos`, which is the stretch of MODULE
+          // a run covers rather than its length — so a route to an endplate,
+          // which crosses the board, reported 0″ for 22″ of track (#226).
+          // ⚠️ TWO COMPUTATIONS OF ONE QUANTITY is exactly why the 0″ survived
+          // the first fix: `runInches` was corrected and this line wasn't.
+          const len = flex[t.id]?.runInches ?? Math.abs(t.toPos - t.fromPos);
           // Round to 0.1″ — raw float math read as 18.800000000000004″.
-          trackRows(t.id, trackLabel(t, i), { kind: "track", id: t.id }, `${Math.round(Math.abs(t.toPos - t.fromPos) * 10) / 10}″`),
-        )}
+          return trackRows(
+            t.id,
+            trackLabel(t, i),
+            { kind: "track", id: t.id },
+            `${Math.round(len * 10) / 10}″`,
+          );
+        })}
       </Group>
 
       <Group

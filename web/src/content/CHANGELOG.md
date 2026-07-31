@@ -5,6 +5,13 @@ Headings are `version — date` (YYYY-MM-DD).
 
 ---
 
+## v0.56.2 — 2026-07-30
+
+### Fixed
+- **The length in the Objects list now matches the one in the panel.** The previous release taught a route to an endplate to report its real length, but the row in the Objects list worked its own length out separately and went on showing **0″**. Both now read the same figure, so a route to an endplate lists as **22.2″** on the test module instead of nothing.
+
+- **And it no longer claims its flex is already accounted for.** That same route briefly said *"No flex on this run — the parts fill it."* It doesn't and they don't: nothing has been cut because the app can't yet say how far along a cross-board route a rail joint sits. It goes back to saying exactly that.
+
 ## v0.56.1 — 2026-07-30
 
 ### Fixed
