@@ -5,6 +5,18 @@ Headings are `version — date` (YYYY-MM-DD).
 
 ---
 
+## v0.62.0 — 2026-08-01
+
+### Added
+- **Mainline length is a field on the board.** How far the rail runs, when that differs from how long the board is — an end-of-line module whose track stops short, a curve whose main is shorter than its footprint. Leave it blank and the main runs the whole board, which is what most modules do.
+
+  This number decides what every position on the canvas is measured along, and until now it could be set **nowhere**: two save paths wrote it and neither had a box to type it in. Six modules carry a value, so on those six the Footprint length field appeared to do nothing — the board is measured along the mainline, and while a mainline was set the footprint was a number nothing read.
+
+### Changed
+- **The Footprint length help text says what it is** — the physical length of the board, end to end — instead of telling you to draw the mainline if the rail runs a different distance. There is a field for that now.
+
+---
+
 ## v0.61.1 — 2026-08-01
 
 ### Fixed
