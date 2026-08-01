@@ -155,7 +155,7 @@ const isCanvasSel = (s: Selection | null): s is CanvasSelection =>
     s.kind === "endplate" ||
     s.kind === "industry" ||
     s.kind === "cp" ||
-    s.kind === "piece");
+    s.kind === "pieces");
 
 export function SchematicEditor({
   moduleId,
@@ -2076,10 +2076,13 @@ export function SchematicEditor({
           // A laid piece is the one object with no other way to remove it — the
           // rest are removed from their inspector, and this one can be too, but
           // laying track is a fast loop and reaching for the panel breaks it.
-          if (selectionRef.current?.kind === "piece") {
+          if (selectionRef.current?.kind === "pieces") {
             e.preventDefault();
-            const id = selectionRef.current.id;
-            setPieces((stateRef.current.graph?.pieces ?? []).filter((p) => p.id !== id), {
+            // Delete removes the WHOLE selection — one piece or twenty. Removing
+            // only the last-clicked one would make Delete mean something
+            // different depending on how the set was built.
+            const ids = new Set(selectionRef.current.ids);
+            setPieces((stateRef.current.graph?.pieces ?? []).filter((p) => !ids.has(p.id)), {
               commit: true,
             });
             setSelection(null);
@@ -4562,10 +4565,84 @@ function Inspector({
     );
   }
 
-  // ---- A PIECE OF TRACK (ADR 0001) ----
-  if (selection.kind === "piece") {
+  // ---- SEVERAL PIECES AT ONCE (#94) ----
+  // ⚠️ THIS MUST COME BEFORE THE SINGLE-PIECE PANEL — both read `kind: "pieces"`
+  // and the set is what tells them apart.
+  if (selection.kind === "pieces" && selection.ids.length > 1) {
     const pieces = state.graph?.pieces ?? [];
-    const piece = pieces.find((p) => p.id === selection.id);
+    const ids = new Set(selection.ids);
+    const picked = pieces.filter((p) => ids.has(p.id));
+    if (picked.length === 0) return null;
+    /** Move the whole set by one offset — the typed equivalent of the drag. */
+    const nudge = (dx: number, dy: number) =>
+      setPieces(
+        pieces.map((p) => (ids.has(p.id) ? { ...p, x: p.x + dx, y: p.y + dy } : p)),
+        { commit: true },
+      );
+    const names = picked.map(
+      (p) => partLibrary.find((x) => x.id === p.partId)?.name ?? p.partId,
+    );
+    // What they ARE, counted — "3 × Atlas #7 Turnout LH" says more than a list
+    // of ids, and the ids are on the canvas anyway.
+    const tally = [...new Set(names)].map((n) => ({ n, c: names.filter((x) => x === n).length }));
+    return shell(
+      `${picked.length} pieces selected`,
+      <>
+        <p className="text-xs text-gray-500">
+          Drag any one of them to move all {picked.length} together — they keep their spacing
+          exactly, and land where you drop them without snapping to anything. Shift-click a piece
+          to add or remove it; Shift-drag the background to rubber-band a selection.
+        </p>
+        <ul className="space-y-0.5 text-xs text-gray-700">
+          {tally.map((t) => (
+            <li key={t.n}>
+              {t.c > 1 ? `${t.c} × ` : ""}
+              {t.n}
+            </li>
+          ))}
+        </ul>
+        <div className="grid grid-cols-2 gap-2">
+          <label className="block text-xs font-medium text-gray-600">
+            Move X by (in)
+            <CommitNumberField
+              step={0.25}
+              value={null}
+              placeholder="0"
+              onCommit={(v) => v != null && v !== 0 && nudge(v, 0)}
+              inp={inp}
+            />
+          </label>
+          <label className="block text-xs font-medium text-gray-600">
+            Move Y by (in)
+            <CommitNumberField
+              step={0.25}
+              value={null}
+              placeholder="0"
+              onCommit={(v) => v != null && v !== 0 && nudge(0, v)}
+              inp={inp}
+            />
+          </label>
+        </div>
+        {/* ⚠️ NO ANGLE FIELD, deliberately. Turning a group is a rotation about
+            some centre, and which centre is a real question (the set's middle?
+            one member? a point you pick?). Offering `rotationDeg` here would
+            spin every piece about ITS OWN origin, which scatters the group —
+            a different operation wearing the same word. */}
+        <GraphReadout readout={graphReadout} />
+      </>,
+      {
+        // No selection reset here — the panel returns null once its pieces are
+        // gone, which is how every other inspector in this file behaves.
+        fn: () => setPieces(pieces.filter((p) => !ids.has(p.id)), { commit: true }),
+        label: `Remove ${picked.length} pieces`,
+      },
+    );
+  }
+
+  // ---- A PIECE OF TRACK (ADR 0001) ----
+  if (selection.kind === "pieces") {
+    const pieces = state.graph?.pieces ?? [];
+    const piece = pieces.find((p) => p.id === selection.ids[0]);
     if (!piece) return null;
     const part = partLibrary.find((p) => p.id === piece.partId);
     const isFlex = part?.kind === "flex";

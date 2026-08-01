@@ -5,6 +5,19 @@ Headings are `version — date` (YYYY-MM-DD).
 
 ---
 
+## v0.65.0 — 2026-08-01
+
+### Added
+- **Pick up several pieces of track at once and move them together.** Shift-click pieces to build a selection, or hold Shift and drag a box across the board to gather everything inside it. Dragging any one of them then moves the whole set, keeping the spacing between them exactly as you laid it.
+
+  Everything still moves independently by default — nothing is tied to anything else. A group only exists while you have it selected, and it moves only because you picked those pieces together.
+
+  A group dropped on the board stays exactly where you put it: it does not snap onto nearby track. Joining a piece to a joint is still a single-piece gesture, so moving a run into place can never quietly re-position track you had already set.
+
+  The panel for a multiple selection lists what you have picked, lets you shift them all by a typed number of inches, and can remove them all at once — as does the Delete key.
+
+---
+
 ## v0.64.2 — 2026-08-01
 
 ### Changed

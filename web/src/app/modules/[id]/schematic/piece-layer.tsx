@@ -268,7 +268,7 @@ export function newPiece(spec: PieceSpec, pt: Pt, existing: TrackPiece[], part?:
 export function PieceLayer({
   pieces,
   library,
-  selected,
+  selectedIds,
   scale,
   laying = false,
   onSelect,
@@ -277,7 +277,13 @@ export function PieceLayer({
 }: {
   pieces: TrackPiece[];
   library: TrackPart[];
-  selected: string | null;
+  /**
+   * ⭐ THE SELECTION IS ALWAYS A SET, even when it holds one piece (#94). It was
+   * a single id, and adding a parallel "and also these" list would have given
+   * two answers to "is this piece selected" — the exact drift this codebase
+   * keeps paying for. One piece is a set of one; the inspector reads the length.
+   */
+  selectedIds: string[];
   /** Device pixels per inch — marks stay the same size on screen at any zoom. */
   scale: number;
   /**
@@ -290,11 +296,21 @@ export function PieceLayer({
    * make. (The turnout tool already works this way for the same reason.)
    */
   laying?: boolean;
-  onSelect?: (id: string | null) => void;
+  /**
+   * `additive` is Shift/Ctrl held — toggle this piece in or out of the set
+   * rather than replacing it. The MODIFIER IS READ IN THE LAYER, not by the
+   * caller, because the layer is what owns the click.
+   */
+  onSelect?: (id: string | null, additive?: boolean) => void;
   onPieceDown?: (id: string, e: React.PointerEvent) => void;
   onHandleDown?: (id: string, handle: "rotate" | "flex" | "bend", e: React.PointerEvent) => void;
 }) {
   const world = (px: number) => px / scale;
+  const selected = new Set(selectedIds);
+  /** Handles belong to a SINGLE selection — with several picked, the gesture on
+   * offer is "move these together", and a rotate handle on one of them would
+   * turn that one alone while the others sat still. */
+  const lone = selectedIds.length === 1 ? selectedIds[0] : null;
   const graph = buildTrackGraph(pieces, library);
   const joined = new Set(graph.connections.flatMap((c) => [c.a, c.b]));
   const inConflict = new Set(graph.conflicts.flatMap((c) => c.joints));
@@ -312,7 +328,7 @@ export function PieceLayer({
             key={`band${p.id}-${i}`}
             points={poly(pts)}
             fill="none"
-            stroke={p.id === selected ? "#bae6fd" : "#e7e2d6"}
+            stroke={selected.has(p.id) ? "#bae6fd" : "#e7e2d6"}
             strokeWidth={ROADBED}
             strokeLinecap="round"
             strokeLinejoin="round"
@@ -323,7 +339,7 @@ export function PieceLayer({
                 ? undefined
                 : (e) => {
                     e.stopPropagation();
-                    onSelect?.(p.id);
+                    onSelect?.(p.id, e.shiftKey || e.ctrlKey || e.metaKey);
                     onPieceDown?.(p.id, e);
                   }
             }
@@ -339,7 +355,7 @@ export function PieceLayer({
                   key={k}
                   points={poly(offsetPath(pts, o))}
                   fill="none"
-                  stroke={p.id === selected ? "#0284c7" : "#334155"}
+                  stroke={selected.has(p.id) ? "#0284c7" : "#334155"}
                   strokeWidth={world(0.6)}
                   strokeLinecap="round"
                 />
@@ -348,7 +364,7 @@ export function PieceLayer({
               <polyline
                 points={poly(pts)}
                 fill="none"
-                stroke={p.id === selected ? "#0284c7" : "#334155"}
+                stroke={selected.has(p.id) ? "#0284c7" : "#334155"}
                 strokeWidth={world(1.1)}
                 strokeLinecap="round"
               />
@@ -378,7 +394,7 @@ export function PieceLayer({
             y1={sy(at.y - ny * h)}
             x2={at.x + nx * h}
             y2={sy(at.y + ny * h)}
-            stroke={p.id === selected ? "#0284c7" : "#7f1d1d"}
+            stroke={selected.has(p.id) ? "#0284c7" : "#7f1d1d"}
             strokeWidth={world(2.5)}
             strokeLinecap="round"
             pointerEvents="none"
@@ -412,7 +428,7 @@ export function PieceLayer({
       {/* Handles for the selected piece: turn it, and — on flex, the one piece a
           builder cuts — pull it to length. */}
       {pieces
-        .filter((p) => p.id === selected)
+        .filter((p) => p.id === lone)
         .map((p) => {
           const part = library.find((x) => x.id === p.partId);
           const rot = rotateHandleAt(p, library, world(18));

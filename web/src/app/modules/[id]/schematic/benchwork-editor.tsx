@@ -167,7 +167,14 @@ export type CanvasSelection =
   | { kind: "endplate"; id: string }
   | { kind: "industry"; id: string }
   | { kind: "cp"; id: string }
-  | { kind: "piece"; id: string };
+  /**
+   * ⭐ PIECES ARE SELECTED AS A SET (#94) — one piece is a set of one. Will's
+   * rule is that everything moves independently by default and together only
+   * when it was picked together, so "how many are selected" is the ONLY thing
+   * that decides whether a drag moves one thing or several. A second
+   * "and also these" field beside a single `id` would let the two disagree.
+   */
+  | { kind: "pieces"; ids: string[] };
 
 /**
  * What a click on empty canvas means. Without this the canvas has to guess, and
@@ -456,9 +463,19 @@ export function BenchworkEditor({
      * a move behind when the release lands in the same tick as the move — and
      * a fit computed against the piece's OLD length silently does nothing. */
     | { kind: "piece"; id: string; grab: Pt; latest?: TrackPiece }
+    /**
+     * ⭐ A GROUP MOVE IS ONE OFFSET APPLIED TO EVERY MEMBER'S OWN ORIGIN (#94) —
+     * never a chain of per-piece drags. `origins` is the geometry AS THE DRAG
+     * BEGAN, so the group is rigid by construction and cannot creep from
+     * rounding accumulated over a few hundred pointermoves.
+     */
+    | { kind: "pieces"; ids: string[]; from: Pt; origins: Record<string, Pt>; latest?: TrackPiece[] }
     | { kind: "pieceHandle"; id: string; handle: "rotate" | "flex" | "bend"; latest?: TrackPiece }
     | null
   >(null);
+  /** An in-progress marquee (Shift+drag on empty canvas), in board inches. */
+  const marqueeRef = useRef<{ from: Pt; to: Pt } | null>(null);
+  const [marquee, setMarquee] = useState<{ from: Pt; to: Pt } | null>(null);
   /** An in-progress pan: pointer origin + the view at grab time. */
   /** An in-progress pan. `tentative` marks a press on empty canvas under the
    * Select tool, which only becomes a pan once the pointer moves — a click that
@@ -2535,6 +2552,7 @@ export function BenchworkEditor({
         layPiece(armedPart, toLocal(e));
         return;
       }
+      if (startMarquee(e)) return;
       onSelect?.(null);
       panRef.current = { from: toLocal(e), view: { ...vbBox }, tentative: true, moved: false };
       svgRef.current?.setPointerCapture?.(e.pointerId);
@@ -2574,6 +2592,7 @@ export function BenchworkEditor({
     // for first (#188). A press that never moves is still a click, and a
     // background click still means "select nothing"; `onUp` decides which.
     if (tool === "select") {
+      if (startMarquee(e)) return;
       svgRef.current?.setPointerCapture?.(e.pointerId);
       panRef.current = { from: toLocal(e), view: { ...vbBox }, tentative: true, moved: false };
       return;
@@ -2585,6 +2604,37 @@ export function BenchworkEditor({
     }
     addOnNearestEdge(snapToAnchor(toLocal(e)));
   };
+  /**
+   * Shift+drag on empty canvas rubber-bands a selection (#94).
+   *
+   * ⚠️ IT HAS TO BE SHIFT, not a plain drag. A plain drag on empty canvas is
+   * the PAN (#188) — the gesture people reach for first — and taking it for a
+   * marquee would trade a daily action for an occasional one. Shift is also
+   * what adds to the selection by click, so the marquee ADDS rather than
+   * replaces, and the two gestures say the same thing.
+   *
+   * Returns whether it took the press.
+   */
+  const startMarquee = (e: React.PointerEvent): boolean => {
+    if (!e.shiftKey || pieces.length === 0 || !onSelect) return false;
+    const at = toLocal(e);
+    marqueeRef.current = { from: at, to: at };
+    setMarquee({ from: at, to: at });
+    svgRef.current?.setPointerCapture?.(e.pointerId);
+    return true;
+  };
+
+  /** Every piece whose ORIGIN falls inside the box. ⭐ The origin, not the whole
+   * body: a 30″ length of flex is rarely enclosed by any comfortable drag, and a
+   * rule of "touches the box" would sweep up the neighbouring run every time. */
+  const piecesInMarquee = (m: { from: Pt; to: Pt }): string[] => {
+    const x0 = Math.min(m.from.x, m.to.x);
+    const x1 = Math.max(m.from.x, m.to.x);
+    const y0 = Math.min(m.from.y, m.to.y);
+    const y1 = Math.max(m.from.y, m.to.y);
+    return pieces.filter((p) => p.x >= x0 && p.x <= x1 && p.y >= y0 && p.y <= y1).map((p) => p.id);
+  };
+
   const beginDrag = (
     e: React.PointerEvent,
     d: NonNullable<typeof dragRef.current>,
@@ -2861,8 +2911,29 @@ export function BenchworkEditor({
 
     const p = toLocal(e);
     setHover(p);
+    if (marqueeRef.current) {
+      marqueeRef.current = { ...marqueeRef.current, to: p };
+      setMarquee(marqueeRef.current);
+      return;
+    }
     const d = dragRef.current;
     if (!d) return;
+
+    // ⭐ THE GROUP MOVES RIGIDLY: one offset, applied to each member's own
+    // origin as it was when the drag began. Nothing is re-derived from a
+    // neighbour, so the pieces cannot drift apart over the drag.
+    if (d.kind === "pieces") {
+      const dx = p.x - d.from.x;
+      const dy = p.y - d.from.y;
+      const next = pieces.map((piece) => {
+        const o = d.origins[piece.id];
+        return o ? { ...piece, x: o.x + dx, y: o.y + dy } : piece;
+      });
+      d.latest = next;
+      onPiecesChange?.(next);
+      setReadout(`${fmt(dx)}″, ${fmt(dy)}″`);
+      return;
+    }
 
     // Pieces move in real inches — no projection onto anything. That is the
     // whole difference from the positional model above: a piece is where it is
@@ -3135,17 +3206,17 @@ export function BenchworkEditor({
     const snapped = snapPiece(fresh, pieces, partLibrary, grabInches);
     if (snapped) {
       onPiecesChange([...pieces, snapped.piece], { commit: true });
-      onSelect?.({ kind: "piece", id: fresh.id });
+      onSelect?.({ kind: "pieces", ids: [fresh.id] });
       return;
     }
     const cut = insertIntoRun(pieces, fresh, at, partLibrary, world(14));
     if (cut) {
       onPiecesChange(cut.pieces, { commit: true });
-      onSelect?.({ kind: "piece", id: cut.insertedId });
+      onSelect?.({ kind: "pieces", ids: [cut.insertedId] });
       return;
     }
     onPiecesChange([...pieces, fresh], { commit: true });
-    onSelect?.({ kind: "piece", id: fresh.id });
+    onSelect?.({ kind: "pieces", ids: [fresh.id] });
   };
 
   /** Is the armed part FLEX — the one product that is laid by the run? */
@@ -3213,7 +3284,7 @@ export function BenchworkEditor({
       };
     });
     onPiecesChange([...pieces, ...laid], { commit: true });
-    onSelect?.({ kind: "piece", id: laid[laid.length - 1].id });
+    onSelect?.({ kind: "pieces", ids: [laid[laid.length - 1].id] });
   };
 
   /** Replace one piece, keeping the rest. */
@@ -3253,6 +3324,21 @@ export function BenchworkEditor({
   };
 
   const onUp = (e: React.PointerEvent) => {
+    // Releasing a marquee: everything whose origin it enclosed joins the
+    // selection. A shift-press that never travelled encloses nothing and so
+    // changes nothing — which is the right answer for a stray modifier click.
+    if (marqueeRef.current) {
+      const m = marqueeRef.current;
+      marqueeRef.current = null;
+      setMarquee(null);
+      svgRef.current?.releasePointerCapture?.(e.pointerId);
+      const hit = piecesInMarquee(m);
+      if (hit.length) {
+        const have = selection?.kind === "pieces" ? selection.ids : [];
+        onSelect?.({ kind: "pieces", ids: [...new Set([...have, ...hit])] });
+      }
+      return;
+    }
     // Fill-a-run: releasing lays it. A press that never travelled is still a
     // CLICK, and a click lays one piece — the gesture it always was.
     if (fillRef.current) {
@@ -3295,6 +3381,17 @@ export function BenchworkEditor({
     // rather than while dragging means the piece follows the pointer honestly
     // and lands where it belongs — snapping live makes it fight the hand.
     const pd = dragRef.current;
+    // ⭐ A GROUP DROP DOES NOT SNAP — Will's call. Snapping each member to its
+    // own nearest joint would tear the group apart, and snapping the set as one
+    // body would move pieces the owner had already placed by hand. Several
+    // things picked up together land exactly where they were put down; welding
+    // is then a deliberate single-piece gesture, as it is everywhere else.
+    if (pd?.kind === "pieces" && onPiecesChange) {
+      if (pd.latest) onPiecesChange(pd.latest, { commit: true });
+      dragRef.current = null;
+      setReadout(null);
+      return;
+    }
     if ((pd?.kind === "piece" || pd?.kind === "pieceHandle") && onPiecesChange) {
       const moved = pd.latest ?? pieces.find((p) => p.id === pd.id);
       const rest = pieces.filter((p) => p.id !== pd.id);
@@ -4764,15 +4861,47 @@ const ENDPLATE_TAB = 5; // ballast-shoulder band width, inches
           <PieceLayer
             pieces={pieces}
             library={partLibrary}
-            selected={selection?.kind === "piece" ? selection.id : null}
+            selectedIds={selection?.kind === "pieces" ? selection.ids : []}
             scale={scale}
             laying={piecesMode && !!armedPart}
-            onSelect={(id) => onSelect?.(id ? { kind: "piece", id } : null)}
+            onSelect={(id, additive) => {
+              if (!id) return onSelect?.(null);
+              const have = selection?.kind === "pieces" ? selection.ids : [];
+              // Shift/Ctrl toggles: clicking a picked piece again drops it out,
+              // so a set can be corrected without starting over.
+              const ids = additive
+                ? have.includes(id)
+                  ? have.filter((x) => x !== id)
+                  : [...have, id]
+                : // ⚠️ A PLAIN PRESS ON A PIECE ALREADY IN THE SET KEEPS THE SET.
+                  // Otherwise picking the group up by one of its own members
+                  // would collapse it to that one piece and move it alone —
+                  // i.e. the group could be selected but never dragged.
+                  have.includes(id)
+                  ? have
+                  : [id];
+              onSelect?.(ids.length ? { kind: "pieces", ids } : null);
+            }}
             onPieceDown={(id, e) => {
               if (!piecesMode && tool !== "select") return;
               const piece = pieces.find((x) => x.id === id);
               if (!piece || !onPiecesChange) return;
               const at = toLocal(e);
+              const have = selection?.kind === "pieces" ? selection.ids : [];
+              const additive = e.shiftKey || e.ctrlKey || e.metaKey;
+              // ⚠️ A SHIFT-CLICK MUST NOT BEGIN A DRAG. Releasing a piece drag
+              // snaps the piece to its nearest open joint even if the pointer
+              // never travelled — so adding a piece to the selection would have
+              // MOVED it, turning a selection gesture into an edit.
+              if (additive) return;
+              // Pressing a member of a multi-selection drags the whole set.
+              if (have.length > 1 && have.includes(id)) {
+                const origins: Record<string, Pt> = {};
+                for (const p of pieces) if (have.includes(p.id)) origins[p.id] = { x: p.x, y: p.y };
+                dragRef.current = { kind: "pieces", ids: have, from: at, origins };
+                svgRef.current?.setPointerCapture?.(e.pointerId);
+                return;
+              }
               dragRef.current = {
                 kind: "piece",
                 id,
@@ -4785,6 +4914,23 @@ const ENDPLATE_TAB = 5; // ballast-shoulder band width, inches
               dragRef.current = { kind: "pieceHandle", id, handle };
               svgRef.current?.setPointerCapture?.(e.pointerId);
             }}
+          />
+        )}
+        {/* The rubber band (#94). Drawn last so it sits over everything it is
+            gathering up, and never hit-testable — it is a readout of a gesture
+            in progress, not an object. */}
+        {marquee && (
+          <rect
+            x={Math.min(marquee.from.x, marquee.to.x)}
+            y={sy(Math.max(marquee.from.y, marquee.to.y))}
+            width={Math.abs(marquee.to.x - marquee.from.x)}
+            height={Math.abs(marquee.to.y - marquee.from.y)}
+            fill="#0284c7"
+            fillOpacity={0.08}
+            stroke="#0284c7"
+            strokeWidth={world(1)}
+            strokeDasharray={`${world(4)} ${world(3)}`}
+            pointerEvents="none"
           />
         )}
         {/* --- Dimension callouts: the board's overall W × H, drafting-style --- */}
