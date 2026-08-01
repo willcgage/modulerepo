@@ -3548,10 +3548,41 @@ function Inspector({
               title={
                 hasSections
                   ? "The sum of this module's section lengths — edit the sections to change it."
-                  : "The physical length of the board. Draw the mainline (M) if the rail runs a different distance than the board."
+                  : "The physical length of the board itself, end to end."
               }
             />
           </label>
+          {/* ⭐ HOW FAR THE RAIL RUNS — the number the whole canvas is measured
+              in, and until #246 it could be edited NOWHERE (modulerepo#246).
+              It was written by two save paths and had an input on neither, so
+              on the six modules that carry a different value the Footprint
+              length above silently did not move the board: the canvas length is
+              `mainline || footprint`, so while a mainline is set the footprint
+              field changed a number nothing was reading.
+
+              It is REAL, DISTINCT data, not a duplicate of the footprint — an
+              end-of-line module is a 7″ board whose track stops after 5″, and a
+              30° curve is a 28″ board carrying 26.4″ of main. Blank means the
+              rail runs the whole board, which is the common case and why 28 of
+              42 modules leave it unset. */}
+          <label className="block text-xs font-medium text-gray-600">
+            Mainline length (in)
+            <input
+              type="number"
+              step={0.001}
+              min={0}
+              value={dims.mainline_length_inches}
+              onChange={(e) => setDim({ mainline_length_inches: e.target.value })}
+              className={`mt-0.5 ${inp}`}
+              placeholder={dims.length_total_inches || "same as the board"}
+              title="How far the rail runs, if that differs from the board — an end-of-line module's track stops short, a curve's main is shorter than its footprint. Everything on the canvas is positioned along this. Leave blank when the main runs the whole board."
+            />
+          </label>
+          <p className="text-xs text-gray-500">
+            Positions on the board are measured along the{" "}
+            <span className="font-medium">mainline</span>. Leave it blank unless
+            the rail runs a different distance than the board.
+          </p>
           {hasSections ? (
             <SectionList
               sections={state.sections}
