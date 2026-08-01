@@ -5,6 +5,15 @@ Headings are `version — date` (YYYY-MM-DD).
 
 ---
 
+## v0.62.2 — 2026-08-01
+
+### Changed
+- **The MSS fields explain what they are.** "Crossover" and "Cascade" were offered as bare words, so a module reading "MSS: Yes" beside a board with no signals looked like something had gone wrong. It hadn't: a crossover module passes the signal bus through without signalling itself, and having no signals is exactly right for it. Of the 22 modules that declare MSS, 13 are crossovers and every one of them correctly carries no signals.
+
+  The checkbox now says this is a fact about the module's wiring — which is why it lives on the module's details and not on the board. Nothing in a track plan can confirm or contradict how a module is wired.
+
+---
+
 ## v0.62.1 — 2026-08-01
 
 ### Fixed
