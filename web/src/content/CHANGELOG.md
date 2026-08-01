@@ -5,6 +5,17 @@ Headings are `version — date` (YYYY-MM-DD).
 
 ---
 
+## v0.62.1 — 2026-08-01
+
+### Fixed
+- **A turnout the document says nothing about now reads "Not recorded" instead of "#6".** Most of them say nothing — 35 of the 50 turnouts on record — and the box was showing a frog number as though someone had chosen it.
+
+  The part that made it more than a wrong label: because the box already showed #6, choosing #6 changed nothing and saved nothing, so **a turnout that really is a #6 could never be recorded as one**. The single value you could not set was the one it claimed to have.
+
+  Not recorded is now its own entry in the list, and picking it again clears a size you no longer want to assert. The board still draws an unrecorded turnout as a #6, because it has to draw something — but it no longer says that is what you told it.
+
+---
+
 ## v0.62.0 — 2026-08-01
 
 ### Added
