@@ -101,10 +101,17 @@ export default async function ModuleSchematicPage({
     .select("value, display_label, requires_degrees, requires_offset_inches")
     .order("value");
 
-  // The module's endplate records are AUTHORITATIVE for the main-track config
-  // (single/double per end) — the schematic mirrors them, like the mainline
-  // length. Without this, a single↔double module (FMN-0038) opened the builder
-  // as single/single and the transition prompt never fired.
+  // ⚠️ THE ROWS SEED, THEY NO LONGER DECIDE. This comment used to say the
+  // endplate records were AUTHORITATIVE and the schematic mirrored them; that
+  // has been backwards for some time and #120 settles it — the DOC owns the
+  // config, `saveModuleSchematic` rewrites these rows from it on every save,
+  // and the read-only mirror the claim justified (`lockedConfigs`) was dead
+  // code hard-coded to false at this very call site.
+  //
+  // What the rows are still for: a LEGACY module whose doc predates the sync
+  // opens with the right configs. Without it a single↔double module (FMN-0038)
+  // opened as single/single and the transition prompt never fired. The label is
+  // seeded the same way, for the same reason, just below.
   const { data: endplateRows } = await supabase
     .from("freemon_endplates")
     .select("endplate_number, track_config, label")
@@ -201,11 +208,6 @@ export default async function ModuleSchematicPage({
         // let it fire on someone else's module.
         newModule={isNew === "1" && !readOnly}
         readOnly={readOnly}
-        // Endplate rows FOLLOW the schematic now (saveModuleSchematic syncs
-        // track_config on every save), so existing rows no longer lock the
-        // configs — the canvas is the source of truth; rows still SEED the
-        // configs above for legacy modules whose doc predates the sync.
-        lockedConfigs={{ a: false, b: false }}
         geometries={geometries ?? []}
         industryTypes={industryTypes}
         carTypes={carTypes}

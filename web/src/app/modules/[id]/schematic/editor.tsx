@@ -164,7 +164,6 @@ export function SchematicEditor({
   initial,
   newModule = false,
   readOnly = false,
-  lockedConfigs = { a: false, b: false },
   geometries = [],
   industryTypes = [],
   carTypes = [],
@@ -182,7 +181,6 @@ export function SchematicEditor({
   readOnly?: boolean;
   /** True when the module's endplate records define the config — the selects
    * mirror them read-only (edit endplates on the module page instead). */
-  lockedConfigs?: { a: boolean; b: boolean };
   /** Geometry choices from the lookup table (which need degrees / offset). */
   geometries?: {
     value: string;
@@ -1793,8 +1791,6 @@ export function SchematicEditor({
       const touchesA = lo2 <= plateEps;
       const touchesB = hi2 >= s.lengthInches - plateEps;
       if (!touchesA && !touchesB) return;
-      // Endplate records are authoritative — never override a locked config.
-      if ((touchesA && lockedConfigs.a) || (touchesB && lockedConfigs.b)) return;
       repoint(A.id, MAIN2_TRACK_ID);
       s.extraTracks.splice(s.extraTracks.findIndex((t) => t.id === A.id), 1);
       select = null;
@@ -1844,7 +1840,6 @@ export function SchematicEditor({
       const eps = 0.5;
       const atFarPlate = aD ? sw.pos >= s.lengthInches - eps : sw.pos <= eps;
       if (!atFarPlate) return;
-      if (aD ? lockedConfigs.b : lockedConfigs.a) return;
       if (aD) s.configB = "double";
       else s.configA = "double";
       s.turnouts.splice(s.turnouts.findIndex((x) => x.id === sw.id), 1);
@@ -2178,7 +2173,6 @@ export function SchematicEditor({
     <AddTrackMenu
       add={trackAdd}
       mainlineDouble={isDouble}
-      mainlineLocked={lockedConfigs.a || lockedConfigs.b}
       canCrossover={canCrossover}
       turnoutCount={state.turnouts.length}
       align="left"
@@ -2387,7 +2381,6 @@ export function SchematicEditor({
             setDim={setDim}
             geometries={geometries}
             geoSpec={geoSpec}
-            lockedConfigs={lockedConfigs}
             derivedPoses={derivedPoses}
             wantsManualPose={wantsManualPose}
             setEndplateWidth={setEndplateWidth}
@@ -2425,7 +2418,6 @@ export function SchematicEditor({
             mains={mainRows}
             flex={flexByTrack}
             mainlineDouble={isDouble}
-            mainlineLocked={lockedConfigs.a || lockedConfigs.b}
             endplates={poses.map((p) => ({ id: p.id, config: p.trackConfig }))}
             undeclaredCrossings={undeclaredCrossings}
           />
@@ -3355,7 +3347,6 @@ function Inspector({
   setDim,
   geometries,
   geoSpec,
-  lockedConfigs,
   derivedPoses,
   wantsManualPose,
   setEndplateWidth,
@@ -3413,7 +3404,6 @@ function Inspector({
   setDim: (p: Partial<ModuleDimensions>) => void;
   geometries: { value: string; display_label: string; requires_degrees: boolean; requires_offset_inches: boolean }[];
   geoSpec?: { requires_degrees: boolean; requires_offset_inches: boolean };
-  lockedConfigs: { a: boolean; b: boolean };
   derivedPoses: EndplatePose[];
   wantsManualPose: boolean;
   setEndplateWidth: (id: string, raw: string) => void;
@@ -3839,7 +3829,6 @@ function Inspector({
     // A/B are the schematic's drawing axis; C+ are authored branches.
     const bi = id.charCodeAt(0) - 67;
     const branch = bi >= 0 ? state.branches[bi] : undefined;
-    const locked = (id === "A" && lockedConfigs.a) || (id === "B" && lockedConfigs.b && !state.loop);
     // The benchwork's edges, as things an endplate can BE (ADR 0001). A curved
     // edge is offered but disabled rather than hidden, so it is clear why it
     // can't be chosen instead of leaving someone hunting for a missing option.
@@ -3962,19 +3951,13 @@ function Inspector({
                 : "End B main track"}
             <select
               value={id === "A" ? state.configA : state.configB}
-              disabled={locked}
-              title={
-                locked
-                  ? "Mirrors the module's endplate record — the schematic owns this now."
-                  : undefined
-              }
               onChange={(e) =>
                 patch((s) => {
                   if (id === "A") s.configA = e.target.value as "single" | "double";
                   else s.configB = e.target.value as "single" | "double" | "none";
                 })
               }
-              className={`mt-0.5 ${inp} ${locked ? "bg-gray-50 text-gray-600" : ""}`}
+              className={`mt-0.5 ${inp}`}
             >
               {id === "B" && state.loop && <option value="none">None — pure turnback</option>}
               <option value="single">Single</option>
@@ -5588,9 +5571,7 @@ function Inspector({
         t.role !== "crossover" &&
         state.configA !== "double" &&
         state.configB !== "double" &&
-        !state.loop &&
-        !lockedConfigs.a &&
-        !lockedConfigs.b && (
+        !state.loop && (
           <button
             type="button"
             onClick={() => {
@@ -5737,7 +5718,6 @@ function CarTypeSuggest({
 function AddTrackMenu({
   add,
   mainlineDouble,
-  mainlineLocked,
   canCrossover,
   turnoutCount,
   align = "right",
@@ -5749,7 +5729,6 @@ function AddTrackMenu({
     mainline: (config: "single" | "double") => void;
   };
   mainlineDouble: boolean;
-  mainlineLocked: boolean;
   canCrossover: boolean;
   turnoutCount: number;
   align?: "left" | "right";
@@ -5782,17 +5761,12 @@ function AddTrackMenu({
               Already on the board — it runs the length of the module. These
               choose how many tracks it is.
             </div>
-            <button type="button" className={item} disabled={mainlineLocked} onClick={() => run(() => add.mainline("single"))}>
+            <button type="button" className={item} onClick={() => run(() => add.mainline("single"))}>
               <span className="w-3 text-blue-600">{!mainlineDouble ? "●" : "○"}</span> Single track
             </button>
-            <button type="button" className={item} disabled={mainlineLocked} onClick={() => run(() => add.mainline("double"))}>
+            <button type="button" className={item} onClick={() => run(() => add.mainline("double"))}>
               <span className="w-3 text-blue-600">{mainlineDouble ? "●" : "○"}</span> Double track
             </button>
-            {mainlineLocked && (
-              <div className="px-2 py-0.5 text-[10px] text-gray-400">
-                Set on the module&rsquo;s endplate records.
-              </div>
-            )}
             <div className="my-1 border-t border-gray-100" />
             <button
               type="button"
@@ -5838,7 +5812,6 @@ function ObjectsList({
   mains,
   flex,
   mainlineDouble,
-  mainlineLocked,
   endplates,
   undeclaredCrossings,
 }: {
@@ -5865,7 +5838,6 @@ function ObjectsList({
     { pieces: FlexPiece[]; partId: string; authored: boolean; runInches: number; alongPath: boolean; unmapped: boolean }
   >;
   mainlineDouble: boolean;
-  mainlineLocked: boolean;
   endplates: { id: string; config?: string }[];
   /** Crossings the drawing implies that nobody authored (#crossings). */
   undeclaredCrossings: ImplicitCrossing[];
@@ -5986,7 +5958,6 @@ function ObjectsList({
           <AddTrackMenu
             add={add}
             mainlineDouble={mainlineDouble}
-            mainlineLocked={mainlineLocked}
             canCrossover={canCrossover}
             turnoutCount={state.turnouts.length}
           />

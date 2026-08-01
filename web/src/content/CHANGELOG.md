@@ -24,6 +24,7 @@ Headings are `version — date` (YYYY-MM-DD).
 - **The endplate count on a module page is counted from the board.** It used to be a tally of rows kept behind the scenes, which drifted both ways: a module with a third endplate placed on the board still said two, while another said three long after its document knew of only two.
 
 ### Fixed
+- **The single/double choice on an endplate is no longer greyed out for a reason that stopped being true.** The board could disable that choice, and the mainline single/double buttons with it, saying it was *"set on the module's endplate records"* — pointing at a page that no longer offers it. The lock had in fact been switched off for some time; what was left was the machinery and the message. Both are gone.
 - **An endplate's name now reaches the catalogue.** The name shown on the board and the name the catalogue and Free-Dispatcher read are the same name, saved together.
 
 ---
