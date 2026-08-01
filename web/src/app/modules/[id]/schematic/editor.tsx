@@ -4371,16 +4371,38 @@ function Inspector({
               </div>
             ) : (
               <select
-                value={t.size ?? 6}
-                onChange={(e) => patch((s) => (s.turnouts[i].size = Number(e.target.value)))}
-                className={`mt-0.5 ${inp}`}
-                title="Frog number — governs the diverging angle."
+                value={t.size ?? ""}
+                onChange={(e) =>
+                  patch((s) => {
+                    const v = e.target.value;
+                    if (v === "") delete s.turnouts[i].size;
+                    else s.turnouts[i].size = Number(v);
+                  })
+                }
+                className={`mt-0.5 ${inp} ${t.size == null ? "text-gray-500" : ""}`}
+                title="Frog number — governs the diverging angle. Not recorded means the document doesn't say; the board still has to draw something, so it draws a #6."
               >
+                {/* ⭐ "NOT RECORDED" IS A REAL OPTION, NOT A BLANK (#248).
+                    This used to read `value={t.size ?? 6}`, so a turnout whose
+                    document says NOTHING displayed "#6" as if it had been
+                    chosen — and 35 of the catalogue's 50 turnouts say nothing.
+
+                    ⛔ The trap that made it more than cosmetic: because the box
+                    already showed #6, choosing #6 fired no change event, so a
+                    turnout that really IS a #6 could never be recorded as one.
+                    The single value you could not set was the one it claimed.
+
+                    Silence is meaningful — it is what ADR 0004's placeholder
+                    exists for and what #199's conversion asks the owner about —
+                    so it gets its own entry rather than being spelled as a
+                    number. Round-tripping already preserves it: both
+                    `docToState` and `stateToDoc` write `size` only when truthy. */}
+                <option value="">Not recorded</option>
                 {/* The stock range, plus whatever this turnout already is — a
                     part can leave behind a frog number the list doesn't carry
                     (Atlas's wye is a #2.5), and a select with no matching
                     option renders blank, which reads as "unset" (#187). */}
-                {[...new Set([...FROG_NUMBERS, t.size ?? DEFAULT_TURNOUT_SIZE])]
+                {[...new Set([...FROG_NUMBERS, ...(t.size != null ? [t.size] : [])])]
                   .sort((a, b) => a - b)
                   .map((n) => (
                     <option key={n} value={n}>#{n}</option>
