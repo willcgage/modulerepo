@@ -85,8 +85,9 @@ import {
   sectionSpans,
   endplateLead,
   type SchematicSection,
+  type PlaceOnTrack,
 } from "@/lib/module-schematic";
-import { snapPoseToOutline, sampleAt } from "@/lib/physical-track";
+import { snapPoseToOutline, sampleAt, laneOffset } from "@/lib/physical-track";
 import { partLibraryWith } from "./part-library";
 import { endplateTrackPoints, startJointsFor } from "./piece-layer";
 import type { StoredTrackPart } from "@willcgage/module-schematic";
@@ -1027,9 +1028,47 @@ export function SchematicEditor({
    * come out are exactly the ones Free-Dispatcher will read — there is no
    * second, editor-local idea of what the pieces mean.
    */
+  /**
+   * ⭐⭐ WHERE EACH TRACK REALLY RUNS — handed to the conversion so it lays
+   * pieces on the board instead of on the module's axis (Will, 2026-08-01:
+   * *"not all track is down the centerline of a module"*).
+   *
+   * This is the same resolution the canvas already draws with: the module's
+   * centre-line is chained from its sections, so it curves when they do, and a
+   * positional track is that line offset to its lane. `absPos` is inches from
+   * endplate A measured along the module, which is exactly the centre-line's
+   * own parameter — no projection needed for a lane track.
+   *
+   * ⚠️ A track with a DRAWN PATH returns null, so those pieces still lay flat.
+   * Their `absPos` has to be projected onto the path first, and that projection
+   * (`toHostRel`, which had its own direction bug in #132) lives with the
+   * renderer. Parity with today rather than a regression — worth doing next.
+   */
+  const placeOnTrack: PlaceOnTrack = (trackId, absPos) => {
+    const center = footprint.centerline;
+    if (center.length < 2) return null;
+    const t = state.extraTracks.find((x) => x.id === trackId);
+    if (t?.path && t.path.length >= 2) return null;
+    const lane =
+      trackId === MAIN_TRACK_ID
+        ? 0
+        : trackId === MAIN2_TRACK_ID
+          ? (state.mainsSwapped ? -1 : 1)
+          : (t?.lane ?? 0);
+    const s = sampleAt(center, absPos);
+    // `sampleAt` gives the LEFT NORMAL, so the tangent is (ny, −nx) and a lane
+    // sits along the normal by its own offset.
+    const off = laneOffset(lane);
+    return {
+      x: s.x + s.nx * off,
+      y: s.y + s.ny * off,
+      headingDeg: (Math.atan2(-s.nx, s.ny) * 180) / Math.PI,
+    };
+  };
+
   const rebuildAsPieces = (answers: ConversionAnswers) => {
     if (readOnly) return;
-    const conv = docToGraph(doc, answers, partLibrary);
+    const conv = docToGraph(doc, answers, partLibrary, placeOnTrack);
     if (!conv.graph) return;
     const { doc: derived } = deriveGraphDoc({ ...doc, graph: conv.graph }, partLibrary);
     markEdited();

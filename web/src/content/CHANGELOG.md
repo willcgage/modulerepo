@@ -5,6 +5,17 @@ Headings are `version — date` (YYYY-MM-DD).
 
 ---
 
+## v0.64.0 — 2026-08-01
+
+### Fixed
+- **Rebuilding a module as pieces now follows the track it converted.** The rebuild used to lay every piece along the module's axis — a straight line at the centre — no matter where the track actually ran. On a module built from several boards that curve, the new pieces appeared in a straight row while the old drawing ran off somewhere else, which looked like the rebuild had ignored the module entirely.
+
+  Pieces are now laid on each track's real line: the mainline follows the centre-line your boards chain into, and a siding follows its own lane. Where a run curves, each piece is bent to the radius that stretch actually has — read off the drawing rather than guessed.
+
+  A mainline drawn with bends can be rebuilt now too; it used to be refused because there was no way to know what radius to bend the pieces to.
+
+---
+
 ## v0.63.3 — 2026-08-01
 
 ### Fixed
