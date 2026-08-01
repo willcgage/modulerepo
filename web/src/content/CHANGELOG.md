@@ -5,6 +5,25 @@ Headings are `version — date` (YYYY-MM-DD).
 
 ---
 
+## v0.61.0 — 2026-08-01
+
+### Added
+- **You can name an endplate on the board.** Click an end and there's a Name box — a town, a railroad, a compass point. Leave it blank and it reads West and East as it always has.
+
+  This is the field that made the change below possible. Naming an end *looked* available before, on the module page, but the name never survived: the schematic wrote "West" and "East" into the module every time it saved, straight over whatever had been typed. Eleven modules are carrying a name that could not stick.
+
+### Changed
+- **The module page no longer has Endplates, Tracks or Industries sections.** All three are built on the board now, where you can see what you're changing — an endplate is placed on a fascia, an industry is a length of track cars actually stand on. The module page keeps what it is good at: the two views of the module, its photographs, and its CAD drawings.
+
+  The rule behind it: **if the board owns something, the module page must not offer to edit it.** Every field that broke that rule was a silent-revert bug waiting to be found, and two of them were found — one owner set both ends to single track, watched it change, and watched it come back; an industry added on the module page was deleted by the next save of the board.
+
+- **The endplate count on a module page is counted from the board.** It used to be a tally of rows kept behind the scenes, which drifted both ways: a module with a third endplate placed on the board still said two, while another said three long after its document knew of only two.
+
+### Fixed
+- **An endplate's name now reaches the catalogue.** The name shown on the board and the name the catalogue and Free-Dispatcher read are the same name, saved together.
+
+---
+
 ## v0.60.0 — 2026-07-31
 
 ### Added

@@ -46,6 +46,7 @@ import {
   measuredAlongPath,
   turnoutDivergingLeg,
   checkEndplateWidth,
+  defaultEndplateLabel,
   flexPieces,
   flexUsage,
   flexParts,
@@ -1083,6 +1084,18 @@ export function SchematicEditor({
       const v = parseFloat(raw);
       if (Number.isFinite(v) && v > 0) s.endplateWidths[id] = v;
       else delete s.endplateWidths[id];
+    });
+
+  /** Store the owner's name for endplate A or B, or clear it back to the
+   * default word (#120). Blank means UNNAMED, not "an endplate called nothing":
+   * an end with no name has always read as West/East on the board, and emptying
+   * the label would leave the plate anonymous everywhere it is drawn. */
+  const setEndplateLabel = (id: string, raw: string) =>
+    patch((s) => {
+      if (!s.endplateLabels) s.endplateLabels = {};
+      const name = raw.trim();
+      if (name) s.endplateLabels[id] = raw;
+      else delete s.endplateLabels[id];
     });
 
   /** Which board the bench-work tool is shaping. An outline belongs to a
@@ -2378,6 +2391,7 @@ export function SchematicEditor({
             derivedPoses={derivedPoses}
             wantsManualPose={wantsManualPose}
             setEndplateWidth={setEndplateWidth}
+            setEndplateLabel={setEndplateLabel}
             setEndplateTrackOffset={setEndplateTrackOffset}
             setSections={setSections}
             countOnSection={countOnSection}
@@ -3345,6 +3359,7 @@ function Inspector({
   derivedPoses,
   wantsManualPose,
   setEndplateWidth,
+  setEndplateLabel,
   setEndplateTrackOffset,
   setSections,
   countOnSection,
@@ -3402,6 +3417,7 @@ function Inspector({
   derivedPoses: EndplatePose[];
   wantsManualPose: boolean;
   setEndplateWidth: (id: string, raw: string) => void;
+  setEndplateLabel: (id: string, raw: string) => void;
   setEndplateTrackOffset: (id: string, raw: string) => void;
   setSections: (next: SchematicSection[]) => void;
   /** How many placed objects stand on a board — the remove guard (#195). */
@@ -3914,7 +3930,29 @@ function Inspector({
             </p>
           </>
         ) : (
-          <label className="block text-xs font-medium text-gray-600">
+          <>
+            {/* ⭐ NAMING AN END LIVES HERE NOW (#120). It used to be on the
+                module detail page, and it never worked: `stateToDoc` wrote the
+                constant "West"/"East" into the document, and the next save
+                copied that back over the row. Eleven modules carry a real name
+                — "UP Spokane N", "South EP" — that could not survive a save.
+                Blank means unnamed, and an unnamed end still reads West/East. */}
+            <label className="block text-xs font-medium text-gray-600">
+              Name
+              <input
+                value={state.endplateLabels?.[id] ?? ""}
+                onChange={(e) => setEndplateLabel(id, e.target.value)}
+                className={`mt-0.5 ${inp}`}
+                maxLength={30}
+                placeholder={defaultEndplateLabel(id as "A" | "B", state.loop)}
+              />
+            </label>
+            <p className="text-[11px] text-gray-400">
+              The owner&rsquo;s word for this end — a town, a railroad, a
+              compass point. Leave it blank to use{" "}
+              {defaultEndplateLabel(id as "A" | "B", state.loop)}.
+            </p>
+            <label className="block text-xs font-medium text-gray-600">
             {id === "A"
               ? state.loop
                 ? "Entry (A) main track"
@@ -3927,7 +3965,7 @@ function Inspector({
               disabled={locked}
               title={
                 locked
-                  ? "Mirrors the module's endplate record — change it in the module's Endplates section."
+                  ? "Mirrors the module's endplate record — the schematic owns this now."
                   : undefined
               }
               onChange={(e) =>
@@ -3942,7 +3980,8 @@ function Inspector({
               <option value="single">Single</option>
               <option value="double">Double</option>
             </select>
-          </label>
+            </label>
+          </>
         )}
 
         {/* Endplate FACE width — the physical size of the standard interface at

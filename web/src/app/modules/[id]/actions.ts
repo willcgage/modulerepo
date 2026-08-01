@@ -9,13 +9,6 @@ function path(moduleId: number) {
   return `/modules/${moduleId}`;
 }
 
-function toNullableNumber(value: FormDataEntryValue | null): number | null {
-  const trimmed = (value ?? "").toString().trim();
-  if (!trimmed) return null;
-  const num = Number(trimmed);
-  return Number.isFinite(num) ? num : null;
-}
-
 async function requireOwnedModule(supabase: Awaited<ReturnType<typeof createClient>>, moduleId: number) {
   const {
     data: { user },
@@ -53,169 +46,23 @@ export async function deleteModule(moduleId: number) {
   redirect("/modules");
 }
 
-// ---- Endplates ----------------------------------------------------------
+// ⛔ addEndplate / updateEndplate / deleteEndplate are GONE (#120). The
+// schematic builder authors endplates now — it is the only place that can
+// PLACE one, and `saveModuleSchematic` syncs the `freemon_endplates` rows from
+// the document on every save, so anything written here was overwritten or
+// orphaned. See the note on the module detail page for the whole rule.
 
-export async function addEndplate(moduleId: number, formData: FormData) {
-  const supabase = await createClient();
-  await requireOwnedModule(supabase, moduleId);
+// ⛔ addTrack / updateTrack / deleteTrack are GONE (#120) — already unreachable
+// before this change: the Tracks section had been read-only for some time, so
+// nothing called them. `saveModuleSchematic` owns `module_tracks`, deriving
+// each track's capacity from its span between the governing clearance points.
 
-  const { count } = await supabase
-    .from("freemon_endplates")
-    .select("id", { count: "exact", head: true })
-    .eq("module_id", moduleId);
-
-  await supabase.from("freemon_endplates").insert({
-    module_id: moduleId,
-    endplate_number: (count ?? 0) + 1,
-    label: (formData.get("label") ?? "").toString().trim() || null,
-    track_config: (formData.get("track_config") ?? "single").toString(),
-    width_inches: toNullableNumber(formData.get("width_inches")),
-    height_inches: toNullableNumber(formData.get("height_inches")),
-    notes: (formData.get("notes") ?? "").toString().trim() || null,
-  });
-  revalidatePath(path(moduleId));
-}
-
-export async function updateEndplate(endplateId: number, moduleId: number, formData: FormData) {
-  const supabase = await createClient();
-  await requireOwnedModule(supabase, moduleId);
-
-  const labelRaw = (formData.get("label") ?? "").toString().trim();
-  await supabase
-    .from("freemon_endplates")
-    .update({
-      label: labelRaw || null,
-      track_config: (formData.get("track_config") ?? "single").toString(),
-      width_inches: toNullableNumber(formData.get("width_inches")),
-      height_inches: toNullableNumber(formData.get("height_inches")),
-      notes: (formData.get("notes") ?? "").toString().trim() || null,
-    })
-    .eq("id", endplateId);
-  revalidatePath(path(moduleId));
-}
-
-export async function deleteEndplate(endplateId: number, moduleId: number) {
-  const supabase = await createClient();
-  await requireOwnedModule(supabase, moduleId);
-
-  await supabase.from("freemon_endplates").delete().eq("id", endplateId);
-  revalidatePath(path(moduleId));
-}
-
-// ---- Tracks ---------------------------------------------------------------
-
-export async function addTrack(moduleId: number, formData: FormData) {
-  const supabase = await createClient();
-  await requireOwnedModule(supabase, moduleId);
-
-  await supabase.from("module_tracks").insert({
-    module_id: moduleId,
-    track_name: (formData.get("track_name") ?? "").toString().trim() || null,
-    capacity_scale_feet: toNullableNumber(formData.get("capacity_scale_feet")),
-    notes: (formData.get("notes") ?? "").toString().trim() || null,
-  });
-  revalidatePath(path(moduleId));
-}
-
-export async function updateTrack(trackId: number, moduleId: number, formData: FormData) {
-  const supabase = await createClient();
-  await requireOwnedModule(supabase, moduleId);
-
-  await supabase
-    .from("module_tracks")
-    .update({
-      track_name: (formData.get("track_name") ?? "").toString().trim() || null,
-      capacity_scale_feet: toNullableNumber(formData.get("capacity_scale_feet")),
-      notes: (formData.get("notes") ?? "").toString().trim() || null,
-    })
-    .eq("id", trackId);
-  revalidatePath(path(moduleId));
-}
-
-export async function deleteTrack(trackId: number, moduleId: number) {
-  const supabase = await createClient();
-  await requireOwnedModule(supabase, moduleId);
-
-  const { error } = await supabase.from("module_tracks").delete().eq("id", trackId);
-  if (error) {
-    redirect(`${path(moduleId)}?error=${encodeURIComponent(error.message)}`);
-  }
-  revalidatePath(path(moduleId));
-}
-
-// ---- Industries ----------------------------------------------------------
-
-export async function addIndustry(moduleId: number, formData: FormData) {
-  const supabase = await createClient();
-  await requireOwnedModule(supabase, moduleId);
-
-  await supabase.from("freemon_industries").insert({
-    module_id: moduleId,
-    industry_name: (formData.get("industry_name") ?? "").toString().trim(),
-    industry_type: (formData.get("industry_type") ?? "").toString(),
-    track_id: toNullableNumber(formData.get("track_id")),
-    notes: (formData.get("notes") ?? "").toString().trim() || null,
-  });
-  revalidatePath(path(moduleId));
-}
-
-export async function updateIndustry(industryId: number, moduleId: number, formData: FormData) {
-  const supabase = await createClient();
-  await requireOwnedModule(supabase, moduleId);
-
-  await supabase
-    .from("freemon_industries")
-    .update({
-      industry_name: (formData.get("industry_name") ?? "").toString().trim(),
-      industry_type: (formData.get("industry_type") ?? "").toString(),
-      track_id: toNullableNumber(formData.get("track_id")),
-      notes: (formData.get("notes") ?? "").toString().trim() || null,
-    })
-    .eq("id", industryId);
-  revalidatePath(path(moduleId));
-}
-
-export async function deleteIndustry(industryId: number, moduleId: number) {
-  const supabase = await createClient();
-  await requireOwnedModule(supabase, moduleId);
-
-  await supabase.from("freemon_industries").delete().eq("id", industryId);
-  revalidatePath(path(moduleId));
-}
-
-export async function setIndustryCarTypes(industryId: number, moduleId: number, formData: FormData) {
-  const supabase = await createClient();
-  await requireOwnedModule(supabase, moduleId);
-
-  const selectedIds = formData
-    .getAll("car_type_ids")
-    .map((value) => Number(value))
-    .filter((value) => Number.isInteger(value));
-
-  const { data: existing } = await supabase
-    .from("freemon_industry_car_types")
-    .select("id, car_type_id")
-    .eq("industry_id", industryId);
-
-  const existingIds = new Set((existing ?? []).map((row) => row.car_type_id));
-  const selectedSet = new Set(selectedIds);
-
-  const toRemove = (existing ?? []).filter((row) => !selectedSet.has(row.car_type_id));
-  const toAdd = selectedIds.filter((id) => !existingIds.has(id));
-
-  if (toRemove.length > 0) {
-    await supabase
-      .from("freemon_industry_car_types")
-      .delete()
-      .in("id", toRemove.map((row) => row.id));
-  }
-  if (toAdd.length > 0) {
-    await supabase.from("freemon_industry_car_types").insert(
-      toAdd.map((carTypeId) => ({ industry_id: industryId, car_type_id: carTypeId })),
-    );
-  }
-  revalidatePath(path(moduleId));
-}
+// ⛔ addIndustry / updateIndustry / deleteIndustry / setIndustryCarTypes are
+// GONE (#120). An industry is a car-spot SPAN on a track — the builder places
+// it, sizes it and reads its capacity off the rail, none of which this page
+// could do. And `saveModuleSchematic` DELETES any `freemon_industries` row the
+// document does not carry, so an industry added here survived only until the
+// next schematic save.
 
 // ---- Images ---------------------------------------------------------------
 

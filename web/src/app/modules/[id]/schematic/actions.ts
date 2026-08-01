@@ -274,13 +274,19 @@ export async function saveModuleSchematic(
     // Sync freemon_endplates from the doc's endplate configs — downstream
     // (Free-Dispatcher) snaps modules together by these rows, so a track drawn
     // onto a plate ("a track on an endplate = a double-track endplate") must be
-    // reflected here. A → endplate_number 1, B → 2. Existing rows keep their
-    // hand-authored width/label/notes; only track_config follows the doc (and
-    // width when the doc carries an authored width). Rows are never deleted
-    // here — quick-create modules gain their rows on first save.
+    // reflected here. A → endplate_number 1, B → 2. track_config, width and now
+    // the LABEL follow the doc; existing rows keep their hand-authored notes.
+    // Rows are never deleted here — quick-create modules gain theirs on first
+    // save.
+    //
+    // ⭐ THE LABEL FOLLOWS THE DOC AS OF #120, because the builder is now the
+    // only place to name an end. Leaving it out is precisely the bug that issue
+    // is about, in the other direction: a name typed in the box would live in
+    // the document while the row — the thing the catalog and Free-Dispatcher
+    // read — went on saying "EP-1".
     const { data: epRows, error: epReadErr } = await supabase
       .from("freemon_endplates")
-      .select("id, endplate_number, track_config, width_inches")
+      .select("id, endplate_number, track_config, width_inches, label")
       .eq("module_id", moduleId);
     if (epReadErr) return { error: epReadErr.message };
     for (const [n, epId] of [
@@ -307,12 +313,16 @@ export async function saveModuleSchematic(
       const cfg = ep.tracks?.[0]?.config === "double" ? "double" : "single";
       const authoredWidth =
         typeof ep.widthInches === "number" && ep.widthInches > 0 ? ep.widthInches : null;
+      // The label the doc carries — the owner's name if they gave one, else the
+      // emitter's default word. Trimmed to the column's 30-char CHECK.
+      const label = (ep.label ?? "").trim().slice(0, 30) || `EP-${n}`;
       const row = epRows?.find((r) => r.endplate_number === n);
       if (row) {
-        const patch: { track_config?: string; width_inches?: number } = {};
+        const patch: { track_config?: string; width_inches?: number; label?: string } = {};
         if (row.track_config !== cfg) patch.track_config = cfg;
         if (authoredWidth != null && Number(row.width_inches) !== authoredWidth)
           patch.width_inches = authoredWidth;
+        if (row.label !== label) patch.label = label;
         if (Object.keys(patch).length) {
           const { error } = await supabase
             .from("freemon_endplates")
@@ -324,7 +334,7 @@ export async function saveModuleSchematic(
         const { error } = await supabase.from("freemon_endplates").insert({
           module_id: moduleId,
           endplate_number: n,
-          label: `EP-${n}`,
+          label,
           track_config: cfg,
           width_inches: authoredWidth ?? endplateWidthInches(ep),
         });

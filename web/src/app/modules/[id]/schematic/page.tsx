@@ -1,6 +1,11 @@
 import { notFound, redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
-import { docToState, nextId, MAIN_TRACK_ID } from "@/lib/module-schematic";
+import {
+  docToState,
+  defaultEndplateLabel,
+  nextId,
+  MAIN_TRACK_ID,
+} from "@/lib/module-schematic";
 import { fetchIndustryTypes, fetchCarTypes } from "@/lib/edge";
 import { loadStoredTrackParts } from "@/lib/track-parts";
 import { SchematicEditor } from "./editor";
@@ -102,7 +107,7 @@ export default async function ModuleSchematicPage({
   // as single/single and the transition prompt never fired.
   const { data: endplateRows } = await supabase
     .from("freemon_endplates")
-    .select("endplate_number, track_config")
+    .select("endplate_number, track_config, label")
     .eq("module_id", moduleId)
     .order("endplate_number");
 
@@ -113,6 +118,29 @@ export default async function ModuleSchematicPage({
   const epA = cfgOf(0);
   const epB = cfgOf(1);
 
+  /**
+   * The owner's NAME for an end, seeded from the row (#120).
+   *
+   * Naming an endplate used to live on the module detail page, and eleven
+   * modules on prod carry a real one — "UP Spokane N", "MR St Maries e",
+   * "South EP". Those names are in `freemon_endplates.label` and NOT in any
+   * document, because `stateToDoc` wrote a constant there until 0.123.0. So the
+   * builder seeds from the row exactly as it already does for track_config: the
+   * name is in the Name box the first time its owner opens the board, and their
+   * first save carries it into the document for good.
+   *
+   * ⚠️ `EP-1`/`EP-2` are what `saveModuleSchematic` inserts when it creates a
+   * row, and the default words are what the emitter writes — neither is
+   * anybody's name, and seeding one would turn a placeholder into an override.
+   */
+  const nameOf = (n: number, id: "A" | "B"): string | null => {
+    const raw = (endplateRows?.[n]?.label ?? "").trim();
+    if (!raw || /^EP-\d+$/.test(raw)) return null;
+    return raw === defaultEndplateLabel(id, false) || raw === defaultEndplateLabel(id, true)
+      ? null
+      : raw;
+  };
+
   const fallbackLength =
     Number(module.mainline_length_inches ?? module.length_total_inches) || 24;
   const initial = docToState(module.schematic, fallbackLength, moduleTracks ?? []);
@@ -120,6 +148,14 @@ export default async function ModuleSchematicPage({
   // B carries interchange semantics the endplate rows don't describe).
   if (epA) initial.configA = epA;
   if (epB && !initial.loop) initial.configB = epB;
+  // Seed a name only where the document has none — a doc that already carries
+  // one is the newer truth, and overwriting it with the row would undo the last
+  // save. Same shape as the config seeding above, opposite precedence for the
+  // same reason: the row is the legacy source, the doc is the live one.
+  for (const [n, id] of [[0, "A"], [1, "B"]] as const) {
+    const name = nameOf(n, id);
+    if (name && !initial.endplateLabels[id]) initial.endplateLabels[id] = name;
+  }
 
   // Reconcile industries of record with the doc: the doc carries geometry
   // (span/side) for industries already placed; any freemon_industries row not
