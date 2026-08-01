@@ -3055,7 +3055,20 @@ export function BenchworkEditor({
         // render), so pull the pointer back by the same amount before measuring
         // — otherwise grabbing it would jump the board a tab longer.
         const q = { x: p.x - (tx / tl) * ENDPLATE_TAB, y: p.y - (ty / tl) * ENDPLATE_TAB };
-        let pos = posFrom(q);
+        // ⛔⛔ NOT `posFrom` — IT CLAMPS TO `lengthInches`, AND THIS DRAG IS WHAT
+        // SETS `lengthInches`. Clamping the input to the value being set is
+        // circular: the pointer can never report a position past the current
+        // end, so `pos >= end` below could never fire and the whole
+        // lengthen-the-board branch was unreachable.
+        //
+        // It only worked while the module's end and the drawn centre-line's end
+        // were THE SAME NUMBER — which they were, because `poses` used to place
+        // endplate B at the centre-line's end. Removing that coupling (v0.66.0,
+        // Will's "moving the track must not move the endplate") let the two
+        // diverge, and this clamp silently pinned endplate B in place: 6″ of
+        // drag moved it 0.009″. Measured on FMN-0075, whose drawn main runs
+        // 35.71″ against a 32.6″ module.
+        let pos = projectToCenterline(centerline, q).pos;
         if (pos >= end - 0.01) {
           const past = ((q.x - b.x) * tx + (q.y - b.y) * ty) / tl;
           pos = end + Math.max(0, past);
@@ -3064,6 +3077,10 @@ export function BenchworkEditor({
         // it terminates. Nothing bounds it going outward.
         const lo = (sectionBreaks[sectionBreaks.length - 1] ?? 0) + 1;
         pos = Math.max(lo, pos);
+        // `posFrom` used to round to a tenth on the way through; keep that, so
+        // dragging still lands on the round numbers a board is built to and the
+        // stored length doesn't grow three decimals of pointer noise.
+        pos = Math.round(pos * 10) / 10;
         onEndplateEndMove?.(d.id, pos);
         setReadout(
           `${lengthLabel(pos - (sectionBreaks[sectionBreaks.length - 1] ?? 0))} section · ${lengthLabel(pos)} module`,

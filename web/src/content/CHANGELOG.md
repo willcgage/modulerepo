@@ -5,6 +5,17 @@ Headings are `version — date` (YYYY-MM-DD).
 
 ---
 
+## v0.66.1 — 2026-08-01
+
+### Fixed
+- **You can drag endplate B again on a module with a drawn mainline.** v0.66.0 correctly stopped the track from dragging the endplate around — but on a module whose drawn mainline doesn't finish exactly at its end, that left endplate B's own handle stuck: pulling it six inches moved it nine thousandths of an inch.
+
+  The handle sets your module's length, and it was measuring against your module's *current* length — so it could never report a position past the end it was trying to move. That only ever worked because the endplate used to sit wherever the track stopped. Now it measures where you actually dragged to.
+
+  Endplate A is still fixed at the origin, as it has always been: everything on the board is measured from it.
+
+---
+
 ## v0.66.0 — 2026-08-01
 
 ### Fixed
