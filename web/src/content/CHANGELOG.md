@@ -5,6 +5,15 @@ Headings are `version — date` (YYYY-MM-DD).
 
 ---
 
+## v0.63.1 — 2026-08-01
+
+### Fixed
+- **The siding end handle can actually be grabbed.** It came back in v0.63.0 but was drawn underneath the turnout markers, and the turnout nearest it is only a few inches away — so pressing on the siding's end picked up the turnout instead. The handle was there and behaved exactly as though it wasn't.
+
+  The end you're joining to a turnout is by definition right next to that turnout, so the two overlap precisely when the gesture matters. The end handles now draw on top.
+
+---
+
 ## v0.63.0 — 2026-08-01
 
 ### Fixed
