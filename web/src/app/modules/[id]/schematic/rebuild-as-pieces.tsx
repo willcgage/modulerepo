@@ -19,7 +19,6 @@ import { useMemo, useState } from "react";
 import {
   docToGraph,
   moduleConversionReport,
-  type PlaceOnTrack,
   partGeometryGap,
   type ConversionAnswers,
   type ModuleSchematicDoc,
@@ -70,19 +69,12 @@ export function RebuildAsPieces({
   library,
   readOnly,
   onRebuild,
-  placeAt = null,
 }: {
   doc: ModuleSchematicDoc;
   library: TrackPart[];
   readOnly?: boolean;
   /** Apply it. The caller owns the undo snapshot and the save. */
   onRebuild: (answers: ConversionAnswers) => void;
-  /** ⚠️ THE PREVIEW MUST BE GIVEN WHAT THE BUTTON IS GIVEN. This is the same
-   * placer `onRebuild` uses; without it the preview runs a DIFFERENT
-   * conversion from the one it is previewing, and on a module whose track
-   * curves it refused ("would need each bend's radius") for a reason that no
-   * longer applied to the actual rebuild. */
-  placeAt?: PlaceOnTrack | null;
 }) {
   const [open, setOpen] = useState(false);
   const [showEach, setShowEach] = useState(false);
@@ -109,8 +101,8 @@ export function RebuildAsPieces({
   // ⭐ THE PREVIEW IS THE CONVERSION ITSELF, run on the current answers — not a
   // description of it. What it reports is exactly what pressing the button does.
   const preview = useMemo(
-    () => (open ? docToGraph(doc, answers, library, placeAt) : null),
-    [open, doc, answers, library, placeAt],
+    () => (open ? docToGraph(doc, answers, library) : null),
+    [open, doc, answers, library],
   );
 
   const asked = report.unanswered.length;
