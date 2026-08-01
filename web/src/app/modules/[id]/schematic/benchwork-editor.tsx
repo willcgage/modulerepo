@@ -4042,23 +4042,6 @@ const ENDPLATE_TAB = 5; // ballast-shoulder band width, inches
             strokeDasharray={`${r} ${r}`}
           />
         )}
-        {/* Siding / spur end handles — drag along the main to reposition */}
-        {!graphAuthoring && onTrackEndMove &&
-          trackEnds.map((h) => (
-            <circle
-              key={`end${h.id}${h.end}`}
-              cx={h.x}
-              cy={sy(h.y)}
-              r={r * 0.7}
-              fill="#fff"
-              stroke="#0f766e"
-              strokeWidth={r * 0.3}
-              style={{ cursor: "ew-resize" }}
-              onPointerDown={(e) => beginDrag(e, { kind: "trackEnd", id: h.id, end: h.end })}
-            >
-              <title>{`Drag to move this track's ${h.end === "from" ? "start" : "end"} along the main`}</title>
-            </circle>
-          ))}
         {/* Turnouts — drag along the track to set their position */}
         {!graphAuthoring &&
           turnoutPts.map((t) => {
@@ -4147,6 +4130,33 @@ const ENDPLATE_TAB = 5; // ballast-shoulder band width, inches
             </g>
           );
         })}
+        {/* Siding / spur end handles — drag along the main to reposition.
+            ⭐⭐ RENDERED AFTER THE TURNOUTS ON PURPOSE. Painting these first put
+            every turnout marker ON TOP of them, and SVG hit-testing follows
+            paint order — `elementFromPoint` over FMN-0064's siding start (pos
+            16) returned the TURNOUT at pos 13, four pixels away. The handle
+            existed and could not be grabbed, which looks exactly like the
+            handle not existing.
+            ⚠️ Not an edge case: the end you are trying to join to its turnout
+            is BY DEFINITION near that turnout, so they overlap precisely when
+            the gesture matters. Tests and types both pass either way; only
+            driving it in a browser shows the difference. */}
+        {!graphAuthoring && onTrackEndMove &&
+          trackEnds.map((h) => (
+            <circle
+              key={`end${h.id}${h.end}`}
+              cx={h.x}
+              cy={sy(h.y)}
+              r={r * 0.7}
+              fill="#fff"
+              stroke="#0f766e"
+              strokeWidth={r * 0.3}
+              style={{ cursor: "ew-resize" }}
+              onPointerDown={(e) => beginDrag(e, { kind: "trackEnd", id: h.id, end: h.end })}
+            >
+              <title>{`Drag to move this track's ${h.end === "from" ? "start" : "end"} along the main`}</title>
+            </circle>
+          ))}
         {/* Signals — a mast (stem from the track it governs) + a head. */}
         {signalPts.map((s) => {
           const on = selection?.kind === "cp" && selection.id === s.cp;
