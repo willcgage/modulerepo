@@ -5,6 +5,13 @@ Headings are `version — date` (YYYY-MM-DD).
 
 ---
 
+## v0.64.1 — 2026-08-01
+
+### Fixed
+- **The rebuild offer stopped refusing modules it can now convert.** The panel that shows what a rebuild would cost runs the conversion itself, and it was still running the old one — so on a module whose track curves it went on saying the mainline's bends could not be laid, even though pressing the button would have laid them correctly.
+
+---
+
 ## v0.64.0 — 2026-08-01
 
 ### Fixed
