@@ -2360,6 +2360,7 @@ export function SchematicEditor({
                     library={partLibrary}
                     readOnly={readOnly}
                     onRebuild={rebuildAsPieces}
+                    placeAt={placeOnTrack}
                   />
                 }
                 onTurnoutMove={moveTurnout}
