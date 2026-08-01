@@ -5,6 +5,20 @@ Headings are `version — date` (YYYY-MM-DD).
 
 ---
 
+## v0.66.0 — 2026-08-01
+
+### Fixed
+- **Moving your mainline no longer moves your endplate.** If you had drawn a mainline, dragging its end dragged the endplate along with it — so adjusting where the track ran quietly changed where the module said its end was.
+
+  An endplate is the module's own fact. It sits where your dimensions, your pose, or the benchwork edge you bound it to put it, and nothing you do to the track moves it. To move an endplate, move the endplate.
+
+  Nothing was ever wrong in your saved module — the endplate was only ever *drawn* in the wrong place, and no stored endplate was changed by this. Two test modules will look different because their drawn mainline stops short of their board; every other module is unaffected.
+
+### Added
+- **A note when your drawn mainline doesn't reach an endplate.** Instead of moving the plate to meet the track, the endplate panel now tells you how far short the track stops, and leaves both choices open: pull the mainline back onto the plate, or move the plate on purpose if the board really does end there.
+
+---
+
 ## v0.65.0 — 2026-08-01
 
 ### Added
