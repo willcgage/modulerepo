@@ -3602,7 +3602,17 @@ const ENDPLATE_TAB = 5; // ballast-shoulder band width, inches
     <div className="relative flex h-full min-h-0 flex-col">
       {/* Tool options (left) + view controls (right). Only the active tool's
           controls show — not a global toolbar. */}
-      <div className="mb-2 flex min-h-6 shrink-0 flex-wrap items-center gap-2 text-xs">
+      {/* ⭐ THE TOOL BAR IS BOUNDED, OR IT EATS THE BOARD. This row is
+          `shrink-0 flex-wrap` and holds the parts palette, so arming the
+          Turnout kind — 12 generic chips plus 24 products — wraps to seven
+          rows and simply takes the height it wants. The `<svg>` below gets
+          whatever is left, which on a laptop measured **80px**: a board
+          reduced to a sliver, which is what made this unusable at 1355% zoom.
+          ⚠️ Giving the COLUMN a scrollbar did not fix this on its own — the
+          squeeze happens inside here, between the bar and the canvas, so the
+          column had nothing to scroll. Bounding the bar is what gives the
+          board its height back; a long palette scrolls within the bar. */}
+      <div className="mb-2 flex max-h-[38vh] min-h-6 shrink-0 flex-wrap items-center gap-2 overflow-y-auto text-xs">
         {tool === "benchwork" ? (
           <>
             {editingLabel ? (

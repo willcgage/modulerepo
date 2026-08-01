@@ -5,6 +5,13 @@ Headings are `version — date` (YYYY-MM-DD).
 
 ---
 
+## v0.63.3 — 2026-08-01
+
+### Fixed
+- **The parts palette no longer squeezes the board out of existence.** Arming the Turnout kind lists three dozen products, and that bar took as much height as it wanted — leaving the board about 80 pixels tall, which is why it was being worked at 1355% zoom. The bar is now bounded and scrolls on its own, and the board keeps the rest of the space.
+
+---
+
 ## v0.63.2 — 2026-08-01
 
 ### Fixed
