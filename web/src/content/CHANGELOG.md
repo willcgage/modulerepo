@@ -5,6 +5,30 @@ Headings are `version — date` (YYYY-MM-DD).
 
 ---
 
+## v0.61.0 — 2026-08-01
+
+### Added
+- **You can name an endplate on the board.** Click an end and there's a Name box — a town, a railroad, a compass point. Leave it blank and it reads West and East as it always has.
+
+  This is the field that made the change below possible. Naming an end *looked* available before, on the module page, but the name never survived: the schematic wrote "West" and "East" into the module every time it saved, straight over whatever had been typed. Eleven modules are carrying a name that could not stick.
+
+### Changed
+- **The module page no longer has Endplates, Tracks or Industries sections.** All three are built on the board now, where you can see what you're changing — an endplate is placed on a fascia, an industry is a length of track cars actually stand on. The module page keeps what it is good at: the two views of the module, its photographs, and its CAD drawings.
+
+- **Creating a module is one path now.** The detailed wizard is gone — its offer was to enter endplates, tracks and industries up front, and those are the three things that moved onto the board. A module made that way arrived with endplates that had no position on any board and industries the first save of the schematic would remove. Name it, say what kind it is and how long the first board runs, and you are drawing. Everything else is still editable: name, description, category and MSS on the module's Edit page, geometry and lengths in the builder.
+
+  The rule behind it: **if the board owns something, the module page must not offer to edit it.** Every field that broke that rule was a silent-revert bug waiting to be found, and two of them were found — one owner set both ends to single track, watched it change, and watched it come back; an industry added on the module page was deleted by the next save of the board.
+
+- **The Edit page no longer sets the module's shape or length.** Those four fields — geometry, degrees, offset and footprint length — already existed on the board, in a better form: the board knows when a module is built from sections, so it steps aside for their shapes and stops you editing a length that is the sum of them. The Edit page's copy knew about sections for the shape and not for the length, so a length typed there on a sectioned module was quietly ignored. It keeps the things a board cannot tell you: name, description, category and MSS.
+
+- **The endplate count on a module page is counted from the board.** It used to be a tally of rows kept behind the scenes, which drifted both ways: a module with a third endplate placed on the board still said two, while another said three long after its document knew of only two.
+
+### Fixed
+- **The single/double choice on an endplate is no longer greyed out for a reason that stopped being true.** The board could disable that choice, and the mainline single/double buttons with it, saying it was *"set on the module's endplate records"* — pointing at a page that no longer offers it. The lock had in fact been switched off for some time; what was left was the machinery and the message. Both are gone.
+- **An endplate's name now reaches the catalogue.** The name shown on the board and the name the catalogue and Free-Dispatcher read are the same name, saved together.
+
+---
+
 ## v0.60.0 — 2026-07-31
 
 ### Added

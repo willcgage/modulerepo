@@ -1,28 +1,15 @@
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
-import { embeddedOne } from "@/lib/embedded";
 import { asModuleSchematic } from "@/lib/module-schematic";
 import { SchematicPreview } from "./schematic/schematic-preview";
 import { DeleteModuleButton } from "./delete-module-button";
 import { ModuleFootprintView, footprintInput } from "@/components/module-footprint-view";
 import { StatusBadge } from "@/components/status-badge";
+import { TextField, SubmitButton } from "@/components/form-fields";
 import {
-  TextField,
-  NumberField,
-  SelectField,
-  SubmitButton,
-} from "@/components/form-fields";
-import {
-  addEndplate,
-  addIndustry,
-  deleteEndplate,
   deleteImage,
-  deleteIndustry,
   deleteSchematic,
-  setIndustryCarTypes,
-  updateEndplate,
-  updateIndustry,
   updateModuleStatus,
   uploadImage,
   uploadSchematic,
@@ -32,11 +19,6 @@ const STATUS_OPTIONS = [
   { value: "active", label: "Active" },
   { value: "inactive", label: "Inactive" },
   { value: "archived", label: "Archived" },
-];
-
-const TRACK_CONFIG_OPTIONS = [
-  { value: "single", label: "Single" },
-  { value: "double", label: "Double" },
 ];
 
 const SCHEMATIC_FORMAT_LABELS: Record<string, string> = {
@@ -81,32 +63,7 @@ export default async function ModuleDetailPage({
   if (!module) notFound();
   const isOwner = module.owner_id === user.id;
 
-  const [
-    { data: endplates },
-    { data: tracks },
-    { data: industries },
-    { data: images },
-    { data: schematics },
-    { data: industryTypes },
-    { data: carTypeOptions },
-  ] = await Promise.all([
-    supabase
-      .from("freemon_endplates")
-      .select("id, endplate_number, label, track_config, width_inches, height_inches, notes")
-      .eq("module_id", moduleId)
-      .order("endplate_number"),
-    supabase
-      .from("module_tracks")
-      .select("id, track_number, label, track_name, capacity_scale_feet, notes")
-      .eq("module_id", moduleId)
-      .order("track_number"),
-    supabase
-      .from("freemon_industries")
-      .select(
-        "id, industry_number, label, industry_name, industry_type, track_id, notes, freemon_industry_car_types(id, car_type_id, rail_car_types(value, display_label))",
-      )
-      .eq("module_id", moduleId)
-      .order("industry_number"),
+  const [{ data: images }, { data: schematics }] = await Promise.all([
     supabase
       .from("module_images")
       .select("id, storage_path, caption, display_order")
@@ -117,27 +74,25 @@ export default async function ModuleDetailPage({
       .select("id, storage_path, file_name, file_format, caption, display_order")
       .eq("module_id", moduleId)
       .order("display_order"),
-    supabase.from("industry_types").select("value, display_label").order("display_label"),
-    supabase
-      .from("rail_car_types")
-      .select("id, value, display_label")
-      .eq("status", "active")
-      .order("display_label"),
   ]);
 
-  const trackFieldOptions = [
-    { value: "", label: "Mainline (no spur)" },
-    ...(tracks ?? []).map((t) => ({
-      value: String(t.id),
-      label: t.track_name ? `${t.label} — ${t.track_name}` : t.label,
-    })),
-  ];
-  const trackLabelById = new Map((tracks ?? []).map((t) => [t.id, t.label]));
+  const doc = asModuleSchematic(module.schematic);
 
-  const carTypeFieldOptions = (carTypeOptions ?? []).map((ct) => ({
-    value: String(ct.id),
-    label: ct.display_label,
-  }));
+  /**
+   * How many endplates this module presents — COUNTED FROM THE SCHEMATIC (#120).
+   *
+   * `freemon_modules.endplate_count` is maintained by a DB trigger on
+   * `freemon_endplates`, and `saveModuleSchematic` only writes rows for A and B.
+   * So the column was wrong in BOTH directions: FMN-0068 and FMN-0077 each have
+   * an endplate C placed on the board and reported 2, while FMN-0026 keeps a
+   * third row its document never knew about and reported 3.
+   *
+   * A count is a fact about the module, not a second way to edit it, so it stays
+   * — but it now reads the source of truth. A module with no document at all
+   * (FMN-0017, FMN-0024) still falls back to the column, which is the only thing
+   * that knows about its ends until someone opens the builder.
+   */
+  const endplateCount = doc?.endplates?.length ?? module.endplate_count;
 
   const imagesWithUrls = await Promise.all(
     (images ?? []).map(async (image) => {
@@ -223,7 +178,7 @@ export default async function ModuleDetailPage({
         {module.mainline_length_inches != null && module.mainline_length_inches !== module.length_total_inches && (
           <Fact label="Mainline length" value={`${module.mainline_length_inches}"`} />
         )}
-        <Fact label="Endplates" value={String(module.endplate_count)} />
+        <Fact label="Endplates" value={String(endplateCount)} />
         {module.geometry_degrees != null && (
           <Fact label="Curve degrees" value={String(module.geometry_degrees)} />
         )}
@@ -253,8 +208,8 @@ export default async function ModuleDetailPage({
                 What it looks like
               </h3>
               <ModuleFootprintView
-                input={footprintInput(module, asModuleSchematic(module.schematic))}
-                doc={asModuleSchematic(module.schematic)}
+                input={footprintInput(module, doc)}
+                doc={doc}
                 height={200}
               />
               <p className="mt-1 text-xs text-gray-400">
@@ -265,8 +220,8 @@ export default async function ModuleDetailPage({
               <h3 className="mb-1 text-xs font-semibold uppercase tracking-wide text-gray-500">
                 How it operates
               </h3>
-              {asModuleSchematic(module.schematic) ? (
-                <SchematicPreview doc={asModuleSchematic(module.schematic)!} />
+              {doc ? (
+                <SchematicPreview doc={doc} />
               ) : isOwner ? (
                 <Link
                   href={`/modules/${module.id}/schematic`}
@@ -279,7 +234,7 @@ export default async function ModuleDetailPage({
               )}
             </div>
           </div>
-          {isOwner && asModuleSchematic(module.schematic) && (
+          {isOwner && doc && (
             <Link
               href={`/modules/${module.id}/schematic`}
               className="inline-block text-sm text-blue-600 hover:underline"
@@ -290,223 +245,35 @@ export default async function ModuleDetailPage({
         </div>
       </Section>
 
-      {/* ---- Endplates ------------------------------------------------- */}
-      <Section title="Endplates">
-        {/* The schematic OWNS the track config: saving the schematic rewrites
-            these rows from the doc. Editing Track here therefore looked like it
-            worked and then silently reverted. Say so, and point at the field
-            that actually decides (#120). */}
-        <p className="mb-3 rounded-md bg-amber-50 px-3 py-2 text-xs text-amber-800">
-          Whether an end is single or double track is set in the{" "}
-          <Link href={`/modules/${module.id}/schematic`} className="font-medium underline">
-            schematic builder
-          </Link>{" "}
-          — click an endplate on the board. Saving the schematic rewrites these
-          rows from it, so changing Track here won&rsquo;t stick.
-        </p>
-        <ul className="space-y-3">
-          {(endplates ?? []).map((ep) => (
-            <li key={ep.id} className="rounded-lg border border-gray-200 bg-white p-4">
-              {isOwner ? (
-                <form action={updateEndplate.bind(null, ep.id, module.id)} className="space-y-3">
-                  <div className="flex items-center justify-between">
-                    <span className="text-sm font-semibold text-gray-900">{ep.label}</span>
-                    <button
-                      formAction={deleteEndplate.bind(null, ep.id, module.id)}
-                      className="text-xs font-medium text-red-600 hover:underline"
-                    >
-                      Delete
-                    </button>
-                  </div>
-                  <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
-                    <TextField label="Label" name="label" defaultValue={ep.label} maxLength={30} />
-                    <SelectField
-                      label="Track"
-                      name="track_config"
-                      defaultValue={ep.track_config}
-                      options={TRACK_CONFIG_OPTIONS}
-                      disabled
-                    />
-                    <NumberField label="Width (in)" name="width_inches" defaultValue={ep.width_inches ?? undefined} step="0.01" />
-                    <NumberField label="Height (in)" name="height_inches" defaultValue={ep.height_inches ?? undefined} step="0.01" required={false} />
-                    <TextField label="Notes" name="notes" defaultValue={ep.notes ?? ""} required={false} />
-                  </div>
-                  <SubmitButton label="Save" variant="secondary" />
-                </form>
-              ) : (
-                <div className="flex items-center justify-between text-sm">
-                  <span className="font-medium text-gray-900">{ep.label}</span>
-                  <span className="text-gray-600">
-                    {ep.track_config} · {ep.width_inches}&quot; wide
-                    {ep.height_inches != null ? ` · ${ep.height_inches}" tall` : ""}
-                  </span>
-                </div>
-              )}
-            </li>
-          ))}
-        </ul>
+      {/* ⛔ THE ENDPLATES, TRACKS AND INDUSTRIES SECTIONS ARE GONE (#120).
+          Will, 2026-07-31: *"we should move the endplate creation to the
+          schematic builder instead of on this page. The track section is
+          already a part of the schematic builder, so it can be removed along
+          with Industries."*
 
-        {isOwner && (
-          <form action={addEndplate.bind(null, module.id)} className="mt-4 rounded-lg border border-dashed border-gray-300 p-4">
-            <p className="mb-3 text-sm font-medium text-gray-700">Add endplate</p>
-            <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
-              <TextField label="Label (e.g. West)" name="label" required={false} maxLength={30} />
-              <SelectField label="Track" name="track_config" defaultValue="single" options={TRACK_CONFIG_OPTIONS} />
-              <NumberField label="Width (in)" name="width_inches" step="0.01" />
-              <NumberField label="Height (in)" name="height_inches" step="0.01" required={false} />
-              <TextField label="Notes" name="notes" required={false} />
-            </div>
-            <SubmitButton label="Add endplate" />
-          </form>
-        )}
-      </Section>
+          The rule they broke — and it is the rule, not a preference: IF THE
+          SCHEMATIC DOC OWNS A VALUE, THIS PAGE MUST NOT OFFER TO EDIT IT.
+          Every field that did was a silent-revert bug waiting to be reported,
+          and two of them were reported:
 
-      {/* ---- Tracks (derived from the schematic builder) ----------------- */}
-      <Section title="Tracks">
-        <p className="mb-3 text-sm text-gray-500">
-          Tracks are managed in the operations schematic builder — capacity is
-          computed from each track&apos;s length (N scale).
-        </p>
-        {(tracks ?? []).length === 0 ? (
-          <p className="text-sm text-gray-500">No tracks yet.</p>
-        ) : (
-          <ul className="divide-y divide-gray-200 rounded-lg border border-gray-200 bg-white">
-            {(tracks ?? []).map((track) => (
-              <li key={track.id} className="flex items-center justify-between p-3 text-sm">
-                <span className="font-medium text-gray-900">
-                  {track.track_name || track.label || `Track ${track.id}`}
-                </span>
-                <span className="text-gray-600">
-                  {track.capacity_scale_feet != null
-                    ? `${track.capacity_scale_feet} scale ft`
-                    : "—"}
-                </span>
-              </li>
-            ))}
-          </ul>
-        )}
-        {isOwner && (
-          <Link
-            href={`/modules/${module.id}/schematic`}
-            className="mt-3 inline-block text-sm text-blue-600 hover:underline"
-          >
-            Manage tracks in the schematic builder →
-          </Link>
-        )}
-      </Section>
+          · Endplate Track (single/double) — `saveModuleSchematic` rewrites
+            `freemon_endplates` from the doc, so an owner set both ends single,
+            saw it change, and watched it come back. The stopgap was a disabled
+            select pointing at the builder; this is the fix.
+          · An industry added here — the same save DELETES any
+            `freemon_industries` row the doc does not carry, so this form's
+            output was destroyed by the next schematic save.
 
-      {/* ---- Industries ------------------------------------------------ */}
-      <Section title="Industries">
-        <ul className="space-y-4">
-          {(industries ?? []).map((industry) => {
-            const linkedIds = new Set(
-              industry.freemon_industry_car_types?.map((j) => j.car_type_id) ?? [],
-            );
-            return (
-              <li key={industry.id} className="rounded-lg border border-gray-200 bg-white p-4">
-                {isOwner ? (
-                  <>
-                    <form action={updateIndustry.bind(null, industry.id, module.id)} className="space-y-3">
-                      <div className="flex items-center justify-between">
-                        <span className="text-sm font-semibold text-gray-900">{industry.label}</span>
-                        <button
-                          formAction={deleteIndustry.bind(null, industry.id, module.id)}
-                          className="text-xs font-medium text-red-600 hover:underline"
-                        >
-                          Delete
-                        </button>
-                      </div>
-                      <div className="grid grid-cols-2 gap-4">
-                        <TextField label="Name" name="industry_name" defaultValue={industry.industry_name} maxLength={120} />
-                        <SelectField
-                          label="Type"
-                          name="industry_type"
-                          defaultValue={industry.industry_type}
-                          options={(industryTypes ?? []).map((t) => ({ value: t.value, label: t.display_label }))}
-                        />
-                      </div>
-                      <div className="grid grid-cols-2 gap-4">
-                        <SelectField
-                          label="Track"
-                          name="track_id"
-                          defaultValue={industry.track_id != null ? String(industry.track_id) : ""}
-                          required={false}
-                          options={trackFieldOptions}
-                        />
-                        <TextField label="Notes" name="notes" defaultValue={industry.notes ?? ""} required={false} />
-                      </div>
-                      <SubmitButton label="Save" variant="secondary" />
-                    </form>
+          Creation moves too, not just configuration. A 3rd+ endplate is PLACED
+          on the board (`at.pos` / `at.side` / a pose), and this page could not
+          place one — so anything it created was half an endplate: a row with no
+          position. That is not untidy, it is a hole in live geometry, because
+          as of module-schematic 0.120.0 THE ENDPLATE DECIDES WHICH SIDE A ROUTE
+          LEAVES ON.
 
-                    <form action={setIndustryCarTypes.bind(null, industry.id, module.id)} className="mt-3 border-t border-gray-100 pt-3">
-                      <p className="mb-2 text-xs font-medium text-gray-500">Rail car types served</p>
-                      <div className="flex flex-wrap gap-3">
-                        {carTypeFieldOptions.map((ct) => (
-                          <label key={ct.value} className="flex items-center gap-1.5 text-xs text-gray-700">
-                            <input
-                              type="checkbox"
-                              name="car_type_ids"
-                              value={ct.value}
-                              defaultChecked={linkedIds.has(Number(ct.value))}
-                              className="h-3.5 w-3.5 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
-                            />
-                            {ct.label}
-                          </label>
-                        ))}
-                      </div>
-                      <button
-                        type="submit"
-                        className="mt-2 rounded-md border border-gray-300 px-3 py-1 text-xs font-medium text-gray-700 hover:bg-gray-50"
-                      >
-                        Save car types
-                      </button>
-                    </form>
-                  </>
-                ) : (
-                  <div>
-                    <p className="text-sm font-medium text-gray-900">
-                      {industry.label} — {industry.industry_name}
-                    </p>
-                    <p className="mt-1 text-xs text-gray-600">
-                      {industry.industry_type} ·{" "}
-                      {industry.track_id != null
-                        ? trackLabelById.get(industry.track_id) ?? "Mainline"
-                        : "Mainline"}
-                    </p>
-                    {(industry.freemon_industry_car_types?.length ?? 0) > 0 && (
-                      <p className="mt-1 text-xs text-gray-600">
-                        Car types:{" "}
-                        {industry.freemon_industry_car_types
-                          ?.map((j) => embeddedOne(j.rail_car_types)?.display_label)
-                          .filter(Boolean)
-                          .join(", ")}
-                      </p>
-                    )}
-                  </div>
-                )}
-              </li>
-            );
-          })}
-        </ul>
-
-        {isOwner && (
-          <form action={addIndustry.bind(null, module.id)} className="mt-4 rounded-lg border border-dashed border-gray-300 p-4">
-            <p className="mb-3 text-sm font-medium text-gray-700">Add industry</p>
-            <div className="grid grid-cols-2 gap-4">
-              <TextField label="Name" name="industry_name" maxLength={120} />
-              <SelectField
-                label="Type"
-                name="industry_type"
-                placeholder="Select a type…"
-                options={(industryTypes ?? []).map((t) => ({ value: t.value, label: t.display_label }))}
-              />
-            </div>
-            <SelectField label="Track" name="track_id" required={false} options={trackFieldOptions} />
-            <TextField label="Notes" name="notes" required={false} />
-            <SubmitButton label="Add industry" />
-          </form>
-        )}
-      </Section>
+          Naming an end moved to the builder's endplate inspector, which needed
+          module-schematic 0.123.0 — until then `stateToDoc` wrote a constant
+          "West"/"East" over any name that got into the doc. */}
 
       {/* ---- Images ----------------------------------------------------- */}
       <Section title="Images">

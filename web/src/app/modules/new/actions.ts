@@ -3,7 +3,6 @@
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { suggestCarType, validateModuleName } from "@/lib/edge";
-import { inchesToScaleFeet } from "@willcgage/module-schematic";
 
 export type BasicsInput = {
   module_name: string;
@@ -18,30 +17,12 @@ export type BasicsInput = {
   mss_type: string; // "" | "crossover" | "cascade" — only meaningful when has_mss
 };
 
-export type EndplateInput = {
-  endplate_number: number;
-  label: string;
-  track_config: string;
-  width_inches: string;
-  height_inches: string;
-  notes: string;
-};
-
-export type TrackInput = {
-  track_name: string;
-  /** MEASURED usable length in real inches — what an owner puts a tape to.
-   * Scale feet are derived from it (#20); nobody measures in scale feet. */
-  usable_inches: string;
-  notes: string;
-};
-
-export type IndustryInput = {
-  industry_name: string;
-  industry_type: string;
-  track_index: string; // "" = mainline (no spur), otherwise index into tracks[]
-  notes: string;
-  car_type_values: string[];
-};
+// ⛔ EndplateInput / TrackInput / IndustryInput are GONE with the detailed
+// wizard (#120). A module is no longer BORN with endplates, tracks and
+// industries typed up front: all three are authored on the board, where they
+// can be placed. Creating them here made rows the schematic did not know
+// about, from the very first moment of a module's life — an endplate with no
+// position, and an industry the first schematic save would delete.
 
 export async function checkModuleName(moduleName: string) {
   if (!moduleName.trim()) return { valid: true as const };
@@ -65,9 +46,6 @@ function toNullableNumber(value: string): number | null {
 
 export async function createModule(
   basics: BasicsInput,
-  endplates: EndplateInput[],
-  tracks: TrackInput[],
-  industries: IndustryInput[],
 ): Promise<{ error: string } | void> {
   const supabase = await createClient();
   const {
@@ -105,105 +83,8 @@ export async function createModule(
 
   const moduleId = module.id;
 
-  if (endplates.length > 0) {
-    const { error: endplatesError } = await supabase
-      .from("freemon_endplates")
-      .insert(
-        endplates.map((ep) => ({
-          module_id: moduleId,
-          endplate_number: ep.endplate_number,
-          label: ep.label.trim() || null,
-          track_config: ep.track_config,
-          width_inches: toNullableNumber(ep.width_inches),
-          height_inches: toNullableNumber(ep.height_inches),
-          notes: ep.notes.trim() || null,
-        })),
-      );
-
-    if (endplatesError) {
-      redirect(
-        `/modules/${moduleId}/edit?warning=${encodeURIComponent(
-          `Module created, but endplates could not be saved: ${endplatesError.message}. Add them here.`,
-        )}`,
-      );
-    }
-  }
-
-  let trackIds: number[] = [];
-  if (tracks.length > 0) {
-    const { data: createdTracks, error: tracksError } = await supabase
-      .from("module_tracks")
-      .insert(
-        tracks.map((track) => ({
-          module_id: moduleId,
-          track_name: track.track_name.trim() || null,
-          // Real inches in, scale feet stored — the column is unchanged, only
-          // what the owner is asked for (#20).
-          capacity_scale_feet: (() => {
-            const inches = Number(track.usable_inches);
-            return Number.isFinite(inches) && inches > 0
-              ? Math.round(inchesToScaleFeet(inches))
-              : null;
-          })(),
-          notes: track.notes.trim() || null,
-        })),
-      )
-      .select("id");
-
-    if (tracksError || !createdTracks) {
-      redirect(
-        `/modules/${moduleId}/edit?warning=${encodeURIComponent(
-          `Module created, but tracks could not be saved: ${tracksError?.message ?? "unknown error"}. Add them here.`,
-        )}`,
-      );
-    }
-
-    trackIds = createdTracks.map((t) => t.id);
-  }
-
-  for (const industry of industries) {
-    const trackId = industry.track_index === "" ? null : trackIds[Number(industry.track_index)] ?? null;
-
-    const { data: createdIndustry, error: industryError } = await supabase
-      .from("freemon_industries")
-      .insert({
-        module_id: moduleId,
-        industry_name: industry.industry_name.trim(),
-        industry_type: industry.industry_type,
-        track_id: trackId,
-        notes: industry.notes.trim() || null,
-      })
-      .select("id")
-      .single();
-
-    if (industryError || !createdIndustry) {
-      redirect(
-        `/modules/${moduleId}/edit?warning=${encodeURIComponent(
-          `Module created, but "${industry.industry_name}" could not be saved: ${
-            industryError?.message ?? "unknown error"
-          }. Add it here.`,
-        )}`,
-      );
-    }
-
-    if (industry.car_type_values.length > 0) {
-      const { data: carTypes } = await supabase
-        .from("rail_car_types")
-        .select("id, value")
-        .in("value", industry.car_type_values);
-
-      if (carTypes && carTypes.length > 0) {
-        await supabase.from("freemon_industry_car_types").insert(
-          carTypes.map((ct) => ({
-            industry_id: createdIndustry.id,
-            car_type_id: ct.id,
-          })),
-        );
-      }
-    }
-  }
-
-  // Land in the schematic builder — the wizard's final step — where the owner
-  // lays out the mainline, positions their tracks, and adds turnouts and signals.
+  // Land in the schematic builder — where a module is actually authored: the
+  // mainline, the track, the endplates it presents and the industries it
+  // serves are all drawn there, on a board, in the place they physically sit.
   redirect(`/modules/${moduleId}/schematic?new=1`);
 }

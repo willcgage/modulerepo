@@ -46,6 +46,7 @@ import {
   measuredAlongPath,
   turnoutDivergingLeg,
   checkEndplateWidth,
+  defaultEndplateLabel,
   flexPieces,
   flexUsage,
   flexParts,
@@ -163,7 +164,6 @@ export function SchematicEditor({
   initial,
   newModule = false,
   readOnly = false,
-  lockedConfigs = { a: false, b: false },
   geometries = [],
   industryTypes = [],
   carTypes = [],
@@ -181,7 +181,6 @@ export function SchematicEditor({
   readOnly?: boolean;
   /** True when the module's endplate records define the config — the selects
    * mirror them read-only (edit endplates on the module page instead). */
-  lockedConfigs?: { a: boolean; b: boolean };
   /** Geometry choices from the lookup table (which need degrees / offset). */
   geometries?: {
     value: string;
@@ -1085,6 +1084,18 @@ export function SchematicEditor({
       else delete s.endplateWidths[id];
     });
 
+  /** Store the owner's name for endplate A or B, or clear it back to the
+   * default word (#120). Blank means UNNAMED, not "an endplate called nothing":
+   * an end with no name has always read as West/East on the board, and emptying
+   * the label would leave the plate anonymous everywhere it is drawn. */
+  const setEndplateLabel = (id: string, raw: string) =>
+    patch((s) => {
+      if (!s.endplateLabels) s.endplateLabels = {};
+      const name = raw.trim();
+      if (name) s.endplateLabels[id] = raw;
+      else delete s.endplateLabels[id];
+    });
+
   /** Which board the bench-work tool is shaping. An outline belongs to a
    * SECTION now, so "the outline" is only meaningful once you say whose (#96
    * phase 2b). Defaults to the first section below. */
@@ -1780,8 +1791,6 @@ export function SchematicEditor({
       const touchesA = lo2 <= plateEps;
       const touchesB = hi2 >= s.lengthInches - plateEps;
       if (!touchesA && !touchesB) return;
-      // Endplate records are authoritative — never override a locked config.
-      if ((touchesA && lockedConfigs.a) || (touchesB && lockedConfigs.b)) return;
       repoint(A.id, MAIN2_TRACK_ID);
       s.extraTracks.splice(s.extraTracks.findIndex((t) => t.id === A.id), 1);
       select = null;
@@ -1831,7 +1840,6 @@ export function SchematicEditor({
       const eps = 0.5;
       const atFarPlate = aD ? sw.pos >= s.lengthInches - eps : sw.pos <= eps;
       if (!atFarPlate) return;
-      if (aD ? lockedConfigs.b : lockedConfigs.a) return;
       if (aD) s.configB = "double";
       else s.configA = "double";
       s.turnouts.splice(s.turnouts.findIndex((x) => x.id === sw.id), 1);
@@ -2165,7 +2173,6 @@ export function SchematicEditor({
     <AddTrackMenu
       add={trackAdd}
       mainlineDouble={isDouble}
-      mainlineLocked={lockedConfigs.a || lockedConfigs.b}
       canCrossover={canCrossover}
       turnoutCount={state.turnouts.length}
       align="left"
@@ -2374,10 +2381,10 @@ export function SchematicEditor({
             setDim={setDim}
             geometries={geometries}
             geoSpec={geoSpec}
-            lockedConfigs={lockedConfigs}
             derivedPoses={derivedPoses}
             wantsManualPose={wantsManualPose}
             setEndplateWidth={setEndplateWidth}
+            setEndplateLabel={setEndplateLabel}
             setEndplateTrackOffset={setEndplateTrackOffset}
             setSections={setSections}
             countOnSection={countOnSection}
@@ -2411,7 +2418,6 @@ export function SchematicEditor({
             mains={mainRows}
             flex={flexByTrack}
             mainlineDouble={isDouble}
-            mainlineLocked={lockedConfigs.a || lockedConfigs.b}
             endplates={poses.map((p) => ({ id: p.id, config: p.trackConfig }))}
             undeclaredCrossings={undeclaredCrossings}
           />
@@ -3341,10 +3347,10 @@ function Inspector({
   setDim,
   geometries,
   geoSpec,
-  lockedConfigs,
   derivedPoses,
   wantsManualPose,
   setEndplateWidth,
+  setEndplateLabel,
   setEndplateTrackOffset,
   setSections,
   countOnSection,
@@ -3398,10 +3404,10 @@ function Inspector({
   setDim: (p: Partial<ModuleDimensions>) => void;
   geometries: { value: string; display_label: string; requires_degrees: boolean; requires_offset_inches: boolean }[];
   geoSpec?: { requires_degrees: boolean; requires_offset_inches: boolean };
-  lockedConfigs: { a: boolean; b: boolean };
   derivedPoses: EndplatePose[];
   wantsManualPose: boolean;
   setEndplateWidth: (id: string, raw: string) => void;
+  setEndplateLabel: (id: string, raw: string) => void;
   setEndplateTrackOffset: (id: string, raw: string) => void;
   setSections: (next: SchematicSection[]) => void;
   /** How many placed objects stand on a board — the remove guard (#195). */
@@ -3823,7 +3829,6 @@ function Inspector({
     // A/B are the schematic's drawing axis; C+ are authored branches.
     const bi = id.charCodeAt(0) - 67;
     const branch = bi >= 0 ? state.branches[bi] : undefined;
-    const locked = (id === "A" && lockedConfigs.a) || (id === "B" && lockedConfigs.b && !state.loop);
     // The benchwork's edges, as things an endplate can BE (ADR 0001). A curved
     // edge is offered but disabled rather than hidden, so it is clear why it
     // can't be chosen instead of leaving someone hunting for a missing option.
@@ -3914,7 +3919,29 @@ function Inspector({
             </p>
           </>
         ) : (
-          <label className="block text-xs font-medium text-gray-600">
+          <>
+            {/* ⭐ NAMING AN END LIVES HERE NOW (#120). It used to be on the
+                module detail page, and it never worked: `stateToDoc` wrote the
+                constant "West"/"East" into the document, and the next save
+                copied that back over the row. Eleven modules carry a real name
+                — "UP Spokane N", "South EP" — that could not survive a save.
+                Blank means unnamed, and an unnamed end still reads West/East. */}
+            <label className="block text-xs font-medium text-gray-600">
+              Name
+              <input
+                value={state.endplateLabels?.[id] ?? ""}
+                onChange={(e) => setEndplateLabel(id, e.target.value)}
+                className={`mt-0.5 ${inp}`}
+                maxLength={30}
+                placeholder={defaultEndplateLabel(id as "A" | "B", state.loop)}
+              />
+            </label>
+            <p className="text-[11px] text-gray-400">
+              The owner&rsquo;s word for this end — a town, a railroad, a
+              compass point. Leave it blank to use{" "}
+              {defaultEndplateLabel(id as "A" | "B", state.loop)}.
+            </p>
+            <label className="block text-xs font-medium text-gray-600">
             {id === "A"
               ? state.loop
                 ? "Entry (A) main track"
@@ -3924,25 +3951,20 @@ function Inspector({
                 : "End B main track"}
             <select
               value={id === "A" ? state.configA : state.configB}
-              disabled={locked}
-              title={
-                locked
-                  ? "Mirrors the module's endplate record — change it in the module's Endplates section."
-                  : undefined
-              }
               onChange={(e) =>
                 patch((s) => {
                   if (id === "A") s.configA = e.target.value as "single" | "double";
                   else s.configB = e.target.value as "single" | "double" | "none";
                 })
               }
-              className={`mt-0.5 ${inp} ${locked ? "bg-gray-50 text-gray-600" : ""}`}
+              className={`mt-0.5 ${inp}`}
             >
               {id === "B" && state.loop && <option value="none">None — pure turnback</option>}
               <option value="single">Single</option>
               <option value="double">Double</option>
             </select>
-          </label>
+            </label>
+          </>
         )}
 
         {/* Endplate FACE width — the physical size of the standard interface at
@@ -5549,9 +5571,7 @@ function Inspector({
         t.role !== "crossover" &&
         state.configA !== "double" &&
         state.configB !== "double" &&
-        !state.loop &&
-        !lockedConfigs.a &&
-        !lockedConfigs.b && (
+        !state.loop && (
           <button
             type="button"
             onClick={() => {
@@ -5698,7 +5718,6 @@ function CarTypeSuggest({
 function AddTrackMenu({
   add,
   mainlineDouble,
-  mainlineLocked,
   canCrossover,
   turnoutCount,
   align = "right",
@@ -5710,7 +5729,6 @@ function AddTrackMenu({
     mainline: (config: "single" | "double") => void;
   };
   mainlineDouble: boolean;
-  mainlineLocked: boolean;
   canCrossover: boolean;
   turnoutCount: number;
   align?: "left" | "right";
@@ -5743,17 +5761,12 @@ function AddTrackMenu({
               Already on the board — it runs the length of the module. These
               choose how many tracks it is.
             </div>
-            <button type="button" className={item} disabled={mainlineLocked} onClick={() => run(() => add.mainline("single"))}>
+            <button type="button" className={item} onClick={() => run(() => add.mainline("single"))}>
               <span className="w-3 text-blue-600">{!mainlineDouble ? "●" : "○"}</span> Single track
             </button>
-            <button type="button" className={item} disabled={mainlineLocked} onClick={() => run(() => add.mainline("double"))}>
+            <button type="button" className={item} onClick={() => run(() => add.mainline("double"))}>
               <span className="w-3 text-blue-600">{mainlineDouble ? "●" : "○"}</span> Double track
             </button>
-            {mainlineLocked && (
-              <div className="px-2 py-0.5 text-[10px] text-gray-400">
-                Set on the module&rsquo;s endplate records.
-              </div>
-            )}
             <div className="my-1 border-t border-gray-100" />
             <button
               type="button"
@@ -5799,7 +5812,6 @@ function ObjectsList({
   mains,
   flex,
   mainlineDouble,
-  mainlineLocked,
   endplates,
   undeclaredCrossings,
 }: {
@@ -5826,7 +5838,6 @@ function ObjectsList({
     { pieces: FlexPiece[]; partId: string; authored: boolean; runInches: number; alongPath: boolean; unmapped: boolean }
   >;
   mainlineDouble: boolean;
-  mainlineLocked: boolean;
   endplates: { id: string; config?: string }[];
   /** Crossings the drawing implies that nobody authored (#crossings). */
   undeclaredCrossings: ImplicitCrossing[];
@@ -5947,7 +5958,6 @@ function ObjectsList({
           <AddTrackMenu
             add={add}
             mainlineDouble={mainlineDouble}
-            mainlineLocked={mainlineLocked}
             canCrossover={canCrossover}
             turnoutCount={state.turnouts.length}
           />

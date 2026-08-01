@@ -1,7 +1,6 @@
 "use client";
 
 import { useState, useTransition } from "react";
-import Link from "next/link";
 import { checkModuleName, createModule, type BasicsInput } from "./actions";
 
 type Option = { value: string; display_label: string };
@@ -13,7 +12,8 @@ const inp =
  * The fast path to a new module: just what's needed to start drawing — name,
  * category and footprint length — then straight to the canvas with a blank
  * board. The mainline, track and industries are drawn there, layer by layer,
- * not up front. The detailed wizard stays one link away for anyone who wants it.
+ * not up front — which as of #120 is the ONLY way to author them, so this is
+ * now the single path to a new module rather than the fast one of two.
  */
 export function QuickCreate({
   categories,
@@ -63,8 +63,7 @@ export function QuickCreate({
       mss_type: "",
     };
     startTransition(async () => {
-      // No endplates / tracks / industries — those are drawn on the canvas.
-      const result = await createModule(basics, [], [], []);
+      const result = await createModule(basics);
       if (result && "error" in result) setError(result.error);
       // On success createModule redirects to the schematic canvas.
     });
@@ -139,12 +138,14 @@ export function QuickCreate({
         </button>
       </div>
 
-      <p className="mt-4 border-t border-gray-100 pt-4 text-center text-xs text-gray-500">
-        Prefer to enter endplates, tracks and industries up front?{" "}
-        <Link href="/modules/new/wizard" className="font-medium text-blue-600 hover:underline">
-          Use the detailed wizard →
-        </Link>
-      </p>
+      {/* ⛔ THE LINK TO THE DETAILED WIZARD IS GONE (#120), and so is the
+          wizard. Its whole offer was *"enter endplates, tracks and industries
+          up front"* — the three things that moved onto the board, because none
+          of them can be PLACED in a form. What it produced was a module born
+          with rows the schematic did not know about. Everything else it asked
+          for is still editable: name, description, category and MSS on the
+          module's Edit page, geometry and lengths in the builder's first
+          stage. */}
     </div>
   );
 }
