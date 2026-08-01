@@ -2254,9 +2254,21 @@ export function SchematicEditor({
       {/* Body: tool rail | canvas (+ dispatcher strip) | inspector */}
       <div className="flex min-h-0 flex-1">
         <ToolRail tool={tool} setTool={setTool} />
-        <div className="flex min-w-0 flex-1 flex-col">
+        {/* ⭐ THE CENTRE COLUMN SCROLLS. The page is `h-dvh overflow-hidden` —
+            "an editor is not an article… each panel scrolls itself" — and the
+            right-hand inspector duly got `overflow-y-auto`. This column never
+            did, so anything taller than the viewport was simply unreachable.
+            Arming the Turnout kind prints ~36 product chips; that palette plus
+            the canvas plus the dispatcher preview is well past a laptop's
+            height, and the canvas gets crushed to a sliver with no way to
+            scroll to the rest (Will, 2026-08-01: "this main area is not
+            scrollable. This makes the UI a bit more challenging to work on").
+            ⚠️ The canvas keeps a floor height so it can't be squeezed to
+            nothing by a tall palette — without it, `flex-1` inside a scrolling
+            column collapses instead of scrolling. */}
+        <div className="flex min-w-0 flex-1 flex-col overflow-y-auto">
           <div className="flex min-h-0 flex-1 flex-col p-3">
-            <div className="min-h-0 flex-1 rounded-lg border border-gray-200 bg-white p-2">
+            <div className="min-h-[28rem] flex-1 rounded-lg border border-gray-200 bg-white p-2">
               <BenchworkEditor
                 outline={activeSection ? (activeSection.outline ?? []) : state.outline}
                 // The loop's donut hole — only for the whole-module board, not a
