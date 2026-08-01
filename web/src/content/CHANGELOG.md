@@ -19,6 +19,8 @@ Headings are `version — date` (YYYY-MM-DD).
 
   The rule behind it: **if the board owns something, the module page must not offer to edit it.** Every field that broke that rule was a silent-revert bug waiting to be found, and two of them were found — one owner set both ends to single track, watched it change, and watched it come back; an industry added on the module page was deleted by the next save of the board.
 
+- **The Edit page no longer sets the module's shape or length.** Those four fields — geometry, degrees, offset and footprint length — already existed on the board, in a better form: the board knows when a module is built from sections, so it steps aside for their shapes and stops you editing a length that is the sum of them. The Edit page's copy knew about sections for the shape and not for the length, so a length typed there on a sectioned module was quietly ignored. It keeps the things a board cannot tell you: name, description, category and MSS.
+
 - **The endplate count on a module page is counted from the board.** It used to be a tally of rows kept behind the scenes, which drifted both ways: a module with a third endplate placed on the board still said two, while another said three long after its document knew of only two.
 
 ### Fixed

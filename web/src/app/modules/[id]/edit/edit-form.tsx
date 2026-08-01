@@ -5,13 +5,6 @@ import { useRouter } from "next/navigation";
 import { updateModuleBasics, type BasicsUpdate } from "./actions";
 
 type Category = { value: string; display_label: string };
-type Geometry = {
-  value: string;
-  display_label: string;
-  requires_degrees: boolean;
-  requires_offset_inches: boolean;
-};
-
 const inputClass =
   "mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 text-gray-900 shadow-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500";
 const labelClass = "block text-sm font-medium text-gray-700";
@@ -20,22 +13,15 @@ export function EditModuleForm({
   moduleId,
   initial,
   categories,
-  geometries,
-  hasSections = false,
 }: {
   moduleId: number;
   initial: BasicsUpdate;
   categories: Category[];
-  geometries: Geometry[];
-  /** The module is built from sections, which own its shape and length. */
-  hasSections?: boolean;
 }) {
   const router = useRouter();
   const [values, setValues] = useState<BasicsUpdate>(initial);
   const [error, setError] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
-
-  const selectedGeometry = geometries.find((g) => g.value === values.geometry_type);
 
   function set<K extends keyof BasicsUpdate>(key: K, value: BasicsUpdate[K]) {
     setValues((v) => ({ ...v, [key]: value }));
@@ -79,105 +65,30 @@ export function EditModuleForm({
         />
       </label>
 
-      <div className="mb-4 grid grid-cols-2 gap-4">
-        <label className={labelClass}>
-          Category
-          <select
-            className={inputClass}
-            value={values.category}
-            onChange={(e) => set("category", e.target.value)}
-            required
-          >
-            {categories.map((c) => (
-              <option key={c.value} value={c.value}>
-                {c.display_label}
-              </option>
-            ))}
-          </select>
-        </label>
-        <label className={labelClass}>
-          Geometry
-          {hasSections && <span className="text-gray-400"> (set per section)</span>}
-          <select
-            className={`${inputClass} ${hasSections ? "bg-gray-100 text-gray-600" : ""}`}
-            value={values.geometry_type}
-            disabled={hasSections}
-            title={
-              hasSections
-                ? "This module is built from sections, and each one carries its own shape — change them in the schematic builder."
-                : undefined
-            }
-            onChange={(e) => {
-              set("geometry_type", e.target.value);
-              set("geometry_degrees", "");
-              set("geometry_offset_inches", "");
-            }}
-            required
-          >
-            {geometries.map((g) => (
-              <option key={g.value} value={g.value}>
-                {g.display_label}
-              </option>
-            ))}
-          </select>
-        </label>
-      </div>
+      <label className={`${labelClass} mb-4 block`}>
+        Category
+        <select
+          className={inputClass}
+          value={values.category}
+          onChange={(e) => set("category", e.target.value)}
+          required
+        >
+          {categories.map((c) => (
+            <option key={c.value} value={c.value}>
+              {c.display_label}
+            </option>
+          ))}
+        </select>
+      </label>
 
-      {hasSections && (
-        <p className="mb-4 rounded-md bg-amber-50 px-3 py-2 text-xs text-amber-800">
-          This module is built from sections. Each one carries its own length
-          and shape, and the module&rsquo;s overall geometry and length are
-          derived from them — so these fields are set in the schematic builder,
-          not here. Editing them would be ignored.
-        </p>
-      )}
-      {!hasSections && selectedGeometry?.requires_degrees && (
-        <label className={`${labelClass} mb-4 block`}>
-          Curve degrees
-          <input
-            className={inputClass}
-            type="number"
-            min="1"
-            max="359"
-            step="0.001"
-            value={values.geometry_degrees}
-            onChange={(e) => set("geometry_degrees", e.target.value)}
-            required
-          />
-        </label>
-      )}
-      {!hasSections && selectedGeometry?.requires_offset_inches && (
-        <label className={`${labelClass} mb-4 block`}>
-          Offset (inches)
-          <input
-            className={inputClass}
-            type="number"
-            step="0.01"
-            value={values.geometry_offset_inches}
-            onChange={(e) => set("geometry_offset_inches", e.target.value)}
-            required
-          />
-        </label>
-      )}
-
-      <div className="mb-1">
-        <label className={`${labelClass} mb-1 block`}>
-          Module footprint length (inches)
-          <input
-            className={inputClass}
-            type="number"
-            min="0.001"
-            step="0.001"
-            value={values.length_total_inches}
-            onChange={(e) => set("length_total_inches", e.target.value)}
-            required
-          />
-        </label>
-        <p className="mb-4 text-xs text-gray-500">
-          The physical end-to-end length of the module itself.
-        </p>
-      </div>
-
+      {/* ⛔ GEOMETRY, DEGREES, OFFSET AND FOOTPRINT LENGTH ARE GONE (#120).
+          They are edited in the schematic builder's Module panel, which is the
+          better copy of the same four fields: it knows about SECTIONS, so it
+          hides the module-level shape once the boards carry their own and
+          disables a length derived from them. This page had the `hasSections`
+          guard on the geometry and NONE on the length — the trap spotted and
+          half-fixed. Its own comment said so: *"Same trap as the endplate
+          config on the detail page."* */}
       <label className="mb-4 flex items-center gap-2 text-sm font-medium text-gray-700">
         <input
           type="checkbox"

@@ -5,25 +5,30 @@ import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { validateModuleName } from "@/lib/edge";
 
+/**
+ * The module's NON-GEOMETRIC facts — the ones a board cannot tell you.
+ *
+ * ⛔ GEOMETRY AND LENGTH ARE NOT HERE ANY MORE (#120). `geometry_type`,
+ * `geometry_degrees`, `geometry_offset_inches` and `length_total_inches` are
+ * edited in the schematic builder's Module panel, which has always been the
+ * better copy: it knows about SECTIONS, so it hides the module-level shape once
+ * the boards carry their own and disables a length that is derived from them.
+ * This page offered the same four with a `hasSections` guard on the geometry and
+ * NONE on the length — half the trap, spotted and half-fixed, its own comment
+ * reading *"Same trap as the endplate config on the detail page"*.
+ *
+ * ⚠️ `mainline_length_inches` is gone from here too, and NOT because it moved:
+ * it never had an input on this page at all — it was round-tripped through the
+ * form untouched. See #120's audit; it is read by the builder as the basis for
+ * the entire canvas and is authored NOWHERE, which is its own issue.
+ */
 export type BasicsUpdate = {
   module_name: string;
   description: string;
   category: string;
-  geometry_type: string;
-  geometry_degrees: string;
-  geometry_offset_inches: string;
-  length_total_inches: string;
-  mainline_length_inches: string;
   has_mss: boolean;
   mss_type: string; // "" | "crossover" | "cascade" — only meaningful when has_mss
 };
-
-function toNullableNumber(value: string): number | null {
-  const trimmed = value.trim();
-  if (!trimmed) return null;
-  const num = Number(trimmed);
-  return Number.isFinite(num) ? num : null;
-}
 
 export async function updateModuleBasics(
   moduleId: number,
@@ -59,11 +64,6 @@ export async function updateModuleBasics(
       module_name: trimmedName,
       description: input.description.trim() || null,
       category: input.category,
-      geometry_type: input.geometry_type,
-      geometry_degrees: toNullableNumber(input.geometry_degrees),
-      geometry_offset_inches: toNullableNumber(input.geometry_offset_inches),
-      length_total_inches: Number(input.length_total_inches),
-      mainline_length_inches: toNullableNumber(input.mainline_length_inches),
       has_mss: input.has_mss,
       mss_type: input.has_mss ? input.mss_type.trim() || null : null,
     })

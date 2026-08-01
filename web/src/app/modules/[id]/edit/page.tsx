@@ -22,7 +22,7 @@ export default async function EditModulePage({
   const { data: module } = await supabase
     .from("freemon_modules")
     .select(
-      "id, owner_id, module_name, description, category, geometry_type, geometry_degrees, geometry_offset_inches, length_total_inches, mainline_length_inches, has_mss, mss_type, schematic",
+      "id, owner_id, module_name, description, category, has_mss, mss_type",
     )
     .eq("id", moduleId)
     .maybeSingle();
@@ -30,30 +30,19 @@ export default async function EditModulePage({
   if (!module) notFound();
   if (module.owner_id !== user.id) redirect(`/modules/${moduleId}`);
 
-  const [{ data: categories }, { data: geometries }] = await Promise.all([
-    supabase.from("module_categories").select("value, display_label").order("display_label"),
-    supabase
-      .from("module_geometries")
-      .select("value, display_label, requires_degrees, requires_offset_inches")
-      .order("display_label"),
-  ]);
+  const { data: categories } = await supabase
+    .from("module_categories")
+    .select("value, display_label")
+    .order("display_label");
 
-  // Sections own the module's shape and length once it has any (#108), so the
-  // module-level geometry here would be ignored — and editing it would look
-  // like it did something. Same trap as the endplate config on the detail page.
-  const hasSections =
-    ((module.schematic as { sections?: unknown[] } | null)?.sections ?? []).length > 0;
-
+  // ⛔ The `hasSections` guard went with the fields it guarded (#120). Sections
+  // own a module's shape and length once it has any (#108) — and that is now the
+  // builder's problem alone, because the builder is the only place those are
+  // edited. This page had the guard on the geometry and not on the length.
   const initial: BasicsUpdate = {
     module_name: module.module_name,
     description: module.description ?? "",
     category: module.category,
-    geometry_type: module.geometry_type,
-    geometry_degrees: module.geometry_degrees != null ? String(module.geometry_degrees) : "",
-    geometry_offset_inches:
-      module.geometry_offset_inches != null ? String(module.geometry_offset_inches) : "",
-    length_total_inches: String(module.length_total_inches),
-    mainline_length_inches: module.mainline_length_inches != null ? String(module.mainline_length_inches) : "",
     has_mss: module.has_mss,
     mss_type: module.mss_type ?? "",
   };
@@ -64,12 +53,13 @@ export default async function EditModulePage({
         <Link href={`/modules/${moduleId}`} className="text-sm text-blue-600 hover:underline">
           ← Back to module
         </Link>
-        <h1 className="mt-2 text-2xl font-semibold text-gray-900">Edit module basics</h1>
+        <h1 className="mt-2 text-2xl font-semibold text-gray-900">Edit module details</h1>
         {/* This used to say endplates and industries were managed on the module
             page. They were, and that was the bug (#120) — they are authored on
             the board now, and the module page no longer offers them either. */}
         <p className="mt-1 text-sm text-gray-600">
-          Endplates, track and industries are drawn in the{" "}
+          The module&rsquo;s shape and length, its endplates, track and
+          industries are all drawn in the{" "}
           <Link href={`/modules/${moduleId}/schematic`} className="font-medium text-blue-600 hover:underline">
             schematic builder
           </Link>
@@ -81,8 +71,6 @@ export default async function EditModulePage({
         moduleId={moduleId}
         initial={initial}
         categories={categories ?? []}
-        geometries={geometries ?? []}
-        hasSections={hasSections}
       />
     </div>
   );
