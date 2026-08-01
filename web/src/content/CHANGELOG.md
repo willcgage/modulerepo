@@ -5,6 +5,13 @@ Headings are `version — date` (YYYY-MM-DD).
 
 ---
 
+## v0.63.2 — 2026-08-01
+
+### Fixed
+- **The middle of the schematic builder scrolls.** Pick the Turnout kind and the parts palette prints three dozen products; that, the board and the dispatcher preview together are taller than a laptop screen. The board was being squeezed to a sliver and everything below it was simply out of reach, with no way to scroll to it. The column scrolls now, and the board keeps a minimum height so a tall palette can't crush it.
+
+---
+
 ## v0.63.1 — 2026-08-01
 
 ### Fixed
