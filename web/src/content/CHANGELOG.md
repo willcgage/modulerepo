@@ -5,21 +5,12 @@ Headings are `version — date` (YYYY-MM-DD).
 
 ---
 
-## v0.64.1 — 2026-08-01
+## v0.64.2 — 2026-08-01
 
-### Fixed
-- **The rebuild offer stopped refusing modules it can now convert.** The panel that shows what a rebuild would cost runs the conversion itself, and it was still running the old one — so on a module whose track curves it went on saying the mainline's bends could not be laid, even though pressing the button would have laid them correctly.
+### Changed
+- **Rebuilding a curved module as pieces is withheld again, for now.** v0.64.0 let the rebuild lay pieces along track that doesn't run down the middle of a module — the right goal — but the geometry it produced was wrong: pieces landed off the board entirely, and one came out longer than the whole module. Rather than leave a rebuild that quietly makes a mess, the previous behaviour is back: a module whose mainline is drawn with bends says so and declines, which is honest.
 
----
-
-## v0.64.0 — 2026-08-01
-
-### Fixed
-- **Rebuilding a module as pieces now follows the track it converted.** The rebuild used to lay every piece along the module's axis — a straight line at the centre — no matter where the track actually ran. On a module built from several boards that curve, the new pieces appeared in a straight row while the old drawing ran off somewhere else, which looked like the rebuild had ignored the module entirely.
-
-  Pieces are now laid on each track's real line: the mainline follows the centre-line your boards chain into, and a siding follows its own lane. Where a run curves, each piece is bent to the radius that stretch actually has — read off the drawing rather than guessed.
-
-  A mainline drawn with bends can be rebuilt now too; it used to be refused because there was no way to know what radius to bend the pieces to.
+  No module was changed by this. The work is not abandoned — it needs the positions handed to it in the same frame the drawing uses, which is being sorted out.
 
 ---
 
