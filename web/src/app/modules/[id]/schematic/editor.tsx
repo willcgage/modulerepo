@@ -416,28 +416,50 @@ export function SchematicEditor({
   );
 
 
-  // When the mainline is drawn, BOTH endplates follow the track's tangent: A
-  // faces back along the start tangent (outward = west for a straight), B sits
-  // at the path's end facing the final tangent — so both endplate faces and the
-  // layout joins follow the drawn shape (not just B).
-  const poses = useMemo(() => {
-    if (!mainDrawn) return derivedPoses;
+  /**
+   * ⭐⭐ AN ENDPLATE IS THE MODULE'S OWN FACT — THE DRAWN TRACK DOES NOT PLACE IT.
+   *
+   * This used to re-place A and B onto the ends of the drawn centre-line when a
+   * mainline had been drawn. Its comment framed that as facing ("both endplate
+   * faces and the layout joins follow the drawn shape"), but it overwrote `x`
+   * and `y` too — so **dragging the end of Main 1 dragged its endplate along
+   * with it**, which is exactly what Will reported (2026-08-01). Reproduced on
+   * FMN-0078: dragging the main's end 96″ → 88″ walked plate B to 89.06, while
+   * the module still said it was 96″ long and NOTHING about the endplate
+   * changed in the stored document. The plate was never moved in the data —
+   * it was only ever drawn in the wrong place.
+   *
+   * ⭐ Will's rule: *"the owner should be able to move everything independently
+   * of each other… pinning the track to the endplate is not correct if the
+   * owner tries to move the track and it moves the endplate."* A plate's
+   * position and heading come from the module's own geometry, an authored
+   * `poseOverride`, or the benchwork edge it is bound to — all of which the
+   * owner controls directly. Track that no longer reaches its plate is
+   * FLAGGED, never silently accommodated: see `mainReachesPlate` below, and
+   * the same house rule at #190's off-centre plate and #193's over-long piece.
+   *
+   * ⚠️ The heading override went with it. Keeping it would mean dragging the
+   * main's end still ROTATED the plate, which is the same bug wearing a
+   * different word.
+   */
+  const poses = derivedPoses;
+
+  /**
+   * Does the drawn mainline still land on each endplate's track point? Null for
+   * a plate when there is no drawn main to check (a derived centre-line meets
+   * its plates by construction). ⚠️ Reports, never corrects.
+   */
+  const mainReachesPlate = useMemo(() => {
+    const out: Record<string, number> = {};
+    if (!mainDrawn) return out;
     const c = footprint.centerline;
-    if (c.length < 2) return derivedPoses;
-    const deg = (dx: number, dy: number) => (Math.atan2(dy, dx) * 180) / Math.PI;
-    const start = c[0];
-    const startNext = c[1];
-    const aHeading = deg(start.x - startNext.x, start.y - startNext.y); // outward
-    const end = c[c.length - 1];
-    const prev = c[c.length - 2];
-    const bHeading = deg(end.x - prev.x, end.y - prev.y);
-    return derivedPoses.map((p) =>
-      p.id === "A"
-        ? { ...p, x: start.x, y: start.y, heading: aHeading }
-        : p.id === "B"
-          ? { ...p, x: end.x, y: end.y, heading: bHeading }
-          : p,
-    );
+    if (c.length < 2) return out;
+    for (const p of derivedPoses) {
+      if (p.id !== "A" && p.id !== "B") continue;
+      const end = p.id === "A" ? c[0] : c[c.length - 1];
+      out[p.id] = Math.hypot(end.x - p.x, end.y - p.y);
+    }
+    return out;
   }, [mainDrawn, derivedPoses, footprint]);
 
   /** Everything except the main itself — the main IS the centre-line. */
@@ -2399,6 +2421,7 @@ export function SchematicEditor({
             geometries={geometries}
             geoSpec={geoSpec}
             derivedPoses={derivedPoses}
+            mainReachesPlate={mainReachesPlate}
             wantsManualPose={wantsManualPose}
             setEndplateWidth={setEndplateWidth}
             setEndplateLabel={setEndplateLabel}
@@ -3365,6 +3388,7 @@ function Inspector({
   geometries,
   geoSpec,
   derivedPoses,
+  mainReachesPlate,
   wantsManualPose,
   setEndplateWidth,
   setEndplateLabel,
@@ -3422,6 +3446,9 @@ function Inspector({
   geometries: { value: string; display_label: string; requires_degrees: boolean; requires_offset_inches: boolean }[];
   geoSpec?: { requires_degrees: boolean; requires_offset_inches: boolean };
   derivedPoses: EndplatePose[];
+  /** Per plate, how far the DRAWN mainline's end stops short of it, in inches.
+   * Absent when there is no drawn main to check. Reported, never corrected. */
+  mainReachesPlate: Record<string, number>;
   wantsManualPose: boolean;
   setEndplateWidth: (id: string, raw: string) => void;
   setEndplateLabel: (id: string, raw: string) => void;
@@ -3899,6 +3926,20 @@ function Inspector({
     return shell(
       `Endplate ${id}`,
       <>
+        {/* ⭐ FLAGGED, NEVER CORRECTED. The drawn mainline used to RE-PLACE this
+            plate onto its own end, so dragging Main 1 dragged the endplate with
+            it. The plate now stays where the module puts it and the shortfall
+            is reported — the same house rule as #190's off-centre plate and
+            #193's over-long piece. */}
+        {(mainReachesPlate[id] ?? 0) > 0.25 && (
+          <p className="rounded-md border border-amber-200 bg-amber-50 p-2 text-[11px] text-amber-800">
+            The drawn mainline stops{" "}
+            <strong>{(Math.round(mainReachesPlate[id] * 100) / 100).toFixed(2)}″</strong> from this
+            endplate. The plate has not moved — it sits where the module&rsquo;s geometry puts it.
+            Either drag the mainline&rsquo;s end back onto the plate, or move the plate deliberately
+            in <em>Pose</em> below if the board really does end here.
+          </p>
+        )}
         {branch ? (
           <>
             <label className="block text-xs font-medium text-gray-600">
