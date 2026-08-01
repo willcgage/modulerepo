@@ -65,8 +65,15 @@ export default async function EditModulePage({
           ← Back to module
         </Link>
         <h1 className="mt-2 text-2xl font-semibold text-gray-900">Edit module basics</h1>
+        {/* This used to say endplates and industries were managed on the module
+            page. They were, and that was the bug (#120) — they are authored on
+            the board now, and the module page no longer offers them either. */}
         <p className="mt-1 text-sm text-gray-600">
-          Endplates, industries, and images are managed directly from the module page.
+          Endplates, track and industries are drawn in the{" "}
+          <Link href={`/modules/${moduleId}/schematic`} className="font-medium text-blue-600 hover:underline">
+            schematic builder
+          </Link>
+          ; images are on the module page.
         </p>
       </div>
 
