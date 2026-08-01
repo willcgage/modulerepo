@@ -414,6 +414,40 @@ export function SchematicEditor({
       geometry,
     ],
   );
+
+  // ⚠️⚠️ TEMPORARY INSTRUMENTATION (2026-08-01) — remove once the rebuild
+  // placer's frame is settled. Read-only: publishes the geometry the CANVAS
+  // actually draws with, so it can be compared against what a placer computes.
+  // The reverted placer emitted rot 138.1° at pos 0 where an offline
+  // `moduleFootprint` says 4.7°, which means it was not reading this.
+  //   window.__mrDebug  →  { arc, lengthInches, first, mainPath, sections, sampleAt(pos) }
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const c = footprint.centerline;
+    let arc = 0;
+    for (let i = 1; i < c.length; i += 1)
+      arc += Math.hypot(c[i].x - c[i - 1].x, c[i].y - c[i - 1].y);
+    (window as unknown as { __mrDebug?: unknown }).__mrDebug = {
+      points: c.length,
+      arc,
+      lengthInches: state.lengthInches,
+      first: c.slice(0, 3),
+      last: c.slice(-2),
+      mainPath: state.mainPath,
+      sectionCount: state.sections.length,
+      geometryType: dims.geometry_type,
+      // exactly what a placer would ask for
+      sampleAt: (pos: number) => {
+        const s = sampleAt(c, pos);
+        return {
+          x: s.x,
+          y: s.y,
+          headingDeg: (Math.atan2(-s.nx, s.ny) * 180) / Math.PI,
+        };
+      },
+    };
+  }, [footprint, state.lengthInches, state.mainPath, state.sections, dims.geometry_type]);
+
   // When the mainline is drawn, BOTH endplates follow the track's tangent: A
   // faces back along the start tangent (outward = west for a straight), B sits
   // at the path's end facing the final tangent — so both endplate faces and the
