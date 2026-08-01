@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
-import { asModuleSchematic } from "@/lib/module-schematic";
+import { asModuleSchematic, endplateCountOf } from "@/lib/module-schematic";
 import { SchematicPreview } from "@/app/modules/[id]/schematic/schematic-preview";
 import { ModuleFootprintView, footprintInput } from "@/components/module-footprint-view";
 import { StatusBadge } from "@/components/status-badge";
@@ -85,8 +85,8 @@ export default async function CatalogPage() {
                       {m.module_name}
                     </p>
                     <p className="mt-0.5 truncate text-xs text-gray-500">
-                      {m.record_number} · {m.category} · {m.endplate_count} endplate
-                      {m.endplate_count === 1 ? "" : "s"}
+                      {m.record_number} · {m.category} · {endplateCountOf(m)} endplate
+                      {endplateCountOf(m) === 1 ? "" : "s"}
                     </p>
                   </div>
                   <StatusBadge status={m.status} />

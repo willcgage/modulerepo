@@ -5,6 +5,15 @@ Headings are `version — date` (YYYY-MM-DD).
 
 ---
 
+## v0.61.1 — 2026-08-01
+
+### Fixed
+- **A module's endplate count is read from its board everywhere it appears.** It was a tally kept behind the scenes, and it disagreed with the board in both directions: a module with a third endplate placed on it still said two, while others said one or three or four for ends their board had never had. Seven modules were showing a wrong number — in your module list, in the catalogue, and in what Free-Dispatcher imports.
+
+  On one module the tally had even drifted from the records it was counting, saying four where two existed. It counted up and down as records came and went rather than ever recounting, so a correction made outside the app left it stranded.
+
+---
+
 ## v0.61.0 — 2026-08-01
 
 ### Added

@@ -205,7 +205,17 @@ Deno.serve(async (req) => {
       geometry_offset_inches: m.geometry_offset_inches,
       length_total_inches: m.length_total_inches,
       mainline_length_inches: m.mainline_length_inches,
-      endplate_count: m.endplate_count,
+      // ⛔ NOT the stored column (#245). `freemon_modules.endplate_count` is a
+      // DB trigger's tally of `freemon_endplates` rows, and the schematic save
+      // only writes rows for A and B — so a module with a branch endplate
+      // PLACED on its board (FMN-0068, FMN-0077) under-reported, and one
+      // carrying a row its document never knew about (FMN-0026) over-reported.
+      // The document owns the endplates (#120), so it answers; the column is
+      // the fallback for a module that has no document at all.
+      endplate_count:
+        (Array.isArray((m.schematic as any)?.endplates)
+          ? (m.schematic as any).endplates.length
+          : null) ?? m.endplate_count,
       has_mss: m.has_mss,
       mss_type: m.mss_type,
       status: m.status,

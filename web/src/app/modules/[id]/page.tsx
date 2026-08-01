@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
-import { asModuleSchematic } from "@/lib/module-schematic";
+import { asModuleSchematic, endplateCountOf } from "@/lib/module-schematic";
 import { SchematicPreview } from "./schematic/schematic-preview";
 import { DeleteModuleButton } from "./delete-module-button";
 import { ModuleFootprintView, footprintInput } from "@/components/module-footprint-view";
@@ -78,21 +78,7 @@ export default async function ModuleDetailPage({
 
   const doc = asModuleSchematic(module.schematic);
 
-  /**
-   * How many endplates this module presents — COUNTED FROM THE SCHEMATIC (#120).
-   *
-   * `freemon_modules.endplate_count` is maintained by a DB trigger on
-   * `freemon_endplates`, and `saveModuleSchematic` only writes rows for A and B.
-   * So the column was wrong in BOTH directions: FMN-0068 and FMN-0077 each have
-   * an endplate C placed on the board and reported 2, while FMN-0026 keeps a
-   * third row its document never knew about and reported 3.
-   *
-   * A count is a fact about the module, not a second way to edit it, so it stays
-   * — but it now reads the source of truth. A module with no document at all
-   * (FMN-0017, FMN-0024) still falls back to the column, which is the only thing
-   * that knows about its ends until someone opens the builder.
-   */
-  const endplateCount = doc?.endplates?.length ?? module.endplate_count;
+  const endplateCount = endplateCountOf(module);
 
   const imagesWithUrls = await Promise.all(
     (images ?? []).map(async (image) => {
