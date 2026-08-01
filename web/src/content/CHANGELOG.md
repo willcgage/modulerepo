@@ -5,6 +5,15 @@ Headings are `version — date` (YYYY-MM-DD).
 
 ---
 
+## v0.63.0 — 2026-08-01
+
+### Fixed
+- **A passing siding can be dragged onto its turnouts again.** Its end handles had been taken away on the reasoning that a siding "is pinned to its two turnouts, so move those instead". Nothing pinned it: moving a turnout moved only the turnout, so a siding that didn't already meet its legs could never be made to. FMN-0064 sat with its siding ending 3″ short at one end and 2″ at the other, selectable and immovable.
+
+  The handles are back, and an end dragged near a turnout now **snaps onto where its diverging route actually begins** — past the frog, where the rails have cleared and the siding proper starts. The readout says which turnout it landed on. The turnout itself doesn't move; it's positioned by its frog.
+
+---
+
 ## v0.62.2 — 2026-08-01
 
 ### Changed
