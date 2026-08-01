@@ -1494,14 +1494,22 @@ export function BenchworkEditor({
     if (centerline.length < 2) return [];
     return tracks
       // A drawn spur is positioned by its path, not fromPos/toPos — no end drags.
-      // A passing siding is pinned to its two turnouts — move those, not its
-      // ends; independent end drags pulled the body off the legs (#133).
-      .filter(
-        (t) =>
-          t.editable &&
-          !(t.path && t.path.length >= 2) &&
-          (legsByTrack.get(t.id)?.length ?? 0) < 2,
-      )
+      //
+      // ⛔⛔ A PASSING SIDING USED TO BE EXCLUDED HERE — `legs < 2` — on the
+      // grounds that it "is pinned to its two turnouts, move those". IT IS NOT
+      // PINNED TO ANYTHING. `moveTurnout` sets the turnout's `pos` and touches
+      // no track, so nothing ever carried the siding, and FMN-0064 sat at
+      // 16→365 with its turnouts at 13 and 367 — ends short of both legs, and
+      // the one affordance that could close the gap taken away. The siding
+      // selected, and then refused to move.
+      //
+      // #133's real complaint was that an end drag pulled the body OFF the
+      // legs, which is a case for SNAPPING the end to the leg — what the drag
+      // handler now does, and what this file already documents as the intended
+      // gesture: "the owner closes the gap by dragging the TRACK's end onto the
+      // turnout's rail, where it snaps." Removing the handle didn't keep the
+      // body on the legs; it just made the gap permanent.
+      .filter((t) => t.editable && !(t.path && t.path.length >= 2))
       .flatMap((t) => {
         // A turnout stub angles away — its far end sits at the end of the
         // diverging route, and its throat is pinned to the turnout (no from
@@ -2904,11 +2912,33 @@ export function BenchworkEditor({
       if (centerline.length >= 2) {
         const t = tracks.find((x) => x.id === d.id);
         let pos = posFrom(p);
+        // ⭐ SNAP THE END ONTO ITS TURNOUT'S DIVERGING ROUTE. This file already
+        // described the gesture — "the owner closes the gap by dragging the
+        // TRACK's end onto the turnout's rail, where it snaps" — but only a
+        // drawn PATH could do it. A positional siding had no such snap, and the
+        // handle that would have carried it was suppressed besides.
+        //
+        // `join` is where the ramp has cleared a full track spacing and the
+        // diverging track proper BEGINS — the honest end of the turnout, and
+        // the point the siding should meet. Projected back onto the main so it
+        // can be compared with a 1-D `pos`.
+        let snappedTo: string | null = null;
+        for (const leg of legsByTrack.get(d.id) ?? []) {
+          const legPos = projectToCenterline(centerline, leg.join).pos;
+          // The window covers the turnout's own reach (#239) — the part is
+          // long, and requiring the pointer within a couple of inches of a
+          // point buried inside it is what made the gesture feel impossible.
+          if (Math.abs(pos - legPos) <= 2 + leg.reachInches) {
+            pos = Math.round(legPos * 10) / 10;
+            snappedTo = leg.turnoutId;
+            break;
+          }
+        }
         // Joining tracks: snap the dragged end onto a same-lane track's end so
         // two stubs (e.g. the parallels of two crossovers) meet EXACTLY and
         // read as one continuous track — like corners snap to endplates.
         let joined: string | null = null;
-        if (t) {
+        if (t && !snappedTo) {
           for (const o of tracks) {
             if (o.id === t.id || o.lane !== t.lane || !o.editable) continue;
             if (o.path && o.path.length >= 2) continue;
@@ -2923,7 +2953,13 @@ export function BenchworkEditor({
         onTrackEndMove?.(d.id, d.end, pos);
         const other = t ? (d.end === "from" ? t.toPos : t.fromPos) : pos;
         const len = lengthLabel(Math.abs(pos - other));
-        setReadout(joined ? `${len} · meets ${joined}` : len);
+        setReadout(
+          snappedTo
+            ? `${len} · on ${snappedTo}`
+            : joined
+              ? `${len} · meets ${joined}`
+              : len,
+        );
       }
       return;
     }
