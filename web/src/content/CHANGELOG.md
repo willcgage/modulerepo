@@ -5,6 +5,17 @@ Headings are `version — date` (YYYY-MM-DD).
 
 ---
 
+## v0.71.0 — 2026-08-01
+
+### Fixed
+- **Putting an endplate on a benchwork edge no longer stretches it to fill that edge.** Assigning an endplate to an edge used to widen it to the whole fascia and discard the face width you had set — so a 24″ endplate on a 96″ side became a 96″ endplate.
+
+  An endplate is part of the benchwork, but it is not the whole of the edge it sits on. It keeps the width you gave it, placed where it already was. This is true of every endplate — there is no difference between A, B and the ones you add.
+
+- **The face width now moves the plate along its edge.** Change the width of an endplate that belongs to an edge and the plate resizes on the board, instead of the number in the box quietly disagreeing with what is drawn.
+
+---
+
 ## v0.70.0 — 2026-08-01
 
 ### Changed

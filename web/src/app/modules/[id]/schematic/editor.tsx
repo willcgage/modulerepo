@@ -37,6 +37,7 @@ import {
   isTransitionTurnout,
   deriveEndplatePoses,
   benchworkLengthInches,
+  endplateSpanOnEdge,
   endplateEdgePose,
   type EndplatePose,
   poseNeedsManual,
@@ -1165,6 +1166,18 @@ export function SchematicEditor({
       const v = parseFloat(raw);
       if (Number.isFinite(v) && v > 0) s.endplateWidths[id] = v;
       else delete s.endplateWidths[id];
+      // ⭐ A BOUND PLATE'S SPAN FOLLOWS ITS WIDTH (#275). Its face is read off
+      // the edge, so the width is expressed as how much of that edge it covers
+      // — leave the old span behind and the number in the box would stop being
+      // the plate on screen, which is the two-truths bug this whole thread has
+      // been about. Keeps its position on the edge; only the extent changes.
+      const bound = s.endplateEdges?.[id];
+      if (!bound) return;
+      const w = Number.isFinite(v) && v > 0 ? v : FREEMO_ENDPLATE_WIDTH_RECOMMENDED_INCHES;
+      const here = derivedPoses.find((p) => p.id === id);
+      if (!here) return;
+      const span = endplateSpanOnEdge(s.outline, bound.index, here, w);
+      if (span && s.endplateEdges) s.endplateEdges[id] = { ...bound, ...span };
     });
 
   /** Store the owner's name for endplate A or B, or clear it back to the
@@ -4285,7 +4298,22 @@ function Inspector({
                   if (!s.endplateEdges) s.endplateEdges = {};
                   if (v === "") delete s.endplateEdges[id];
                   else {
-                    s.endplateEdges[id] = { index: Number(v) };
+                    const index = Number(v);
+                    // ⭐⭐ KEEP THE WIDTH THE OWNER AUTHORED (#275). `{index}`
+                    // alone means no span, which resolves to the WHOLE edge —
+                    // so binding used to widen the plate to its fascia and
+                    // throw away the face width. Will: "The Endplate can be the
+                    // same or smaller size than the edge."
+                    //
+                    // The span comes from the package's own helper, the same one
+                    // the derived binding uses, so a plate the app places and a
+                    // plate the owner binds land identically.
+                    const w =
+                      s.endplateWidths?.[id] ??
+                      pose.widthInches ??
+                      FREEMO_ENDPLATE_WIDTH_RECOMMENDED_INCHES;
+                    const span = endplateSpanOnEdge(s.outline, index, pose, w);
+                    s.endplateEdges[id] = { index, ...(span ?? {}) };
                     // A binding replaces a hand-placed pose — keeping both would
                     // leave the plate pinned to a point it no longer sits on.
                     delete s.poseOverrides[id];
