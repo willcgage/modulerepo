@@ -5,6 +5,21 @@ Headings are `version — date` (YYYY-MM-DD).
 
 ---
 
+## v0.70.0 — 2026-08-01
+
+### Changed
+- **Once both your endplates belong to a benchwork edge, your module's length comes from the board.** The Footprint length reads *(from the benchwork)* and is measured across your actual boardwork — endplate A's face to endplate B's — rather than typed in.
+
+  This is what finishes the endplate work. The length used to decide where endplate B sat, while dragging endplate B set the length — each defining the other. Now the board says how long it is and the endplates are part of the board, so there is one answer instead of two.
+
+  **It only happens once you have told the app which edges are your endplates.** Until then nothing changes and the length stays yours to type.
+
+  It is measured **end to end**, not along a side — a tapered module whose fasciae run 96.3″ between ends 96″ apart is a 96″ module, because 96″ is what its neighbours meet.
+
+- **If the board and the record disagree, you are told and neither is changed.** Move the board's ends if the record is right, or update the record if the board is. The app does not decide for you.
+
+---
+
 ## v0.69.0 — 2026-08-01
 
 ### Added

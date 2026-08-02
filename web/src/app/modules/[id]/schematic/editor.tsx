@@ -36,6 +36,7 @@ import {
   buildCrossover,
   isTransitionTurnout,
   deriveEndplatePoses,
+  benchworkLengthInches,
   endplateEdgePose,
   type EndplatePose,
   poseNeedsManual,
@@ -429,6 +430,23 @@ export function SchematicEditor({
    * band), never off the track: a spur running past a fascia does not make the
    * board bigger.
    */
+  /**
+   * ⭐⭐ THE LENGTH THE BENCHWORK ITSELF REPORTS (#268's last piece) — face of
+   * endplate A to face of endplate B. Null unless BOTH ends are authored edge
+   * bindings, which is the guard that keeps this from being circular: a plate
+   * only *derived* onto an edge got there from `lengthInches`, so measuring
+   * between two of those would hand the same number back.
+   */
+  const benchworkLen = useMemo(
+    () =>
+      benchworkLengthInches({
+        outline: state.outline,
+        sections: state.sections,
+        endplateEdges: state.endplateEdges,
+      }),
+    [state.outline, state.sections, state.endplateEdges],
+  );
+
   const boardExtent = useMemo(() => {
     const pts = [
       ...(footprint.outline ?? []),
@@ -2463,6 +2481,7 @@ export function SchematicEditor({
             geoSpec={geoSpec}
             derivedPoses={derivedPoses}
             boardExtent={boardExtent}
+            benchworkLen={benchworkLen}
             benchworkAuthored={footprint.benchworkAuthored}
             mainReachesPlate={mainReachesPlate}
             wantsManualPose={wantsManualPose}
@@ -3432,6 +3451,7 @@ function Inspector({
   geoSpec,
   derivedPoses,
   boardExtent,
+  benchworkLen,
   benchworkAuthored,
   mainReachesPlate,
   wantsManualPose,
@@ -3495,6 +3515,9 @@ function Inspector({
    * measure. `drawn` is false when this is the derived band rather than a board
    * anyone drew. Measured off the benchwork only — never off the track. */
   boardExtent: { w: number; h: number; drawn: boolean } | null;
+  /** The length the BENCHWORK reports — endplate A's face to endplate B's —
+   * or null unless both ends are authored edge bindings (#268). */
+  benchworkLen: number | null;
   /** Has the owner actually drawn a board? False means the benchwork on screen
    * is a derived stand-in, so an endplate has nothing real to be part of. */
   benchworkAuthored: boolean;
@@ -3632,23 +3655,45 @@ function Inspector({
               />
             </label>
           )}
+          {/* ⭐⭐ THE BENCHWORK OWNS THIS NUMBER once both ends are bound to it
+              (#268). It stops being something you type and becomes something
+              the board reports — which is what breaks the last circularity:
+              this value used to POSITION endplate B while dragging endplate B
+              SET it. Same idiom the sections case already uses. */}
           <label className="block text-xs font-medium text-gray-600">
             Footprint length (in)
-            {hasSections && <span className="text-gray-400"> (derived)</span>}
+            {benchworkLen != null ? (
+              <span className="text-gray-400"> (from the benchwork)</span>
+            ) : hasSections ? (
+              <span className="text-gray-400"> (derived)</span>
+            ) : null}
             <input
               type="number"
               step={0.001}
-              value={dims.length_total_inches}
-              disabled={hasSections}
+              value={benchworkLen != null ? String(benchworkLen) : dims.length_total_inches}
+              disabled={hasSections || benchworkLen != null}
               onChange={(e) => setDim({ length_total_inches: e.target.value })}
-              className={`mt-0.5 ${inp} ${hasSections ? "bg-gray-50 text-gray-600" : ""}`}
+              className={`mt-0.5 ${inp} ${hasSections || benchworkLen != null ? "bg-gray-50 text-gray-600" : ""}`}
               title={
-                hasSections
-                  ? "The sum of this module's section lengths — edit the sections to change it."
-                  : "The physical length of the board itself, end to end."
+                benchworkLen != null
+                  ? "Measured across your benchwork, from endplate A's face to endplate B's. To change it, move the board's ends."
+                  : hasSections
+                    ? "The sum of this module's section lengths — edit the sections to change it."
+                    : "The physical length of the board itself, end to end."
               }
             />
           </label>
+          {/* ⚠️ FLAG, DON'T CLAMP. If the stored number and the board disagree,
+              say so and change neither — the owner decides which is right. */}
+          {benchworkLen != null &&
+            Math.abs(benchworkLen - state.lengthInches) > 0.05 && (
+              <p className="rounded-md border border-amber-300 bg-amber-50 p-2 text-[11px] text-amber-900">
+                Your benchwork measures <strong>{benchworkLen}″</strong> between its endplate faces,
+                but this module is recorded as <strong>{state.lengthInches}″</strong>. Nothing has
+                been changed — move the board&rsquo;s ends if the record is right, or update the
+                record if the board is.
+              </p>
+            )}
           {/* ⭐ WHAT THE BOARD ACTUALLY MEASURES, beside what it was told to be.
               Maxima, because a tapered module has no single depth — FMN-0078 is
               16″ at one end and 32″ at the other, and 32″ is the space it needs.
