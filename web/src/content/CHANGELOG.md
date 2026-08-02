@@ -5,6 +5,21 @@ Headings are `version — date` (YYYY-MM-DD).
 
 ---
 
+## v0.67.0 — 2026-08-01
+
+### Changed
+- **Your benchwork is shaped by your board, not by the track you drew on it.** Drawing or moving the mainline used to reshape the module's footprint, and the endplates with it. The board is now shaped by your dimensions, sections and outline alone. Nothing you have positioned moves — turnouts, signals and industries still follow the mainline you drew.
+
+### Added
+- **A module with no benchwork now says so.** Half the catalogue has never had a board drawn, and until now the app quietly showed a shape derived from the dimensions that looked exactly like a real one. An endplate is part of the benchwork, so the endplate panel now tells you when there is no benchwork for it to be part of, and points you at the Benchwork tool.
+
+  **Nothing was changed in your module, and no board stopped being drawn.** It is a note, not a correction — if the derived shape is right for your module, drawing it makes that explicit rather than assumed.
+
+### Fixed
+- **The note about a mainline not meeting its endplate now says which way it misses.** It read "stops 3.17″ from this endplate" whether the track fell short or ran past. It now says "runs 3.17″ past" or "stops 3.17″ short of", and the advice matches.
+
+---
+
 ## v0.66.1 — 2026-08-01
 
 ### Fixed

@@ -445,19 +445,30 @@ export function SchematicEditor({
   const poses = derivedPoses;
 
   /**
-   * Does the drawn mainline still land on each endplate's track point? Null for
-   * a plate when there is no drawn main to check (a derived centre-line meets
-   * its plates by construction). ⚠️ Reports, never corrects.
+   * Does the drawn mainline still land on each endplate's track point? Absent
+   * for a plate when there is no drawn main to check (a derived centre-line
+   * meets its plates by construction). ⚠️ Reports, never corrects.
+   *
+   * ⭐ `past` carries the DIRECTION, because "stops 3.17″ from this endplate"
+   * was being printed at a main that ran 3.17″ BEYOND it — the right distance
+   * with the wrong verb, which reads as a different fault than the one it is.
+   * Sign comes from the plate's OUTWARD heading: outboard of the plate means
+   * the track overshoots the end of the board.
    */
   const mainReachesPlate = useMemo(() => {
-    const out: Record<string, number> = {};
+    const out: Record<string, { gap: number; past: boolean }> = {};
     if (!mainDrawn) return out;
     const c = footprint.centerline;
     if (c.length < 2) return out;
     for (const p of derivedPoses) {
       if (p.id !== "A" && p.id !== "B") continue;
       const end = p.id === "A" ? c[0] : c[c.length - 1];
-      out[p.id] = Math.hypot(end.x - p.x, end.y - p.y);
+      const dx = end.x - p.x;
+      const dy = end.y - p.y;
+      const rad = (p.heading * Math.PI) / 180;
+      // Component along the outward normal: >0 is past the plate, <0 is short.
+      const along = dx * Math.cos(rad) + dy * Math.sin(rad);
+      out[p.id] = { gap: Math.hypot(dx, dy), past: along > 0.05 };
     }
     return out;
   }, [mainDrawn, derivedPoses, footprint]);
@@ -2421,6 +2432,7 @@ export function SchematicEditor({
             geometries={geometries}
             geoSpec={geoSpec}
             derivedPoses={derivedPoses}
+            benchworkAuthored={footprint.benchworkAuthored}
             mainReachesPlate={mainReachesPlate}
             wantsManualPose={wantsManualPose}
             setEndplateWidth={setEndplateWidth}
@@ -3388,6 +3400,7 @@ function Inspector({
   geometries,
   geoSpec,
   derivedPoses,
+  benchworkAuthored,
   mainReachesPlate,
   wantsManualPose,
   setEndplateWidth,
@@ -3446,9 +3459,13 @@ function Inspector({
   geometries: { value: string; display_label: string; requires_degrees: boolean; requires_offset_inches: boolean }[];
   geoSpec?: { requires_degrees: boolean; requires_offset_inches: boolean };
   derivedPoses: EndplatePose[];
-  /** Per plate, how far the DRAWN mainline's end stops short of it, in inches.
+  /** Has the owner actually drawn a board? False means the benchwork on screen
+   * is a derived stand-in, so an endplate has nothing real to be part of. */
+  benchworkAuthored: boolean;
+  /** Per plate, how far the DRAWN mainline's end misses it by, in inches, and
+   * whether it misses by running PAST the plate rather than stopping short.
    * Absent when there is no drawn main to check. Reported, never corrected. */
-  mainReachesPlate: Record<string, number>;
+  mainReachesPlate: Record<string, { gap: number; past: boolean }>;
   wantsManualPose: boolean;
   setEndplateWidth: (id: string, raw: string) => void;
   setEndplateLabel: (id: string, raw: string) => void;
@@ -3926,18 +3943,33 @@ function Inspector({
     return shell(
       `Endplate ${id}`,
       <>
+        {/* ⭐⭐ AN ENDPLATE IS PART OF THE BENCHWORK (Will, 2026-08-01, #268), so
+            a module with no benchwork has nothing for this plate to belong to.
+            The board on screen is a DERIVED band standing in for one nobody
+            drew — say so rather than let it pass for the real thing. Shown
+            first because it is the reason the rest of this panel is provisional. */}
+        {!benchworkAuthored && (
+          <p className="rounded-md border border-amber-300 bg-amber-50 p-2 text-[11px] text-amber-900">
+            <strong>This module has no benchwork drawn.</strong> An endplate is part of the
+            benchwork, so there is nothing yet for this plate to be part of — the board you see is
+            a shape derived from the dimensions, not one you drew. Draw the board with the{" "}
+            <strong>Benchwork</strong> tool (<kbd>B</kbd>) and the endplates become part of it.
+          </p>
+        )}
         {/* ⭐ FLAGGED, NEVER CORRECTED. The drawn mainline used to RE-PLACE this
             plate onto its own end, so dragging Main 1 dragged the endplate with
             it. The plate now stays where the module puts it and the shortfall
             is reported — the same house rule as #190's off-centre plate and
             #193's over-long piece. */}
-        {(mainReachesPlate[id] ?? 0) > 0.25 && (
+        {(mainReachesPlate[id]?.gap ?? 0) > 0.25 && (
           <p className="rounded-md border border-amber-200 bg-amber-50 p-2 text-[11px] text-amber-800">
-            The drawn mainline stops{" "}
-            <strong>{(Math.round(mainReachesPlate[id] * 100) / 100).toFixed(2)}″</strong> from this
-            endplate. The plate has not moved — it sits where the module&rsquo;s geometry puts it.
-            Either drag the mainline&rsquo;s end back onto the plate, or move the plate deliberately
-            in <em>Pose</em> below if the board really does end here.
+            The drawn mainline{" "}
+            {mainReachesPlate[id].past ? "runs" : "stops"}{" "}
+            <strong>{(Math.round(mainReachesPlate[id].gap * 100) / 100).toFixed(2)}″</strong>{" "}
+            {mainReachesPlate[id].past ? "past" : "short of"} this endplate. The plate has not
+            moved — it sits where the module&rsquo;s geometry puts it. Either drag the
+            mainline&rsquo;s end {mainReachesPlate[id].past ? "back onto" : "out to"} the plate, or
+            move the plate deliberately in <em>Pose</em> below if the board really does end there.
           </p>
         )}
         {branch ? (
