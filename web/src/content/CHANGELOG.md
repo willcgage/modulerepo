@@ -5,6 +5,18 @@ Headings are `version — date` (YYYY-MM-DD).
 
 ---
 
+## v0.72.0 — 2026-08-01
+
+### Added
+- **An endplate can now sit on a section's edge, not just the module's.** Your sections are pieces of your benchwork, so a module built from several boards can put an endplate on whichever board actually carries it. Each section's edges are listed alongside the module's, named after the section.
+
+### Fixed
+- **"Which edge of the benchwork is this?" now says why it is empty.** It used to sit greyed out with a single dead option, which reads as broken. It now tells you what to do — draw the board, or give a section a shape — depending on which is missing.
+
+  ⚠️ A module whose benchwork lives entirely in sections still has no edges to offer, because sections cannot yet be given a shape. That is the next piece of work; this release makes the app say so plainly instead of leaving you guessing.
+
+---
+
 ## v0.71.0 — 2026-08-01
 
 ### Fixed

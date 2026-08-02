@@ -4036,20 +4036,57 @@ function Inspector({
     // edge is offered but disabled rather than hidden, so it is clear why it
     // can't be chosen instead of leaving someone hunting for a missing option.
     const bound = state.endplateEdges?.[id];
-    const edgeChoices = (state.outline ?? []).map((p0, i, arr) => {
-      const p1 = arr[(i + 1) % arr.length];
-      const len = Math.round(Math.hypot(p1.x - p0.x, p1.y - p0.y) * 10) / 10;
-      const e = endplateEdgePose(state.outline, { index: i });
-      const compass = (deg: number) =>
-        ["east", "north", "west", "south"][Math.round(((deg % 360) + 360) % 360 / 90) % 4];
-      return {
-        index: i,
-        usable: !!e,
-        label: e
-          ? `Edge ${i + 1} — ${len}″, faces ${compass(e.heading)}`
-          : `Edge ${i + 1} — ${len}″, curved (an endplate face must be straight)`,
-      };
-    });
+    /**
+     * ⭐⭐ EVERY EDGE OF THE BENCHWORK, INCLUDING ITS SECTIONS' (#274).
+     *
+     * Will, 2026-08-01: *"Sections are a part of a module, they make up multiple
+     * pieces of the overall benchwork since the module can have 1 or more
+     * sections."* This list read `state.outline` ALONE, so a module whose
+     * benchwork lives in its sections offered no edges at all and the control
+     * sat there disabled. `EndplateEdge.section` has existed the whole time and
+     * nothing in the UI could set it.
+     *
+     * ⚠️ The value is a STRING key, not the bare index, because an edge is now
+     * identified by (section, index) — `"2"` on the module outline and `"sec1:2"`
+     * on a section are different edges. Parsed back in the change handler.
+     */
+    const compass = (deg: number) =>
+      ["east", "north", "west", "south"][Math.round(((deg % 360) + 360) % 360 / 90) % 4];
+    const edgesOf = (
+      outline: BenchworkPoint[] | null | undefined,
+      section: string | null,
+      prefix: string,
+    ) =>
+      (outline ?? []).map((p0, i, arr) => {
+        const p1 = arr[(i + 1) % arr.length];
+        const len = Math.round(Math.hypot(p1.x - p0.x, p1.y - p0.y) * 10) / 10;
+        const e = endplateEdgePose(outline, { index: i, section });
+        return {
+          key: section ? `${section}:${i}` : String(i),
+          index: i,
+          section,
+          usable: !!e,
+          label: e
+            ? `${prefix}Edge ${i + 1} — ${len}″, faces ${compass(e.heading)}`
+            : `${prefix}Edge ${i + 1} — ${len}″, curved (an endplate face must be straight)`,
+        };
+      });
+    const sectionsWithShape = (state.sections ?? []).filter((s) => (s.outline?.length ?? 0) >= 3);
+    const edgeChoices = [
+      ...edgesOf(state.outline, null, ""),
+      ...sectionsWithShape.flatMap((s, n) =>
+        edgesOf(s.outline, s.id, `${s.name || `Section ${n + 1}`} · `),
+      ),
+    ];
+    /** Why there is nothing to choose — a dead control that says nothing reads
+     * as broken (#274). A module can have no benchwork at all, or have it in
+     * sections that nobody has given a shape yet (#273). */
+    const noEdgeReason =
+      edgeChoices.length > 0
+        ? null
+        : (state.sections?.length ?? 0) > 0
+          ? "This module's benchwork is its sections, and none of them has been given a shape yet. Draw a section's outline and its edges will be offered here."
+          : "This module has no benchwork drawn. Draw the board with the Benchwork tool (B) and its edges will be offered here.";
 
     return shell(
       `Endplate ${id}`,
@@ -4291,14 +4328,22 @@ function Inspector({
           <label className="block text-xs font-medium text-gray-600">
             Which edge of the benchwork is this?
             <select
-              value={bound ? String(bound.index) : ""}
+              value={bound ? (bound.section ? `${bound.section}:${bound.index}` : String(bound.index)) : ""}
               onChange={(e) =>
                 patch((s) => {
                   const v = e.target.value;
                   if (!s.endplateEdges) s.endplateEdges = {};
                   if (v === "") delete s.endplateEdges[id];
                   else {
-                    const index = Number(v);
+                    // (section, index) — a bare number is the module outline,
+                    // "sec1:2" is edge 2 of that section's own board (#274).
+                    const cut = v.lastIndexOf(":");
+                    const section = cut < 0 ? null : v.slice(0, cut);
+                    const index = Number(cut < 0 ? v : v.slice(cut + 1));
+                    const shape =
+                      section == null
+                        ? s.outline
+                        : (s.sections ?? []).find((x) => x.id === section)?.outline;
                     // ⭐⭐ KEEP THE WIDTH THE OWNER AUTHORED (#275). `{index}`
                     // alone means no span, which resolves to the WHOLE edge —
                     // so binding used to widen the plate to its fascia and
@@ -4312,8 +4357,12 @@ function Inspector({
                       s.endplateWidths?.[id] ??
                       pose.widthInches ??
                       FREEMO_ENDPLATE_WIDTH_RECOMMENDED_INCHES;
-                    const span = endplateSpanOnEdge(s.outline, index, pose, w);
-                    s.endplateEdges[id] = { index, ...(span ?? {}) };
+                    const span = endplateSpanOnEdge(shape, index, pose, w);
+                    s.endplateEdges[id] = {
+                      index,
+                      ...(section ? { section } : {}),
+                      ...(span ?? {}),
+                    };
                     // A binding replaces a hand-placed pose — keeping both would
                     // leave the plate pinned to a point it no longer sits on.
                     delete s.poseOverrides[id];
@@ -4325,17 +4374,18 @@ function Inspector({
             >
               <option value="">Not on an edge — placed by hand</option>
               {edgeChoices.map((c) => (
-                <option key={c.index} value={c.index} disabled={!c.usable}>
+                <option key={c.key} value={c.key} disabled={!c.usable}>
                   {c.label}
                 </option>
               ))}
             </select>
           </label>
-          {!edgeChoices.length ? (
-            <p className="mt-1 text-xs text-gray-500">
-              Draw the benchwork first and this endplate can sit on one of its
-              edges — then its width and facing come from the board itself.
-            </p>
+          {/* ⭐ SAY WHY THERE IS NOTHING TO CHOOSE (#274). A disabled control
+              with one dead option reads as broken, and the two reasons want
+              different actions: no benchwork at all, or benchwork that lives in
+              sections nobody has shaped yet (#273). */}
+          {noEdgeReason ? (
+            <p className="mt-1 text-xs text-gray-500">{noEdgeReason}</p>
           ) : bound && pose.boundToEdge ? (
             <p className="mt-1 text-xs text-gray-600">
               On the board&apos;s edge, <span className="font-medium">{Math.round((pose.widthInches ?? 0) * 10) / 10}″</span> wide,
