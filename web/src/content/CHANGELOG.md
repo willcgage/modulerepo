@@ -5,6 +5,20 @@ Headings are `version — date` (YYYY-MM-DD).
 
 ---
 
+## v0.69.0 — 2026-08-01
+
+### Added
+- **Your board's maximum size, both ways, on the drawing and in the panel.** The module panel now reads *"Board, at its widest: 96″ left to right × 32″ top to bottom"*, and the depth callout on the drawing gained the same feet reading the length already had.
+
+  They are **maximums** on purpose. A tapered module has no single depth — it might be 16″ at one end and 32″ at the other — and the number worth knowing is the most it needs, whether you are planning a layout or fitting it in a car.
+
+### Fixed
+- **The dimensions now measure your board, not your drawing.** They were taken from everything on the canvas, including track — so a spur running past a fascia made the module report a bigger board than you built. The benchwork's size is a fact about the benchwork.
+
+  If a module has no benchwork drawn, the figures come from its dimensions and the panel says so.
+
+---
+
 ## v0.68.0 — 2026-08-01
 
 ### Changed

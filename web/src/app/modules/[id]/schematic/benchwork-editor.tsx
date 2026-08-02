@@ -3513,6 +3513,39 @@ export function BenchworkEditor({
   const extentW = extent.maxX - extent.minX;
   const extentH = extent.maxY - extent.minY;
 
+  /**
+   * ⭐⭐ THE BOARD'S OWN MAXIMUM EXTENTS — the benchwork, and nothing else.
+   *
+   * Will, 2026-08-01: *"maximum length for both left to right top and bottom
+   * should be shown … FMN-0078 is a good example. Left to right its maximum is
+   * approximately 96″ and top to bottom is 32″."*
+   *
+   * ⚠️ NOT `extent` ABOVE. That one measures everything DRAWN — the centre-line,
+   * every track path, and the `lengthInches` axis — so a spur running past the
+   * fascia would report a bigger BOARD than the owner built. The benchwork's
+   * size is a fact about the benchwork (layer 1); track cannot enlarge it.
+   *
+   * ⭐ And these are MAXIMA on purpose: FMN-0078 is tapered, 16″ deep at end A
+   * and 32″ at end B, so "the depth" is not one number. The board needs 32″ of
+   * space and that is what a layout planner and a car boot both care about.
+   *
+   * Falls back to the whole-drawing extent when nothing has been drawn yet, so
+   * a blank module still dimensions its derived band rather than showing 0.
+   */
+  const boardExtent = (() => {
+    // ⚠️ Section shapes are not available in this component, and no module in
+    // prod has one yet (#273) — when they can be authored, they belong here too.
+    const pts = sampled;
+    if (pts.length < 2) return { w: extentW, h: extentH, ofBoard: false };
+    const xs = pts.map((p) => p.x);
+    const ys = pts.map((p) => p.y);
+    return {
+      w: Math.max(...xs) - Math.min(...xs),
+      h: Math.max(...ys) - Math.min(...ys),
+      ofBoard: true,
+    };
+  })();
+
   // --- Track rendering -------------------------------------------------------
   // Track reads as a clean outlined band (roadbed fill + edge lines), no ties —
   // the switch points/frog emerge from where the bands converge and cross.
@@ -4967,7 +5000,10 @@ const ENDPLATE_TAB = 5; // ballast-shoulder band width, inches
                     textAnchor="middle"
                     stroke="none"
                   >
-                    {fmt(extentW)}″ · {feetLabel(extentW)}
+                    {/* ⭐ The BOARD's maximum left-to-right, not the drawing's —
+                        track running past a fascia must not enlarge the board
+                        it sits on. Same for the depth below. */}
+                    {fmt(boardExtent.w)}″ · {feetLabel(boardExtent.w)}
                   </text>
                 </>
               );
@@ -4986,7 +5022,10 @@ const ENDPLATE_TAB = 5; // ballast-shoulder band width, inches
                     textAnchor="end"
                     stroke="none"
                   >
-                    {fmt(extentH)}″
+                    {/* Given the same feet reading as the length — a 32″ board
+                        is "2′8″" of shelf, and reading one dimension in feet
+                        while the other is bare invites comparing unlike things. */}
+                    {fmt(boardExtent.h)}″ · {feetLabel(boardExtent.h)}
                   </text>
                 </>
               );
