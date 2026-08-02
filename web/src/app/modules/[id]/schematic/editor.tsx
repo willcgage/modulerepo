@@ -3956,6 +3956,28 @@ function Inspector({
             <strong>Benchwork</strong> tool (<kbd>B</kbd>) and the endplates become part of it.
           </p>
         )}
+        {/* ⭐⭐ THE BENCHWORK EDGE OWNS THIS PLATE (#268). Said plainly, because
+            it is the whole model: the plate is part of the board, so the board
+            is where its position, facing and face come from. `edgeDerived`
+            means the app worked out which edge it sits on — the owner did not
+            choose it — so the wording must not claim they did. */}
+        {pose.boundToEdge && (
+          <p className="rounded-md border border-sky-200 bg-sky-50 p-2 text-[11px] text-sky-900">
+            This endplate is <strong>part of the benchwork</strong>
+            {typeof bound?.index === "number" ? ` — edge ${bound.index + 1}` : ""}. Its position,
+            facing and face are read off the board, so reshaping the board moves it.
+            {pose.edgeDerived && " You did not have to set this: the plate already sat on that edge."}
+          </p>
+        )}
+        {/* ⛔ The module HAS benchwork and this plate is on none of it. Say so;
+            never move the plate onto the board — flag, don't correct. */}
+        {pose.offBenchwork && (
+          <p className="rounded-md border border-amber-300 bg-amber-50 p-2 text-[11px] text-amber-900">
+            <strong>This endplate is not on your benchwork.</strong> The board and the plate
+            disagree about where the module ends, so the plate is not part of it. Nothing has been
+            moved — either reshape the board to meet the plate, or move the plate onto an edge.
+          </p>
+        )}
         {/* ⭐ FLAGGED, NEVER CORRECTED. The drawn mainline used to RE-PLACE this
             plate onto its own end, so dragging Main 1 dragged the endplate with
             it. The plate now stays where the module puts it and the shortfall

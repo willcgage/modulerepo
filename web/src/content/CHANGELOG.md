@@ -5,6 +5,22 @@ Headings are `version — date` (YYYY-MM-DD).
 
 ---
 
+## v0.68.0 — 2026-08-01
+
+### Changed
+- **Your endplates are now part of your benchwork.** Where an endplate already sits on an edge of your board, that edge owns it: the plate's position, its facing and its face are read off the board, so reshaping the board moves the plate with it. The endplate panel says which edge a plate belongs to.
+
+  **You do not have to set this up.** If the plate already sat on an edge, the app works out which one. If you have deliberately placed a plate by hand, your placement still wins — and if you have named an edge yourself, that wins over everything.
+
+  Binding never widens a plate to fill its edge: it keeps the face width you set. A deeper board does not make a wider endplate.
+
+  Six modules will draw an endplate up to 0.56″ from where it was, because the plate sat slightly off the board and has now been pulled onto it. Nothing was saved or changed in any module — only the drawing.
+
+### Added
+- **A warning when an endplate is not on your benchwork.** If the board and the plate disagree about where the module ends, the app says so and moves nothing. Reshape the board to meet the plate, or move the plate onto an edge — your choice, not the app's.
+
+---
+
 ## v0.67.0 — 2026-08-01
 
 ### Changed
