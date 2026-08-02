@@ -417,6 +417,36 @@ export function SchematicEditor({
 
 
   /**
+   * ⭐ THE BOARD'S MAXIMUM EXTENTS — how much room this module actually takes.
+   *
+   * Will, 2026-08-01: *"maximum length for both left to right top and bottom
+   * should be shown … FMN-0078 is a good example. Left to right its maximum is
+   * approximately 96″ and top to bottom is 32″."*
+   *
+   * ⭐ MAXIMA on purpose. FMN-0078 is TAPERED — 16″ deep at end A, 32″ at end B —
+   * so "the depth" is not a single number, and the one worth printing is the
+   * most it needs. Measured off the BENCHWORK (outline, sections, or the derived
+   * band), never off the track: a spur running past a fascia does not make the
+   * board bigger.
+   */
+  const boardExtent = useMemo(() => {
+    const pts = [
+      ...(footprint.outline ?? []),
+      ...footprint.sectionOutlines.flatMap((s) => s.outline ?? []),
+    ];
+    const use = pts.length >= 2 ? pts : footprint.band;
+    if (use.length < 2) return null;
+    const xs = use.map((p) => p.x);
+    const ys = use.map((p) => p.y);
+    return {
+      w: Math.max(...xs) - Math.min(...xs),
+      h: Math.max(...ys) - Math.min(...ys),
+      /** False when this is the derived band, not a board anyone drew (#268). */
+      drawn: pts.length >= 2,
+    };
+  }, [footprint]);
+
+  /**
    * ⭐⭐ AN ENDPLATE IS THE MODULE'S OWN FACT — THE DRAWN TRACK DOES NOT PLACE IT.
    *
    * This used to re-place A and B onto the ends of the drawn centre-line when a
@@ -2432,6 +2462,7 @@ export function SchematicEditor({
             geometries={geometries}
             geoSpec={geoSpec}
             derivedPoses={derivedPoses}
+            boardExtent={boardExtent}
             benchworkAuthored={footprint.benchworkAuthored}
             mainReachesPlate={mainReachesPlate}
             wantsManualPose={wantsManualPose}
@@ -3400,6 +3431,7 @@ function Inspector({
   geometries,
   geoSpec,
   derivedPoses,
+  boardExtent,
   benchworkAuthored,
   mainReachesPlate,
   wantsManualPose,
@@ -3459,6 +3491,10 @@ function Inspector({
   geometries: { value: string; display_label: string; requires_degrees: boolean; requires_offset_inches: boolean }[];
   geoSpec?: { requires_degrees: boolean; requires_offset_inches: boolean };
   derivedPoses: EndplatePose[];
+  /** The BOARD's maximum extents in inches, or null when there is nothing to
+   * measure. `drawn` is false when this is the derived band rather than a board
+   * anyone drew. Measured off the benchwork only — never off the track. */
+  boardExtent: { w: number; h: number; drawn: boolean } | null;
   /** Has the owner actually drawn a board? False means the benchwork on screen
    * is a derived stand-in, so an endplate has nothing real to be part of. */
   benchworkAuthored: boolean;
@@ -3613,6 +3649,23 @@ function Inspector({
               }
             />
           </label>
+          {/* ⭐ WHAT THE BOARD ACTUALLY MEASURES, beside what it was told to be.
+              Maxima, because a tapered module has no single depth — FMN-0078 is
+              16″ at one end and 32″ at the other, and 32″ is the space it needs.
+              Read off the benchwork only: track that overhangs a fascia does not
+              make the board bigger. */}
+          {boardExtent && (
+            <p className="rounded-md border border-gray-200 bg-gray-50 p-2 text-[11px] text-gray-600">
+              Board, at its widest:{" "}
+              <strong>
+                {Math.round(boardExtent.w * 10) / 10}″ left to right ×{" "}
+                {Math.round(boardExtent.h * 10) / 10}″ top to bottom
+              </strong>
+              {!boardExtent.drawn && (
+                <> — derived from the dimensions; no benchwork has been drawn yet.</>
+              )}
+            </p>
+          )}
           {/* ⭐ HOW FAR THE RAIL RUNS — the number the whole canvas is measured
               in, and until #246 it could be edited NOWHERE (modulerepo#246).
               It was written by two save paths and had an input on neither, so
