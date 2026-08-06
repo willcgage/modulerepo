@@ -2605,21 +2605,47 @@ type RailTool = {
   glyph: string;
   hint: string;
   soon?: boolean;
+  /** Which build-order layer this tool CREATES in. Absent for Select, which
+   * creates nothing and so belongs to no layer (#270). */
+  layer?: LayerNumber;
 };
 
-// Grouped so the rail reads in sections: the pointer, then everything you draw
-// on the board (board → main → sidings → turnouts → signals), then the
-// operations overlay. Turnouts and signals sit with the track tools, not below
-// Industry. Dividers separate the groups.
+/**
+ * ⭐ THE RAIL IS A MODE, AND STAYS ONE (Will, 2026-08-06). It answers a question
+ * no selection can: what does a click on empty canvas CREATE? Deriving that from
+ * what happens to be selected is impossible when nothing is — and the canvas
+ * already learned it the hard way, guessing "add a benchwork corner" until
+ * `CanvasTool` made the intent explicit.
+ *
+ * ⭐ What it stops doing is standing in for the LAYER. That is derived from the
+ * selection now (`LAYER_OF`, shown by `LayerBadge`), so the rail is free to be
+ * read as *"what am I about to add"*.
+ *
+ * ⚠️ The old grouping comment here described "board → main → sidings → turnouts
+ * → signals" — the pre-ADR-0001 six-layer split, where a permanent main was the
+ * module's coordinate system. That model is gone. The four drawing tools
+ * already mapped one-to-one onto the four real layers; they are now ordered and
+ * numbered as such, so the rail, the Objects list and the inspector badge all
+ * state the same fact the same way.
+ */
 const TOOL_GROUPS: RailTool[][] = [
+  // Select creates nothing — it is the only entry that is not a layer.
   [{ id: "select", key: "V", label: "Select", glyph: "▶", hint: "Select & move (V)" }],
   [
-    { id: "benchwork", key: "B", label: "Benchwork", glyph: "▱", hint: "Draw the board outline (B)" },
+    {
+      id: "benchwork",
+      key: "B",
+      label: "Benchwork",
+      glyph: "▱",
+      layer: 1,
+      hint: "Draw the board outline (B)",
+    },
     {
       id: "track",
       key: "T",
       label: "Track",
       glyph: "═",
+      layer: 2,
       // ⭐ ONE JOB, AND NOW ONE BUTTON FOR IT. A turnout is a thing you put on
       // track, not a separate activity, so its palette lives here rather than in
       // a rail button of its own — and laying track as the PIECES it is built
@@ -2628,9 +2654,25 @@ const TOOL_GROUPS: RailTool[][] = [
       // two models this click means; see `graphAuthoring` in benchwork-editor.
       hint: "Build track — lay the pieces, or draw the main and drop a turnout (T)",
     },
-    { id: "signal", key: "S", label: "Signal", glyph: "⚑", hint: "Drop a signal / control point on the main (S)" },
+    {
+      id: "signal",
+      key: "S",
+      label: "Signal",
+      glyph: "⚑",
+      layer: 3,
+      hint: "Drop a signal / control point on the main (S)",
+    },
+    // Industry joins the other drawing tools rather than sitting past a divider
+    // of its own: it is layer 4 of the same four, not a separate kind of thing.
+    {
+      id: "industry",
+      key: "I",
+      label: "Industry",
+      glyph: "▢",
+      layer: 4,
+      hint: "Place an industry on a track (I)",
+    },
   ],
-  [{ id: "industry", key: "I", label: "Industry", glyph: "▢", hint: "Place an industry on a track (I)" }],
 ];
 
 /** The section lengths implied by the joint positions — the gaps between end A,
@@ -3323,12 +3365,24 @@ function ToolRail({
                 key={t.id}
                 type="button"
                 onClick={() => setTool(t.id!)}
-                title={t.hint}
+                // The layer is named here too, so the one place that still asks
+                // you to choose says which layer choosing it puts you in.
+                title={t.layer ? `${t.hint} — layer ${t.layer}, ${LAYER_NAMES[t.layer - 1]}` : t.hint}
                 aria-pressed={on}
-                className={`flex h-9 w-9 flex-col items-center justify-center rounded-md text-base leading-none transition ${
+                className={`relative flex h-9 w-9 flex-col items-center justify-center rounded-md text-base leading-none transition ${
                   on ? "bg-blue-600 text-white" : "text-gray-600 hover:bg-gray-100"
                 }`}
               >
+                {t.layer && (
+                  <span
+                    aria-hidden
+                    className={`absolute right-0.5 top-0.5 text-[8px] font-semibold ${
+                      on ? "text-white/70" : "text-gray-300"
+                    }`}
+                  >
+                    {t.layer}
+                  </span>
+                )}
                 <span>{t.glyph}</span>
                 <span className="mt-0.5 text-[9px] font-medium">{t.key}</span>
               </button>
