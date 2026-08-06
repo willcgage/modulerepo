@@ -5,6 +5,16 @@ Headings are `version — date` (YYYY-MM-DD).
 
 ---
 
+## v0.74.0 — 2026-08-06
+
+### Changed
+- **The Objects list now reads in build order.** Benchwork first (the board and the endplates that are part of it), then Trackwork (track, turnouts, crossings), then Control points, then Industries — the order you actually build a module in, with each layer named. It used to be grouped by object kind with no through-line.
+- **A run no longer lists every length of flex it is cut from.** Most owners do not need to see that their main is three pieces, so the breakdown folds into a single "3 pieces" line you can open when you do.
+
+  ⓘ A run containing a piece longer than its stock stays open and cannot be folded away, so a warning can never be hidden behind a closed section.
+
+---
+
 ## v0.73.0 — 2026-08-06
 
 ### Added

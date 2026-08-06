@@ -6319,6 +6319,11 @@ function ObjectsList({
 }) {
   /** Corners are keyed by index, everything else by id — compare accordingly.
    * A flex piece needs BOTH: several pieces share one track id (#193). */
+  /** Which runs have had their flex breakdown opened by hand (#270). Kept as
+   * UI state, not in the document: which rows you have unfolded is not a fact
+   * about the module. */
+  const [openRuns, setOpenRuns] = useState<Set<string>>(new Set());
+
   const on = (s: Selection) => {
     if (selection === null || selection.kind !== s.kind) return false;
     // A corner is keyed by (section, index) — the index alone repeats across
@@ -6366,17 +6371,60 @@ function ObjectsList({
   /** A run's rows: the track itself, then the lengths of flex it's made of. */
   const trackRows = (id: string, label: string, sel: Selection, sub?: string) => {
     const f = flex[id];
+    const pieces = f?.pieces ?? [];
+    // ⭐ "Main 1 → the pieces that make it up is nice, but most Owners will not
+    // care" (Will, #270) — so the breakdown collapses. It stays a real part of
+    // the list, one click away, rather than being removed.
+    // ⛔ EXCEPT WHEN A PIECE IS OVERLONG. #208/#209 gated a disclosure on a
+    // count and so rendered a warning inside a section that stays shut —
+    // invisible by construction. A warned run is forced open and CANNOT be
+    // collapsed away, which is why this is `||` and not a stored preference.
+    const warned = pieces.some((p) => p.overlong);
+    const open = warned || openRuns.has(id);
     return [
       row(id, label, sel, sub),
-      ...(f?.pieces ?? []).map((p) =>
-        row(
-          `${id}#${p.index}`,
-          `Piece ${p.index + 1}`,
-          { kind: "flex" as const, id, index: p.index },
-          `${Math.round(p.lengthInches * 10) / 10}″${p.overlong ? " ⚠" : ""}`,
-          { indent: true, warn: p.overlong },
-        ),
-      ),
+      ...(pieces.length
+        ? [
+            <button
+              key={`${id}#toggle`}
+              type="button"
+              disabled={warned}
+              onClick={() =>
+                setOpenRuns((prev) => {
+                  const next = new Set(prev);
+                  if (next.has(id)) next.delete(id);
+                  else next.add(id);
+                  return next;
+                })
+              }
+              className={`flex w-full items-center gap-1 rounded py-0.5 pl-5 pr-2 text-left text-[11px] ${
+                warned ? "text-amber-600" : "text-gray-400 hover:bg-gray-50 hover:text-gray-600"
+              }`}
+              title={
+                warned
+                  ? "A piece is longer than its stock — shown so it can't be hidden"
+                  : open
+                    ? "Hide the lengths this run is cut into"
+                    : "Show the lengths this run is cut into"
+              }
+            >
+              <span className={open ? "rotate-90" : ""}>▸</span>
+              {pieces.length} {pieces.length === 1 ? "piece" : "pieces"}
+              {warned && <span className="ml-auto shrink-0">⚠</span>}
+            </button>,
+          ]
+        : []),
+      ...(open
+        ? pieces.map((p) =>
+            row(
+              `${id}#${p.index}`,
+              `Piece ${p.index + 1}`,
+              { kind: "flex" as const, id, index: p.index },
+              `${Math.round(p.lengthInches * 10) / 10}″${p.overlong ? " ⚠" : ""}`,
+              { indent: true, warn: p.overlong },
+            ),
+          )
+        : []),
     ];
   };
 
@@ -6389,32 +6437,8 @@ function ObjectsList({
         Objects
       </h2>
 
-      {endplates.length > 0 && (
-        <Group
-          title="Endplates"
-          count={endplates.length}
-          actions={
-            <button
-              type="button"
-              onClick={add.endplate}
-              className={addBtn}
-              title="Add a 3rd+ endplate (a junction) — placed on the board; draw track to it separately."
-            >
-              + Endplate
-            </button>
-          }
-        >
-          {endplates.map((e) =>
-            row(
-              `ep${e.id}`,
-              e.id === "A" ? "Endplate A (west)" : e.id === "B" ? "Endplate B (east)" : `Endplate ${e.id}`,
-              { kind: "endplate", id: e.id },
-              e.config === "double" ? "double" : "single",
-            ),
-          )}
-        </Group>
-      )}
-
+      {/* ── Layer 1: Benchwork ── the board itself, and the endplates that are part of it */}
+      <LayerHeading n={1}>Benchwork</LayerHeading>
       {/* ⭐ WHEN A MODULE HAS BOARDS, THE BENCHWORK IS THOSE BOARDS. This group
           read `state.outline` alone — the same blind spot #274 fixed in
           `edgeChoices`, in another component — so a sectioned module listed no
@@ -6479,6 +6503,34 @@ function ObjectsList({
         </Group>
       )}
 
+      {endplates.length > 0 && (
+        <Group
+          title="Endplates"
+          count={endplates.length}
+          actions={
+            <button
+              type="button"
+              onClick={add.endplate}
+              className={addBtn}
+              title="Add a 3rd+ endplate (a junction) — placed on the board; draw track to it separately."
+            >
+              + Endplate
+            </button>
+          }
+        >
+          {endplates.map((e) =>
+            row(
+              `ep${e.id}`,
+              e.id === "A" ? "Endplate A (west)" : e.id === "B" ? "Endplate B (east)" : `Endplate ${e.id}`,
+              { kind: "endplate", id: e.id },
+              e.config === "double" ? "double" : "single",
+            ),
+          )}
+        </Group>
+      )}
+
+      {/* ── Layer 2: Trackwork ── all of it one layer — track, turnouts, crossings */}
+      <LayerHeading n={2}>Trackwork</LayerHeading>
       <Group
         title="Track"
         count={state.extraTracks.length + mains.length}
@@ -6514,25 +6566,6 @@ function ObjectsList({
             `${Math.round(len * 10) / 10}″`,
           );
         })}
-      </Group>
-
-      <Group
-        title="Industries"
-        count={state.industries.length}
-        actions={
-          <button type="button" onClick={add.industry} className={addBtn} title="A rail-served customer — a car-spot span on a track.">
-            + Industry
-          </button>
-        }
-      >
-        {state.industries.map((ind) =>
-          row(
-            ind.id,
-            ind.name || "unnamed",
-            { kind: "industry", id: ind.id },
-            `${carCapacity(ind.fromPos, ind.toPos)} cars`,
-          ),
-        )}
       </Group>
 
       <Group
@@ -6583,6 +6616,8 @@ function ObjectsList({
         ))}
       </Group>
 
+      {/* ── Layer 3: Control points ── and their signals */}
+      <LayerHeading n={3}>Control points</LayerHeading>
       <Group
         title="Control points"
         count={state.controlPoints.length}
@@ -6601,6 +6636,52 @@ function ObjectsList({
           ),
         )}
       </Group>
+
+      {/* ── Layer 4: Industries ── what the railway is actually there to serve */}
+      <LayerHeading n={4}>Industries</LayerHeading>
+      <Group
+        title="Industries"
+        count={state.industries.length}
+        actions={
+          <button type="button" onClick={add.industry} className={addBtn} title="A rail-served customer — a car-spot span on a track.">
+            + Industry
+          </button>
+        }
+      >
+        {state.industries.map((ind) =>
+          row(
+            ind.id,
+            ind.name || "unnamed",
+            { kind: "industry", id: ind.id },
+            `${carCapacity(ind.fromPos, ind.toPos)} cars`,
+          ),
+        )}
+      </Group>
+    </div>
+  );
+}
+
+/** A build-order layer's heading in the Objects list (#270).
+ *
+ * ⭐ THE FOUR LAYERS ARE THE APP'S MODEL, not a visual grouping invented here:
+ * Benchwork → Trackwork → Control points → Industries, and a layer may read the
+ * layers below it, never above. Naming them on screen is what makes the order
+ * mean something — "ordered by layer" with the layers unlabelled just looks
+ * like a different arbitrary order.
+ *
+ * ⚠️ A heading is a LABEL, never a container. Grouping in the panel must not
+ * imply grouping in behaviour (Will: nothing is implicitly tied to anything
+ * else), so this deliberately renders no wrapper around the groups that follow
+ * it and owns no disclosure state — nothing here can hide a warning.
+ */
+function LayerHeading({ n, children }: { n: number; children: React.ReactNode }) {
+  return (
+    <div className="mt-3 flex items-center gap-1.5 px-1 pb-0.5 first:mt-0">
+      <span className="rounded bg-gray-100 px-1 text-[9px] font-semibold text-gray-500">{n}</span>
+      <span className="text-[10px] font-semibold uppercase tracking-wide text-gray-400">
+        {children}
+      </span>
+      <span className="ml-1 h-px flex-1 bg-gray-100" />
     </div>
   );
 }
