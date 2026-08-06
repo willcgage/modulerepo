@@ -149,6 +149,41 @@ type Selection =
   // it, because that IS what a piece is: the stretch between two joints.
   | { kind: "flex"; id: string; index: number };
 
+/** The four build-order layers (#47, #270). Benchwork → Trackwork → Control
+ * points → Industries, and a layer may read the layers below it, never above. */
+const LAYER_NAMES = ["Benchwork", "Trackwork", "Control points", "Industries"] as const;
+type LayerNumber = 1 | 2 | 3 | 4;
+
+/**
+ * ⭐ WHICH LAYER A SELECTION IS IN — DERIVED, NEVER CHOSEN (#270).
+ * "We need the UI to automatically know what layer we are working in based on
+ * what is selected." Same principle the app settled for track roles in #226:
+ * picking up a turnout means you are working trackwork; nothing should need
+ * saying so first.
+ *
+ * ⚠️ A `Record` keyed on `Selection["kind"]`, deliberately — NOT a switch with a
+ * default. Adding a selection kind is then a COMPILE ERROR until it is given a
+ * layer, instead of silently falling into a plausible one. That is the
+ * `PartExtent` lesson: a type that hands out a reasonable-looking answer for a
+ * case nobody considered hides the bug instead of surfacing it.
+ */
+const LAYER_OF: Record<Selection["kind"], LayerNumber> = {
+  // 1 — the board itself. An endplate is PART of the benchwork (#268).
+  corner: 1,
+  endplate: 1,
+  // 2 — all trackwork is one layer: routes, the pieces they are cut into,
+  // turnouts and crossings alike.
+  track: 2,
+  pieces: 2,
+  flex: 2,
+  turnout: 2,
+  crossing: 2,
+  // 3 — control points, and the signals they carry.
+  cp: 3,
+  // 4 — what the railway is there to serve.
+  industry: 4,
+};
+
 const isCanvasSel = (s: Selection | null): s is CanvasSelection =>
   s !== null &&
   (s.kind === "corner" ||
@@ -4011,7 +4046,12 @@ function Inspector({
   const shell = (title: string, body: React.ReactNode, remove?: { fn: () => void; label: string }) => (
     <div className={box}>
       <div className="mb-3 flex items-start justify-between gap-2 border-b border-gray-100 pb-2">
-        <h2 className="text-sm font-semibold text-gray-900">{title}</h2>
+        <div className="min-w-0">
+          {/* Derived from the selection, every time — no panel gets to say which
+              layer it belongs to, so none can disagree with this table. */}
+          <LayerBadge n={LAYER_OF[selection.kind]} />
+          <h2 className="mt-0.5 text-sm font-semibold text-gray-900">{title}</h2>
+        </div>
         <button
           type="button"
           onClick={() => select(null)}
@@ -6658,6 +6698,31 @@ function ObjectsList({
         )}
       </Group>
     </div>
+  );
+}
+
+/** The layer the current selection puts you in, shown above the inspector's
+ * title (#270 stage 1).
+ *
+ * ⭐⭐ THIS IS A READOUT, NOT A CONTROL, and that is the whole point. Selecting a
+ * corner tells you that you are working the benchwork; it must NOT arm the
+ * benchwork tool, because then your next click on empty canvas would silently
+ * add a corner. Derive what you SEE from the selection, never what your next
+ * click DOES — anything else is the implicit coupling Will rules out
+ * ("nothing is implicitly tied to anything else").
+ *
+ * Shares its numbered chip with `LayerHeading` on purpose: the badge here and
+ * the heading in the Objects list are the same fact stated twice, so they
+ * should look the same.
+ */
+function LayerBadge({ n }: { n: LayerNumber }) {
+  return (
+    <span className="flex items-center gap-1.5" title={`Layer ${n} of 4 — derived from what you have selected`}>
+      <span className="rounded bg-gray-100 px-1 text-[9px] font-semibold text-gray-500">{n}</span>
+      <span className="text-[10px] font-semibold uppercase tracking-wide text-gray-400">
+        {LAYER_NAMES[n - 1]}
+      </span>
+    </span>
   );
 }
 
