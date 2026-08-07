@@ -1336,6 +1336,10 @@ export function SchematicEditor({
     state.sections.find((sec) => sec.id === activeSectionId) ??
     (footprint.sectionOutlines.length ? (state.sections[0] ?? null) : null);
 
+  /** Why the last Delete refused, so the key is never silent (#269). Declared
+   * here rather than beside its effect because `selectObject` below clears it. */
+  const [removeRefusal, setRemoveRefusal] = useState<string | null>(null);
+
   /** Selecting a corner that belongs to a section makes that section the one
    * being shaped. Without this the inspector would edit one board's polygon
    * while the canvas drew another's, and "Corner 2" in the list would be a
@@ -1345,6 +1349,9 @@ export function SchematicEditor({
    * benchwork polygons can be in play at once). */
   const selectObject = useCallback((s: Selection | null) => {
     if (s?.kind === "corner" && s.section) setActiveSectionId(s.section);
+    // A refusal is about the thing that WAS selected — picking something else
+    // makes it stale, so it goes with the selection that earned it (#269).
+    setRemoveRefusal(null);
     setSelection(s);
   }, []);
 
@@ -2081,6 +2088,11 @@ export function SchematicEditor({
   // every keystroke of state — the same reason the save refs above exist.
   const selectionRef = useRef(selection);
   const stateRef = useRef(state);
+  /** The Delete key reaches the CURRENT `removeSelected` through this, so the
+   * listener never re-binds and the two can't drift apart (#269). */
+  const removeSelectedRef = useRef<(sel: Selection | null) => { ok: true } | { ok: false; reason: string }>(
+    () => ({ ok: false, reason: "Not ready." }),
+  );
   useEffect(() => {
     docRef.current = doc;
     dimsRef.current = dims;
@@ -2182,6 +2194,141 @@ export function SchematicEditor({
     });
   };
 
+  /**
+   * ⭐⭐ REMOVE WHATEVER IS SELECTED — **ONE definition**, used by BOTH the
+   * `Delete` key and every inspector "Remove" button (#269).
+   *
+   * Will: *"you can't delete anything from the drawing. Wow, this is a big
+   * miss."* It was not literally true — every object had a Remove button at the
+   * foot of its panel — but `Delete` was wired to track PIECES alone, so the
+   * gesture everyone tries first silently did nothing on everything else. A
+   * gesture that works on one object type out of eight reads as broken.
+   *
+   * ⚠️ It returns a REASON rather than a boolean, because "nothing happened" is
+   * the failure this issue is about. A key press that silently does nothing is
+   * indistinguishable from a broken app, so a refusal has to be able to say why.
+   *
+   * ⭐ Sharing one implementation is the point, not a tidiness bonus: the track
+   * and route panels already carried the SAME cascade written out twice, and
+   * adding a third copy behind the key would have been the "two computations of
+   * one quantity" bug that let a 0″ route survive its own fix (#226).
+   */
+  const removeSelected = (sel: Selection | null): { ok: true } | { ok: false; reason: string } => {
+    if (!sel) return { ok: false, reason: "Nothing is selected." };
+    // Drop every reference to a track that is going away, so a branch endplate
+    // or a turnout is never left pointing at track that no longer exists (#170).
+    const dropTrack = (s: EditorState, i: number) => {
+      const removed = s.extraTracks[i]?.id;
+      s.extraTracks.splice(i, 1);
+      if (!removed) return;
+      for (const tn of s.turnouts) if (tn.divergeTrack === removed) tn.divergeTrack = "";
+      for (const b of s.branches) if (b.trackId === removed) b.trackId = null;
+    };
+    switch (sel.kind) {
+      case "pieces": {
+        if (!sel.ids.length) return { ok: false, reason: "Nothing is selected." };
+        // The WHOLE selection goes — one piece or twenty. Removing only the
+        // last-clicked would make Delete mean something different depending on
+        // how the set was built (#94).
+        const ids = new Set(sel.ids);
+        setPieces((state.graph?.pieces ?? []).filter((p) => !ids.has(p.id)), { commit: true });
+        return { ok: true };
+      }
+      case "corner": {
+        const secId = sel.section ?? null;
+        const si = secId === null ? -1 : state.sections.findIndex((x) => x.id === secId);
+        if (secId !== null && si < 0) return { ok: false, reason: "That board is no longer there." };
+        patch((s) => {
+          const poly =
+            secId === null ? s.outline : ((s.sections[si].outline ??= []) as BenchworkPoint[]);
+          poly.splice(sel.i, 1);
+          // Below three corners it is not a shape. Fall back to the derived band
+          // rather than storing a non-shape `sectionFootprints` silently drops.
+          if (secId !== null && poly.length < 3) s.sections[si].outline = null;
+        });
+        return { ok: true };
+      }
+      case "turnout": {
+        const i = state.turnouts.findIndex((t) => t.id === sel.id);
+        if (i < 0) return { ok: false, reason: "That turnout is no longer there." };
+        patch((s) => s.turnouts.splice(i, 1));
+        return { ok: true };
+      }
+      case "crossing": {
+        const i = state.crossings.findIndex((c) => c.id === sel.id);
+        if (i < 0) return { ok: false, reason: "That crossing is no longer there." };
+        patch((s) => s.crossings.splice(i, 1));
+        return { ok: true };
+      }
+      case "cp": {
+        const i = state.controlPoints.findIndex((c) => c.id === sel.id);
+        if (i < 0) return { ok: false, reason: "That control point is no longer there." };
+        patch((s) => s.controlPoints.splice(i, 1));
+        return { ok: true };
+      }
+      case "industry": {
+        const i = state.industries.findIndex((x) => x.id === sel.id);
+        if (i < 0) return { ok: false, reason: "That industry is no longer there." };
+        patch((s) => s.industries.splice(i, 1));
+        return { ok: true };
+      }
+      case "track": {
+        // ⛔ The mainline is the module's spine, not an object you delete. Say so
+        // instead of ignoring the key.
+        if (mainRows.some((m) => m.id === sel.id))
+          return {
+            ok: false,
+            reason:
+              "The mainline is part of the module's structure and can't be deleted. Change the endplates if this module doesn't carry a main.",
+          };
+        const i = state.extraTracks.findIndex((t) => t.id === sel.id);
+        if (i < 0) return { ok: false, reason: "That track is no longer there." };
+        patch((s) => dropTrack(s, i));
+        return { ok: true };
+      }
+      case "endplate": {
+        // Branch plates are C, D, … — identified by letter, the same convention
+        // the rest of the editor uses (`charCodeAt(0) - 67`).
+        const bi = sel.id.charCodeAt(0) - 67;
+        const branch = bi >= 0 ? state.branches[bi] : undefined;
+        if (!branch)
+          return {
+            ok: false,
+            reason:
+              "Endplates A and B are part of the benchwork — they are where this module joins its neighbours. Reshape the board instead.",
+          };
+        patch((s) => {
+          // Cascade: the diverging track this endplate owns goes with it, and any
+          // turnout that fed it is cleared (#170).
+          const trackId = s.branches[bi]?.trackId;
+          if (trackId) {
+            const ti = s.extraTracks.findIndex((t) => t.id === trackId);
+            if (ti >= 0) dropTrack(s, ti);
+            for (const tn of s.turnouts) if (tn.divergeTrack === trackId) tn.divergeTrack = "";
+          }
+          delete s.poseOverrides[sel.id];
+          s.branches.splice(bi, 1);
+        });
+        return { ok: true };
+      }
+      case "flex":
+        // A flex piece is a SPAN of a run, not an object of its own (#193) —
+        // deleting one would have to mean lengthening its neighbour, which is
+        // what dragging its joint already does.
+        return {
+          ok: false,
+          reason:
+            "A flex piece is a length of a run, not a separate object. Move its joint to change where it's cut.",
+        };
+    }
+  };
+
+  // Published after render, once `removeSelected` exists — the Delete listener
+  // reads it through the ref so it never re-binds (#269).
+  useEffect(() => {
+    removeSelectedRef.current = removeSelected;
+  });
+
   // --- Keyboard: tool shortcuts, undo/redo, pan (space handled in canvas) -----
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -2214,28 +2361,28 @@ export function SchematicEditor({
           setSelection(null);
           setPendingTrack(null);
         } else if (e.key === "Delete" || e.key === "Backspace") {
-          // A laid piece is the one object with no other way to remove it — the
-          // rest are removed from their inspector, and this one can be too, but
-          // laying track is a fast loop and reaching for the panel breaks it.
-          if (selectionRef.current?.kind === "pieces") {
-            e.preventDefault();
-            // Delete removes the WHOLE selection — one piece or twenty. Removing
-            // only the last-clicked one would make Delete mean something
-            // different depending on how the set was built.
-            const ids = new Set(selectionRef.current.ids);
-            setPieces((stateRef.current.graph?.pieces ?? []).filter((p) => !ids.has(p.id)), {
-              commit: true,
-            });
+          // ⭐ Delete removes WHATEVER is selected (#269). It used to run only
+          // for track pieces, so on every other object the gesture everyone
+          // tries first did nothing at all — which reads as "you can't delete
+          // anything from the drawing".
+          const sel = selectionRef.current;
+          if (!sel) return;
+          e.preventDefault();
+          const res = removeSelectedRef.current(sel);
+          if (res.ok) {
+            setRemoveRefusal(null);
             setSelection(null);
+          } else {
+            // Never silent: if it won't go, say why.
+            setRemoveRefusal(res.reason);
           }
         }
       }
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-    // `setPieces` is read through refs on purpose — listing it would re-bind the
-    // listener on every keystroke of state for no benefit.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    // Everything else is read through refs on purpose, so the listener binds
+    // once instead of on every keystroke of state.
   }, [undo, redo]);
 
   /**
@@ -2525,11 +2672,29 @@ export function SchematicEditor({
 
         {/* The one inspector. */}
         <aside className="flex w-80 shrink-0 flex-col overflow-y-auto border-l border-gray-200 bg-white">
+          {/* ⭐ WHY DELETE DID NOTHING. The whole of #269 is that a key press
+              that silently fails is indistinguishable from a broken app, so a
+              refusal has to say so rather than being swallowed. */}
+          {removeRefusal && (
+            <div className="m-3 mb-0 flex items-start gap-2 rounded-md border border-amber-200 bg-amber-50 p-2 text-[11px] text-amber-800">
+              <span aria-hidden>⚠</span>
+              <span className="min-w-0 flex-1">{removeRefusal}</span>
+              <button
+                type="button"
+                onClick={() => setRemoveRefusal(null)}
+                className="shrink-0 text-amber-600 hover:text-amber-900"
+                aria-label="Dismiss"
+              >
+                ×
+              </button>
+            </div>
+          )}
           <Inspector
             selection={selection}
             select={setSelection}
             state={state}
             patch={patch}
+            onRemove={removeSelected}
             setPieces={setPieces}
             graphReadout={graphReadout}
             onTurnoutPos={moveTurnout}
@@ -3561,6 +3726,7 @@ function Inspector({
   select,
   state,
   patch,
+  onRemove,
   onTurnoutPos,
   mains,
   flex,
@@ -3597,6 +3763,10 @@ function Inspector({
   select: (s: Selection | null) => void;
   state: EditorState;
   patch: (fn: (s: EditorState) => void) => void;
+  /** Remove whatever is selected — THE SAME function the Delete key calls, so a
+   * panel's button and the keyboard can never disagree about what removal means
+   * or what it cascades to (#269). */
+  onRemove: (sel: Selection | null) => { ok: true } | { ok: false; reason: string };
   /** Lay out the pieces (ADR 0001) — the graph's own setter, because it also
    * keeps `startAt` pointing at a piece that still exists. */
   setPieces: (next: TrackPiece[], opts?: { commit?: boolean }) => void;
@@ -4580,21 +4750,7 @@ function Inspector({
         </details>
       </>,
       branch
-        ? {
-            fn: () =>
-              patch((s) => {
-                // Cascade: drop the diverging track this endplate owns and clear
-                // any turnout that fed it, so nothing is left dangling (#170).
-                const trackId = s.branches[bi]?.trackId;
-                if (trackId) {
-                  s.extraTracks = s.extraTracks.filter((t) => t.id !== trackId);
-                  for (const tn of s.turnouts) if (tn.divergeTrack === trackId) tn.divergeTrack = "";
-                }
-                delete s.poseOverrides[id];
-                s.branches.splice(bi, 1);
-              }),
-            label: `Remove endplate ${id}`,
-          }
+        ? { fn: () => onRemove(selection), label: `Remove endplate ${id}` }
         : undefined,
     );
   }
@@ -4658,19 +4814,7 @@ function Inspector({
           </p>
         )}
       </>,
-      {
-        fn: () =>
-          patch((s) => {
-            const p = at(s);
-            p.splice(i, 1);
-            // A polygon needs three corners to be a shape. Cutting below that
-            // leaves a section with a stored non-shape that `sectionFootprints`
-            // silently drops — so fall back to the derived band explicitly,
-            // which is what the Sections list's own Reset does.
-            if (secId !== null && p.length < 3) s.sections[secIdx].outline = null;
-          }),
-        label: "Remove corner",
-      },
+      { fn: () => onRemove(selection), label: "Remove corner" },
     );
   }
 
@@ -4914,7 +5058,7 @@ function Inspector({
           Rotated 180° — the points face the other way
         </label>
       </>,
-      { fn: () => patch((s) => s.turnouts.splice(i, 1)), label: "Remove turnout" },
+      { fn: () => onRemove(selection), label: "Remove turnout" },
     );
   }
 
@@ -4975,7 +5119,7 @@ function Inspector({
           </label>
         </div>
       </>,
-      { fn: () => patch((s) => s.crossings.splice(i, 1)), label: "Remove crossing" },
+      { fn: () => onRemove(selection), label: "Remove crossing" },
     );
   }
 
@@ -5047,7 +5191,7 @@ function Inspector({
       {
         // No selection reset here — the panel returns null once its pieces are
         // gone, which is how every other inspector in this file behaves.
-        fn: () => setPieces(pieces.filter((p) => !ids.has(p.id)), { commit: true }),
+        fn: () => onRemove(selection),
         label: `Remove ${picked.length} pieces`,
       },
     );
@@ -5157,7 +5301,7 @@ function Inspector({
         <GraphReadout readout={graphReadout} />
       </>,
       {
-        fn: () => setPieces(pieces.filter((p) => p.id !== piece.id), { commit: true }),
+        fn: () => onRemove(selection),
         label: "Remove piece",
       },
     );
@@ -5328,7 +5472,7 @@ function Inspector({
           ))}
         </div>
       </>,
-      { fn: () => patch((s) => s.controlPoints.splice(ci, 1)), label: "Remove control point" },
+      { fn: () => onRemove(selection), label: "Remove control point" },
     );
   }
 
@@ -5597,7 +5741,7 @@ function Inspector({
           />
         </div>
       </>,
-      { fn: () => patch((s) => s.industries.splice(idx, 1)), label: "Remove industry" },
+      { fn: () => onRemove(selection), label: "Remove industry" },
     );
   }
 
@@ -5984,18 +6128,7 @@ function Inspector({
         </p>
         {flexBlock(t.id)}
       </>,
-      {
-        fn: () =>
-          patch((s) => {
-            const removed = s.extraTracks[i]?.id;
-            s.extraTracks.splice(i, 1);
-            if (removed) {
-              for (const tn of s.turnouts) if (tn.divergeTrack === removed) tn.divergeTrack = "";
-              for (const b of s.branches) if (b.trackId === removed) b.trackId = null;
-            }
-          }),
-        label: "Remove this route",
-      },
+      { fn: () => onRemove(selection), label: "Remove this route" },
     );
   }
   return shell(
@@ -6177,20 +6310,7 @@ function Inspector({
       {crossoverBlock(i)}
       {flexBlock(t.id)}
     </>,
-    {
-      fn: () =>
-        patch((s) => {
-          const removed = s.extraTracks[i]?.id;
-          s.extraTracks.splice(i, 1);
-          if (removed) {
-            // Clear references so a branch endplate / turnout doesn't point at a
-            // track that no longer exists (#170).
-            for (const tn of s.turnouts) if (tn.divergeTrack === removed) tn.divergeTrack = "";
-            for (const b of s.branches) if (b.trackId === removed) b.trackId = null;
-          }
-        }),
-      label: "Remove track",
-    },
+    { fn: () => onRemove(selection), label: "Remove track" },
   );
 }
 
