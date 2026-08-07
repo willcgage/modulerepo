@@ -5,6 +5,20 @@ Headings are `version — date` (YYYY-MM-DD).
 
 ---
 
+## v0.73.0 — 2026-08-06
+
+### Added
+- **The Objects list now shows your benchwork board by board.** If your module is built from sections, the Benchwork group lists each board and — once you have given one a shape — its corners, exactly as a single-board module has always listed its own. Selecting a corner opens it with editable X and Y, and switches the drawing to that board so the corner you picked is the corner under your pointer.
+- **Each board can be shaped straight from the Objects list**, with "Shape this board" beside its name. A board you have not shaped yet says its shape is derived from its length, rather than looking like it has none.
+
+### Fixed
+- **A sectioned module no longer offers to "Draw the benchwork".** On a module built from two or more boards, the boards are the benchwork, so anything drawn as a single module-wide outline was quietly discarded — you could place corners, save, and never see them again. That offer is gone, replaced by the per-board shaping above.
+- **A corner belongs to the board it was drawn on.** Corners were identified by their number alone, so board 2's "Corner 1" and board 1's "Corner 1" were treated as the same point.
+
+  ⓘ Correction to the v0.72.0 note above: it said sections could not yet be given a shape. That was wrong — they could, from the Sections list, and had been able to since before that release. What was missing is what this release adds: the Benchwork group knowing about it.
+
+---
+
 ## v0.72.0 — 2026-08-01
 
 ### Added

@@ -161,7 +161,16 @@ export interface CanvasIndustry {
 
 /** What's selected on the canvas — the editor renders its inspector. */
 export type CanvasSelection =
-  | { kind: "corner"; i: number }
+  /**
+   * A benchwork corner. ⭐ `section` says WHICH polygon the index counts into —
+   * absent means the module's own outline, a section id means that section's.
+   * The canvas edits one polygon at a time (`outline` is the module's, or the
+   * section being shaped), so an index alone is ambiguous the moment a module
+   * has sections: "Corner 1" in the Objects list and "Corner 1" under the
+   * pointer were two different points, and the inspector resolved it against
+   * `state.outline`, which a sectioned module hasn't got (#273).
+   */
+  | { kind: "corner"; i: number; section?: string }
   | { kind: "turnout"; id: string }
   | { kind: "track"; id: string }
   | { kind: "endplate"; id: string }
@@ -269,6 +278,7 @@ export function BenchworkEditor({
   flexCutsByTrack,
   selection = null,
   onSelect,
+  outlineSection = null,
   tool = "select",
   partLibrary = PART_LIBRARY,
   pieces = [],
@@ -419,6 +429,10 @@ export function BenchworkEditor({
   /** Selection is owned by the editor, which renders the inspector for it. */
   selection?: CanvasSelection | null;
   onSelect?: (s: CanvasSelection | null) => void;
+  /** Whose polygon `outline` is: null for the module's own, else the id of the
+   * section being shaped. Corner selections are stamped with it so an index is
+   * never read against the wrong polygon (#273). */
+  outlineSection?: string | null;
   /** What a background click means. See CanvasTool. */
   tool?: CanvasTool;
   /** The track/turnout parts library for this request — the admin-maintained
@@ -524,9 +538,17 @@ export function BenchworkEditor({
   const [hover, setHover] = useState<Pt | null>(null);
   /** A live measurement shown while dragging (corner xy, track length, pos). */
   const [readout, setReadout] = useState<string | null>(null);
-  /** The selected corner index, when a corner is what's selected. */
-  const sel = selection?.kind === "corner" ? selection.i : null;
-  const setSel = (i: number | null) => onSelect?.(i === null ? null : { kind: "corner", i });
+  /** A corner selection that names the polygon it indexes into, so a section's
+   * "Corner 1" can never highlight or edit the module outline's (#273). */
+  const cornerSel = (i: number): CanvasSelection =>
+    outlineSection === null ? { kind: "corner", i } : { kind: "corner", i, section: outlineSection };
+  /** The selected corner index, when a corner OF THE POLYGON ON SCREEN is what's
+   * selected — a corner of some other section is not this canvas's to highlight. */
+  const sel =
+    selection?.kind === "corner" && (selection.section ?? null) === outlineSection
+      ? selection.i
+      : null;
+  const setSel = (i: number | null) => onSelect?.(i === null ? null : cornerSel(i));
 
   /** The axis along an endplate's FACE — perpendicular to its track — oriented
    * to agree with the centre-line NORMAL, which is the same axis lanes (and so
@@ -2647,7 +2669,7 @@ export function BenchworkEditor({
     }
     dragRef.current = d;
     // Grabbing something selects it — the editor shows its inspector.
-    if (d.kind === "vertex") onSelect?.({ kind: "corner", i: d.i });
+    if (d.kind === "vertex") onSelect?.(cornerSel(d.i));
     else if (d.kind === "turnout") onSelect?.({ kind: "turnout", id: d.id });
     else if (d.kind === "trackEnd") onSelect?.({ kind: "track", id: d.id });
     else if (d.kind === "industryEnd") onSelect?.({ kind: "industry", id: d.id });

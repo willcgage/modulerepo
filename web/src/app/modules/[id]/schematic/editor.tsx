@@ -1301,6 +1301,18 @@ export function SchematicEditor({
     state.sections.find((sec) => sec.id === activeSectionId) ??
     (footprint.sectionOutlines.length ? (state.sections[0] ?? null) : null);
 
+  /** Selecting a corner that belongs to a section makes that section the one
+   * being shaped. Without this the inspector would edit one board's polygon
+   * while the canvas drew another's, and "Corner 2" in the list would be a
+   * different point from the one under the pointer. The UI derives what it's
+   * working on FROM THE SELECTION rather than making the owner set it twice
+   * (#270's principle, applied here because #273 is the first place two
+   * benchwork polygons can be in play at once). */
+  const selectObject = useCallback((s: Selection | null) => {
+    if (s?.kind === "corner" && s.section) setActiveSectionId(s.section);
+    setSelection(s);
+  }, []);
+
   /** The band this section would occupy if it had no authored shape — what
    * "Start from a rectangle" seeds, so a section's rectangle is its own
    * stretch of board rather than the whole module's. */
@@ -2387,6 +2399,7 @@ export function SchematicEditor({
                 // `undefined`, not `[]`: a fresh array here would change identity
                 // every render and defeat the memo that reads it.
                 contextOutlines={activeSection ? otherSectionOutlines : undefined}
+                outlineSection={activeSection?.id ?? null}
                 seedOutline={activeSectionBand}
                 editingLabel={
                   activeSection
@@ -2457,7 +2470,7 @@ export function SchematicEditor({
                   })
                 }
                 selection={isCanvasSel(selection) ? selection : null}
-                onSelect={setSelection}
+                onSelect={selectObject}
                 partLibrary={partLibrary}
               />
             </div>
@@ -2520,8 +2533,13 @@ export function SchematicEditor({
           <ObjectsList
             state={state}
             selection={selection}
-            select={setSelection}
+            select={selectObject}
             setTool={setTool}
+            onShapeSection={(id) => {
+              setActiveSectionId(id);
+              setTool("benchwork");
+            }}
+            sectionsOwnShape={footprint.sectionOutlines.length > 0}
             add={{
               ...trackAdd,
               turnout: addTurnout,
@@ -4490,15 +4508,31 @@ function Inspector({
   // ---- Benchwork corner ----
   if (selection.kind === "corner") {
     const i = selection.i;
-    const c = state.outline[i];
+    // Which polygon this index counts into: the module's own outline, or one
+    // section's. A sectioned module has NO module outline, so reading
+    // `state.outline` unconditionally made every section corner un-openable.
+    const secId = selection.section ?? null;
+    const secIdx = secId === null ? -1 : state.sections.findIndex((x) => x.id === secId);
+    if (secId !== null && secIdx < 0) return null;
+    const poly = secId === null ? state.outline : (state.sections[secIdx].outline ?? []);
+    const c = poly[i];
     if (!c) return null;
+    const at = (s: EditorState): BenchworkPoint[] =>
+      secId === null ? s.outline : ((s.sections[secIdx].outline ??= []) as BenchworkPoint[]);
+    const sectionName =
+      secId === null ? null : (state.sections[secIdx].name || `section ${secIdx + 1}`);
     // Both are SIGNED — a corner below the centre line or west of endplate A is
     // ordinary — so both commit on blur. Per keystroke, the "−" of "−6" parsed
     // as NaN and wrote it straight into the corner (#209).
     const set = (k: "x" | "y", v: number | null) =>
-      patch((s) => (s.outline[i] = { ...s.outline[i], [k]: v ?? 0 }));
+      patch((s) => {
+        const p = at(s);
+        p[i] = { ...p[i], [k]: v ?? 0 };
+      });
     return shell(
-      `Benchwork corner ${i + 1}`,
+      sectionName
+        ? `${sectionName} · corner ${i + 1}`
+        : `Benchwork corner ${i + 1}`,
       <>
         <div className="grid grid-cols-2 gap-2">
           <label className="block text-xs font-medium text-gray-600">
@@ -4515,7 +4549,10 @@ function Inspector({
             type="button"
             onClick={() =>
               // Drop the bulge on the edge LEAVING this corner.
-              patch((s) => (s.outline[i] = { x: s.outline[i].x, y: s.outline[i].y }))
+              patch((s) => {
+                const p = at(s);
+                p[i] = { x: p[i].x, y: p[i].y };
+              })
             }
             className={addBtn}
           >
@@ -4527,7 +4564,19 @@ function Inspector({
           </p>
         )}
       </>,
-      { fn: () => patch((s) => s.outline.splice(i, 1)), label: "Remove corner" },
+      {
+        fn: () =>
+          patch((s) => {
+            const p = at(s);
+            p.splice(i, 1);
+            // A polygon needs three corners to be a shape. Cutting below that
+            // leaves a section with a stored non-shape that `sectionFootprints`
+            // silently drops — so fall back to the derived band explicitly,
+            // which is what the Sections list's own Reset does.
+            if (secId !== null && p.length < 3) s.sections[secIdx].outline = null;
+          }),
+        label: "Remove corner",
+      },
     );
   }
 
@@ -6223,6 +6272,8 @@ function ObjectsList({
   selection,
   select,
   setTool,
+  onShapeSection,
+  sectionsOwnShape,
   add,
   mains,
   flex,
@@ -6234,6 +6285,15 @@ function ObjectsList({
   selection: Selection | null;
   select: (s: Selection | null) => void;
   setTool: (t: CanvasTool) => void;
+  /** Start shaping one section's own board — the same action the Sections list
+   * offers, so the Benchwork group can point at it instead of offering to draw
+   * a module outline that a sectioned module discards (#273). */
+  onShapeSection: (id: string) => void;
+  /** Whether the SECTIONS own this module's shape, as the package decided it —
+   * `moduleFootprint().sectionOutlines` being non-empty. Passed in rather than
+   * re-tested here so the list and the drawing can't disagree about which
+   * polygon is real (#273). */
+  sectionsOwnShape: boolean;
   add: {
     passingSiding: () => void;
     spur: () => void;
@@ -6261,7 +6321,10 @@ function ObjectsList({
    * A flex piece needs BOTH: several pieces share one track id (#193). */
   const on = (s: Selection) => {
     if (selection === null || selection.kind !== s.kind) return false;
-    if (selection.kind === "corner" && s.kind === "corner") return selection.i === s.i;
+    // A corner is keyed by (section, index) — the index alone repeats across
+    // every section's polygon, so two boards' "Corner 1" both lit up (#273).
+    if (selection.kind === "corner" && s.kind === "corner")
+      return selection.i === s.i && (selection.section ?? null) === (s.section ?? null);
     if (selection.kind === "flex" && s.kind === "flex")
       return selection.id === s.id && selection.index === s.index;
     return "id" in selection && "id" in s && selection.id === s.id;
@@ -6352,19 +6415,69 @@ function ObjectsList({
         </Group>
       )}
 
-      <Group title="Benchwork" count={state.outline.length}>
-        {state.outline.length === 0 ? (
-          <button
-            type="button"
-            onClick={() => setTool("benchwork")}
-            className={addBtn}
-          >
-            Draw the benchwork
-          </button>
-        ) : (
-          state.outline.map((_, i) => row(`c${i}`, `Corner ${i + 1}`, { kind: "corner", i }))
-        )}
-      </Group>
+      {/* ⭐ WHEN A MODULE HAS BOARDS, THE BENCHWORK IS THOSE BOARDS. This group
+          read `state.outline` alone — the same blind spot #274 fixed in
+          `edgeChoices`, in another component — so a sectioned module listed no
+          corners at all and instead offered "Draw the benchwork", authoring an
+          outline `moduleFootprint` DISCARDS the moment the sections own the
+          shape. Corners drawn and then ignored is #173 exactly (#273).
+          ⚠️ Which side owns the shape is NOT re-derived here: `sectionsOwnShape`
+          is read off the package's own output, so a LONE shapeless section still
+          edits the module's outline (#173) and this list cannot drift from what
+          actually gets rendered. */}
+      {sectionsOwnShape ? (
+        <Group title="Benchwork" count={state.sections.length}>
+          {state.sections.map((sec, si) => {
+            const pts = sec.outline ?? [];
+            const shaped = pts.length >= 3;
+            return (
+              <Fragment key={sec.id}>
+                <div className="flex items-center gap-2 px-2 pt-1 text-[11px] font-medium text-gray-500">
+                  <span className="truncate">{sec.name || `Section ${si + 1}`}</span>
+                  <button
+                    type="button"
+                    onClick={() => onShapeSection(sec.id)}
+                    className="ml-auto shrink-0 font-medium text-blue-600 hover:underline"
+                  >
+                    {shaped ? "Reshape" : "Shape this board"}
+                  </button>
+                </div>
+                {shaped ? (
+                  pts.map((_, i) =>
+                    row(
+                      `${sec.id}-c${i}`,
+                      `Corner ${i + 1}`,
+                      { kind: "corner", i, section: sec.id },
+                      undefined,
+                      { indent: true },
+                    ),
+                  )
+                ) : (
+                  // Not "no shape" — it HAS one, derived from its length. Saying
+                  // so is what stops the owner drawing a module outline instead.
+                  <p className="pb-1 pl-5 pr-2 text-[11px] text-gray-400">
+                    Shape derived from its length. Shape this board to edit its corners.
+                  </p>
+                )}
+              </Fragment>
+            );
+          })}
+        </Group>
+      ) : (
+        <Group title="Benchwork" count={state.outline.length}>
+          {state.outline.length === 0 ? (
+            <button
+              type="button"
+              onClick={() => setTool("benchwork")}
+              className={addBtn}
+            >
+              Draw the benchwork
+            </button>
+          ) : (
+            state.outline.map((_, i) => row(`c${i}`, `Corner ${i + 1}`, { kind: "corner", i }))
+          )}
+        </Group>
+      )}
 
       <Group
         title="Track"
