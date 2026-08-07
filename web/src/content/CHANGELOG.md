@@ -5,6 +5,16 @@ Headings are `version — date` (YYYY-MM-DD).
 
 ---
 
+## v0.75.0 — 2026-08-07
+
+### Fixed
+- **Delete now removes whatever you have selected.** The key only ever worked on track pieces, so on a turnout, a crossing, a route, an industry, a control point or a benchwork corner it silently did nothing — which reads as not being able to delete anything at all. Select it and press Delete or Backspace; multi-selected pieces still all go together.
+- **When something can't be deleted, the app says why.** Pressing Delete on endplate A or B explains that they are part of the benchwork and where the module joins its neighbours; on the mainline, that it is part of the module's structure. Previously the key did nothing and gave no reason, which is indistinguishable from a bug.
+
+  ⓘ Removing a branch endplate still takes its diverging track with it, and removing a track still clears the turnouts and branch endplates that pointed at it — the Remove buttons and the Delete key now run exactly the same code, so they cannot behave differently.
+
+---
+
 ## v0.74.0 — 2026-08-06
 
 ### Added
