@@ -5927,9 +5927,15 @@ function Inspector({
     /** Move the joint at this piece's far end. Its neighbour gives up (or gains)
      * exactly what this piece takes — which is what cutting really does. The
      * rule (and the clamp that stops a too-long value reordering the joints)
-     * lives in the package, with `resizeSection`'s lesson already learnt. */
+     * lives in the package, with `resizeSection`'s lesson already learnt.
+     *
+     * ⭐ Passing the product's stock length is what makes a piece unable to
+     * exceed it (Will, 2026-08-07): *"A piece can never be longer than its
+     * maximum … it should auto split and create a new piece."* Ask for 50″ of a
+     * 30″ product and you get a 30 and a 20, because that is what you would
+     * actually lay (#271). */
     const resize = (want: number) => {
-      const next = resizeFlexPiece(f.pieces, selection.index, want);
+      const next = resizeFlexPiece(f.pieces, selection.index, want, max);
       if (!next) return;
       patch((s) => {
         // The first edit turns the whole run's derived cuts into the owner's
@@ -5952,7 +5958,12 @@ function Inspector({
             {meets(piece.fromEnd)} at the west end, {meets(piece.toEnd)} at the east
           </dd>
           <dt className="text-gray-500">Longest</dt>
-          <dd className="text-gray-800">{max}″ for this product</dd>
+          <dd className="text-gray-800">
+            {max}″ for this product
+            {piece.toEnd === "piece" && (
+              <span className="text-gray-500"> — ask for more and it&rsquo;s cut into lengths</span>
+            )}
+          </dd>
         </dl>
         {piece.toEnd === "piece" ? (
           <label className="block text-xs font-medium text-gray-600">
@@ -5962,7 +5973,7 @@ function Inspector({
               // Blank isn't a length — clearing it leaves the piece as it was.
               onCommit={(v) => v != null && resize(v)}
               inp={inp}
-              title="Moves the joint at this piece's east end. Its neighbour takes up the difference — which is what cutting one longer really does."
+              title={`Moves the joint at this piece's east end. Its neighbour takes up the difference — which is what cutting one longer really does. Longer than ${max}″ and it is cut into lengths, because that is what you would have to lay.`}
             />
           </label>
         ) : (
