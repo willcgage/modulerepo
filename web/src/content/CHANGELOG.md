@@ -5,6 +5,16 @@ Headings are `version — date` (YYYY-MM-DD).
 
 ---
 
+## v0.76.0 — 2026-08-07
+
+### Changed
+- **A length of flex can never be longer than the product it is cut from.** Ask for 50″ of a 30″ flex and you now get a 30″ and a 20″ — the two lengths you would actually lay — instead of one piece nobody sells. Shrinking is unchanged: you can always cut more off.
+- **The longest length is the one your product comes in**, not a fixed 30″. Atlas Code 55 is 30″, Micro Engineering is 36″, and the piece panel says which.
+
+  ⓘ Only the piece you resize and the one next to it are affected — a length elsewhere in the run that is already over-length is left exactly as it is, and stays flagged, rather than being quietly re-cut.
+
+---
+
 ## v0.75.0 — 2026-08-07
 
 ### Fixed
