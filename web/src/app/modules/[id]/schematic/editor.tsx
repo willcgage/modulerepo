@@ -149,6 +149,41 @@ type Selection =
   // it, because that IS what a piece is: the stretch between two joints.
   | { kind: "flex"; id: string; index: number };
 
+/** The four build-order layers (#47, #270). Benchwork → Trackwork → Control
+ * points → Industries, and a layer may read the layers below it, never above. */
+const LAYER_NAMES = ["Benchwork", "Trackwork", "Control points", "Industries"] as const;
+type LayerNumber = 1 | 2 | 3 | 4;
+
+/**
+ * ⭐ WHICH LAYER A SELECTION IS IN — DERIVED, NEVER CHOSEN (#270).
+ * "We need the UI to automatically know what layer we are working in based on
+ * what is selected." Same principle the app settled for track roles in #226:
+ * picking up a turnout means you are working trackwork; nothing should need
+ * saying so first.
+ *
+ * ⚠️ A `Record` keyed on `Selection["kind"]`, deliberately — NOT a switch with a
+ * default. Adding a selection kind is then a COMPILE ERROR until it is given a
+ * layer, instead of silently falling into a plausible one. That is the
+ * `PartExtent` lesson: a type that hands out a reasonable-looking answer for a
+ * case nobody considered hides the bug instead of surfacing it.
+ */
+const LAYER_OF: Record<Selection["kind"], LayerNumber> = {
+  // 1 — the board itself. An endplate is PART of the benchwork (#268).
+  corner: 1,
+  endplate: 1,
+  // 2 — all trackwork is one layer: routes, the pieces they are cut into,
+  // turnouts and crossings alike.
+  track: 2,
+  pieces: 2,
+  flex: 2,
+  turnout: 2,
+  crossing: 2,
+  // 3 — control points, and the signals they carry.
+  cp: 3,
+  // 4 — what the railway is there to serve.
+  industry: 4,
+};
+
 const isCanvasSel = (s: Selection | null): s is CanvasSelection =>
   s !== null &&
   (s.kind === "corner" ||
@@ -2570,21 +2605,47 @@ type RailTool = {
   glyph: string;
   hint: string;
   soon?: boolean;
+  /** Which build-order layer this tool CREATES in. Absent for Select, which
+   * creates nothing and so belongs to no layer (#270). */
+  layer?: LayerNumber;
 };
 
-// Grouped so the rail reads in sections: the pointer, then everything you draw
-// on the board (board → main → sidings → turnouts → signals), then the
-// operations overlay. Turnouts and signals sit with the track tools, not below
-// Industry. Dividers separate the groups.
+/**
+ * ⭐ THE RAIL IS A MODE, AND STAYS ONE (Will, 2026-08-06). It answers a question
+ * no selection can: what does a click on empty canvas CREATE? Deriving that from
+ * what happens to be selected is impossible when nothing is — and the canvas
+ * already learned it the hard way, guessing "add a benchwork corner" until
+ * `CanvasTool` made the intent explicit.
+ *
+ * ⭐ What it stops doing is standing in for the LAYER. That is derived from the
+ * selection now (`LAYER_OF`, shown by `LayerBadge`), so the rail is free to be
+ * read as *"what am I about to add"*.
+ *
+ * ⚠️ The old grouping comment here described "board → main → sidings → turnouts
+ * → signals" — the pre-ADR-0001 six-layer split, where a permanent main was the
+ * module's coordinate system. That model is gone. The four drawing tools
+ * already mapped one-to-one onto the four real layers; they are now ordered and
+ * numbered as such, so the rail, the Objects list and the inspector badge all
+ * state the same fact the same way.
+ */
 const TOOL_GROUPS: RailTool[][] = [
+  // Select creates nothing — it is the only entry that is not a layer.
   [{ id: "select", key: "V", label: "Select", glyph: "▶", hint: "Select & move (V)" }],
   [
-    { id: "benchwork", key: "B", label: "Benchwork", glyph: "▱", hint: "Draw the board outline (B)" },
+    {
+      id: "benchwork",
+      key: "B",
+      label: "Benchwork",
+      glyph: "▱",
+      layer: 1,
+      hint: "Draw the board outline (B)",
+    },
     {
       id: "track",
       key: "T",
       label: "Track",
       glyph: "═",
+      layer: 2,
       // ⭐ ONE JOB, AND NOW ONE BUTTON FOR IT. A turnout is a thing you put on
       // track, not a separate activity, so its palette lives here rather than in
       // a rail button of its own — and laying track as the PIECES it is built
@@ -2593,9 +2654,25 @@ const TOOL_GROUPS: RailTool[][] = [
       // two models this click means; see `graphAuthoring` in benchwork-editor.
       hint: "Build track — lay the pieces, or draw the main and drop a turnout (T)",
     },
-    { id: "signal", key: "S", label: "Signal", glyph: "⚑", hint: "Drop a signal / control point on the main (S)" },
+    {
+      id: "signal",
+      key: "S",
+      label: "Signal",
+      glyph: "⚑",
+      layer: 3,
+      hint: "Drop a signal / control point on the main (S)",
+    },
+    // Industry joins the other drawing tools rather than sitting past a divider
+    // of its own: it is layer 4 of the same four, not a separate kind of thing.
+    {
+      id: "industry",
+      key: "I",
+      label: "Industry",
+      glyph: "▢",
+      layer: 4,
+      hint: "Place an industry on a track (I)",
+    },
   ],
-  [{ id: "industry", key: "I", label: "Industry", glyph: "▢", hint: "Place an industry on a track (I)" }],
 ];
 
 /** The section lengths implied by the joint positions — the gaps between end A,
@@ -3288,12 +3365,24 @@ function ToolRail({
                 key={t.id}
                 type="button"
                 onClick={() => setTool(t.id!)}
-                title={t.hint}
+                // The layer is named here too, so the one place that still asks
+                // you to choose says which layer choosing it puts you in.
+                title={t.layer ? `${t.hint} — layer ${t.layer}, ${LAYER_NAMES[t.layer - 1]}` : t.hint}
                 aria-pressed={on}
-                className={`flex h-9 w-9 flex-col items-center justify-center rounded-md text-base leading-none transition ${
+                className={`relative flex h-9 w-9 flex-col items-center justify-center rounded-md text-base leading-none transition ${
                   on ? "bg-blue-600 text-white" : "text-gray-600 hover:bg-gray-100"
                 }`}
               >
+                {t.layer && (
+                  <span
+                    aria-hidden
+                    className={`absolute right-0.5 top-0.5 text-[8px] font-semibold ${
+                      on ? "text-white/70" : "text-gray-300"
+                    }`}
+                  >
+                    {t.layer}
+                  </span>
+                )}
                 <span>{t.glyph}</span>
                 <span className="mt-0.5 text-[9px] font-medium">{t.key}</span>
               </button>
@@ -4011,7 +4100,12 @@ function Inspector({
   const shell = (title: string, body: React.ReactNode, remove?: { fn: () => void; label: string }) => (
     <div className={box}>
       <div className="mb-3 flex items-start justify-between gap-2 border-b border-gray-100 pb-2">
-        <h2 className="text-sm font-semibold text-gray-900">{title}</h2>
+        <div className="min-w-0">
+          {/* Derived from the selection, every time — no panel gets to say which
+              layer it belongs to, so none can disagree with this table. */}
+          <LayerBadge n={LAYER_OF[selection.kind]} />
+          <h2 className="mt-0.5 text-sm font-semibold text-gray-900">{title}</h2>
+        </div>
         <button
           type="button"
           onClick={() => select(null)}
@@ -6319,6 +6413,11 @@ function ObjectsList({
 }) {
   /** Corners are keyed by index, everything else by id — compare accordingly.
    * A flex piece needs BOTH: several pieces share one track id (#193). */
+  /** Which runs have had their flex breakdown opened by hand (#270). Kept as
+   * UI state, not in the document: which rows you have unfolded is not a fact
+   * about the module. */
+  const [openRuns, setOpenRuns] = useState<Set<string>>(new Set());
+
   const on = (s: Selection) => {
     if (selection === null || selection.kind !== s.kind) return false;
     // A corner is keyed by (section, index) — the index alone repeats across
@@ -6366,17 +6465,60 @@ function ObjectsList({
   /** A run's rows: the track itself, then the lengths of flex it's made of. */
   const trackRows = (id: string, label: string, sel: Selection, sub?: string) => {
     const f = flex[id];
+    const pieces = f?.pieces ?? [];
+    // ⭐ "Main 1 → the pieces that make it up is nice, but most Owners will not
+    // care" (Will, #270) — so the breakdown collapses. It stays a real part of
+    // the list, one click away, rather than being removed.
+    // ⛔ EXCEPT WHEN A PIECE IS OVERLONG. #208/#209 gated a disclosure on a
+    // count and so rendered a warning inside a section that stays shut —
+    // invisible by construction. A warned run is forced open and CANNOT be
+    // collapsed away, which is why this is `||` and not a stored preference.
+    const warned = pieces.some((p) => p.overlong);
+    const open = warned || openRuns.has(id);
     return [
       row(id, label, sel, sub),
-      ...(f?.pieces ?? []).map((p) =>
-        row(
-          `${id}#${p.index}`,
-          `Piece ${p.index + 1}`,
-          { kind: "flex" as const, id, index: p.index },
-          `${Math.round(p.lengthInches * 10) / 10}″${p.overlong ? " ⚠" : ""}`,
-          { indent: true, warn: p.overlong },
-        ),
-      ),
+      ...(pieces.length
+        ? [
+            <button
+              key={`${id}#toggle`}
+              type="button"
+              disabled={warned}
+              onClick={() =>
+                setOpenRuns((prev) => {
+                  const next = new Set(prev);
+                  if (next.has(id)) next.delete(id);
+                  else next.add(id);
+                  return next;
+                })
+              }
+              className={`flex w-full items-center gap-1 rounded py-0.5 pl-5 pr-2 text-left text-[11px] ${
+                warned ? "text-amber-600" : "text-gray-400 hover:bg-gray-50 hover:text-gray-600"
+              }`}
+              title={
+                warned
+                  ? "A piece is longer than its stock — shown so it can't be hidden"
+                  : open
+                    ? "Hide the lengths this run is cut into"
+                    : "Show the lengths this run is cut into"
+              }
+            >
+              <span className={open ? "rotate-90" : ""}>▸</span>
+              {pieces.length} {pieces.length === 1 ? "piece" : "pieces"}
+              {warned && <span className="ml-auto shrink-0">⚠</span>}
+            </button>,
+          ]
+        : []),
+      ...(open
+        ? pieces.map((p) =>
+            row(
+              `${id}#${p.index}`,
+              `Piece ${p.index + 1}`,
+              { kind: "flex" as const, id, index: p.index },
+              `${Math.round(p.lengthInches * 10) / 10}″${p.overlong ? " ⚠" : ""}`,
+              { indent: true, warn: p.overlong },
+            ),
+          )
+        : []),
     ];
   };
 
@@ -6389,32 +6531,8 @@ function ObjectsList({
         Objects
       </h2>
 
-      {endplates.length > 0 && (
-        <Group
-          title="Endplates"
-          count={endplates.length}
-          actions={
-            <button
-              type="button"
-              onClick={add.endplate}
-              className={addBtn}
-              title="Add a 3rd+ endplate (a junction) — placed on the board; draw track to it separately."
-            >
-              + Endplate
-            </button>
-          }
-        >
-          {endplates.map((e) =>
-            row(
-              `ep${e.id}`,
-              e.id === "A" ? "Endplate A (west)" : e.id === "B" ? "Endplate B (east)" : `Endplate ${e.id}`,
-              { kind: "endplate", id: e.id },
-              e.config === "double" ? "double" : "single",
-            ),
-          )}
-        </Group>
-      )}
-
+      {/* ── Layer 1: Benchwork ── the board itself, and the endplates that are part of it */}
+      <LayerHeading n={1}>Benchwork</LayerHeading>
       {/* ⭐ WHEN A MODULE HAS BOARDS, THE BENCHWORK IS THOSE BOARDS. This group
           read `state.outline` alone — the same blind spot #274 fixed in
           `edgeChoices`, in another component — so a sectioned module listed no
@@ -6479,6 +6597,34 @@ function ObjectsList({
         </Group>
       )}
 
+      {endplates.length > 0 && (
+        <Group
+          title="Endplates"
+          count={endplates.length}
+          actions={
+            <button
+              type="button"
+              onClick={add.endplate}
+              className={addBtn}
+              title="Add a 3rd+ endplate (a junction) — placed on the board; draw track to it separately."
+            >
+              + Endplate
+            </button>
+          }
+        >
+          {endplates.map((e) =>
+            row(
+              `ep${e.id}`,
+              e.id === "A" ? "Endplate A (west)" : e.id === "B" ? "Endplate B (east)" : `Endplate ${e.id}`,
+              { kind: "endplate", id: e.id },
+              e.config === "double" ? "double" : "single",
+            ),
+          )}
+        </Group>
+      )}
+
+      {/* ── Layer 2: Trackwork ── all of it one layer — track, turnouts, crossings */}
+      <LayerHeading n={2}>Trackwork</LayerHeading>
       <Group
         title="Track"
         count={state.extraTracks.length + mains.length}
@@ -6514,25 +6660,6 @@ function ObjectsList({
             `${Math.round(len * 10) / 10}″`,
           );
         })}
-      </Group>
-
-      <Group
-        title="Industries"
-        count={state.industries.length}
-        actions={
-          <button type="button" onClick={add.industry} className={addBtn} title="A rail-served customer — a car-spot span on a track.">
-            + Industry
-          </button>
-        }
-      >
-        {state.industries.map((ind) =>
-          row(
-            ind.id,
-            ind.name || "unnamed",
-            { kind: "industry", id: ind.id },
-            `${carCapacity(ind.fromPos, ind.toPos)} cars`,
-          ),
-        )}
       </Group>
 
       <Group
@@ -6583,6 +6710,8 @@ function ObjectsList({
         ))}
       </Group>
 
+      {/* ── Layer 3: Control points ── and their signals */}
+      <LayerHeading n={3}>Control points</LayerHeading>
       <Group
         title="Control points"
         count={state.controlPoints.length}
@@ -6601,6 +6730,77 @@ function ObjectsList({
           ),
         )}
       </Group>
+
+      {/* ── Layer 4: Industries ── what the railway is actually there to serve */}
+      <LayerHeading n={4}>Industries</LayerHeading>
+      <Group
+        title="Industries"
+        count={state.industries.length}
+        actions={
+          <button type="button" onClick={add.industry} className={addBtn} title="A rail-served customer — a car-spot span on a track.">
+            + Industry
+          </button>
+        }
+      >
+        {state.industries.map((ind) =>
+          row(
+            ind.id,
+            ind.name || "unnamed",
+            { kind: "industry", id: ind.id },
+            `${carCapacity(ind.fromPos, ind.toPos)} cars`,
+          ),
+        )}
+      </Group>
+    </div>
+  );
+}
+
+/** The layer the current selection puts you in, shown above the inspector's
+ * title (#270 stage 1).
+ *
+ * ⭐⭐ THIS IS A READOUT, NOT A CONTROL, and that is the whole point. Selecting a
+ * corner tells you that you are working the benchwork; it must NOT arm the
+ * benchwork tool, because then your next click on empty canvas would silently
+ * add a corner. Derive what you SEE from the selection, never what your next
+ * click DOES — anything else is the implicit coupling Will rules out
+ * ("nothing is implicitly tied to anything else").
+ *
+ * Shares its numbered chip with `LayerHeading` on purpose: the badge here and
+ * the heading in the Objects list are the same fact stated twice, so they
+ * should look the same.
+ */
+function LayerBadge({ n }: { n: LayerNumber }) {
+  return (
+    <span className="flex items-center gap-1.5" title={`Layer ${n} of 4 — derived from what you have selected`}>
+      <span className="rounded bg-gray-100 px-1 text-[9px] font-semibold text-gray-500">{n}</span>
+      <span className="text-[10px] font-semibold uppercase tracking-wide text-gray-400">
+        {LAYER_NAMES[n - 1]}
+      </span>
+    </span>
+  );
+}
+
+/** A build-order layer's heading in the Objects list (#270).
+ *
+ * ⭐ THE FOUR LAYERS ARE THE APP'S MODEL, not a visual grouping invented here:
+ * Benchwork → Trackwork → Control points → Industries, and a layer may read the
+ * layers below it, never above. Naming them on screen is what makes the order
+ * mean something — "ordered by layer" with the layers unlabelled just looks
+ * like a different arbitrary order.
+ *
+ * ⚠️ A heading is a LABEL, never a container. Grouping in the panel must not
+ * imply grouping in behaviour (Will: nothing is implicitly tied to anything
+ * else), so this deliberately renders no wrapper around the groups that follow
+ * it and owns no disclosure state — nothing here can hide a warning.
+ */
+function LayerHeading({ n, children }: { n: number; children: React.ReactNode }) {
+  return (
+    <div className="mt-3 flex items-center gap-1.5 px-1 pb-0.5 first:mt-0">
+      <span className="rounded bg-gray-100 px-1 text-[9px] font-semibold text-gray-500">{n}</span>
+      <span className="text-[10px] font-semibold uppercase tracking-wide text-gray-400">
+        {children}
+      </span>
+      <span className="ml-1 h-px flex-1 bg-gray-100" />
     </div>
   );
 }

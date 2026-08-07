@@ -5,6 +5,24 @@ Headings are `version — date` (YYYY-MM-DD).
 
 ---
 
+## v0.74.0 — 2026-08-06
+
+### Added
+- **The app now tells you which layer you are working in, from what you have selected.** Select a benchwork corner and it says Benchwork; select a turnout and it says Trackwork. You never set it — it follows the selection, shown above the name of whatever you are editing.
+
+  ⓘ It is a readout, not a switch. Selecting something tells you where you are; it does not change what your next click on the canvas will draw.
+
+### Changed
+- **The tool rail reads in the same build order, and each drawing tool shows its layer.** Benchwork, Track, Signal and Industry are layers 1 to 4 — the same four the Objects list and the layer readout use, numbered the same way. Select sits apart, because it creates nothing.
+
+  ⓘ The tools still work exactly as before. Picking one still says what your next click on the canvas draws; nothing about that changed.
+- **The Objects list now reads in build order.** Benchwork first (the board and the endplates that are part of it), then Trackwork (track, turnouts, crossings), then Control points, then Industries — the order you actually build a module in, with each layer named. It used to be grouped by object kind with no through-line.
+- **A run no longer lists every length of flex it is cut from.** Most owners do not need to see that their main is three pieces, so the breakdown folds into a single "3 pieces" line you can open when you do.
+
+  ⓘ A run containing a piece longer than its stock stays open and cannot be folded away, so a warning can never be hidden behind a closed section.
+
+---
+
 ## v0.73.0 — 2026-08-06
 
 ### Added
