@@ -5130,75 +5130,6 @@ function Inspector({
         </label>
         <div className="grid grid-cols-2 gap-2">
           <label className="block text-xs font-medium text-gray-600">
-            On track
-            <select
-              value={t.onTrack}
-              onChange={(e) =>
-                patch((s) => {
-                  const v = e.target.value;
-                  const cur = s.turnouts[i];
-                  // Picking the track it currently diverges to would make it
-                  // diverge into itself (onTrack === divergeTrack) — the false
-                  // "no second route" warning on a reversed transition (#172).
-                  // Swap instead, so it keeps a valid second route.
-                  if (cur.divergeTrack === v) cur.divergeTrack = cur.onTrack;
-                  cur.onTrack = v;
-                })
-              }
-              className={`mt-0.5 ${inp}`}
-            >
-              {trackOptions.map((o) => (
-                <option key={o.value} value={o.value}>{o.label}</option>
-              ))}
-            </select>
-          </label>
-          <label className="block text-xs font-medium text-gray-600">
-            Diverges to
-            <select
-              value={t.divergeTrack}
-              onChange={(e) => {
-                const v = e.target.value;
-                // Turnout-first creation (#136): these mint a new track for the
-                // turnout to feed instead of picking an existing one.
-                if (v === "__new_spur__") onNewDivergeTrack(t.id, "spur");
-                else if (v === "__new_siding__") onNewDivergeTrack(t.id, "siding");
-                else if (v.startsWith("__to_ep__"))
-                  onDivergeToEndplate(t.id, v.slice("__to_ep__".length));
-                else patch((s) => (s.turnouts[i].divergeTrack = v));
-              }}
-              className={`mt-0.5 ${inp}`}
-            >
-              {/* A turnout can't diverge into the track it sits on — there'd be
-                  no second route, so nothing renders and the turnout silently
-                  does nothing. The list used to offer it. */}
-              {trackOptions
-                .filter((o) => o.value !== t.onTrack)
-                .map((o) => (
-                  <option key={o.value} value={o.value}>{o.label}</option>
-                ))}
-              <option disabled>──────────</option>
-              <option value="__new_spur__">＋ New spur…</option>
-              <option value="__new_siding__">＋ New siding…</option>
-              {/* Draw a branch route out to a placed 3rd+ endplate (#170). */}
-              {state.branches.map((_, bi) => {
-                const epId = String.fromCharCode(67 + bi);
-                return (
-                  <option key={`ep${epId}`} value={`__to_ep__${epId}`}>
-                    → Endplate {epId}
-                  </option>
-                );
-              })}
-            </select>
-          </label>
-        </div>
-        {t.divergeTrack === t.onTrack && (
-          <p className="rounded-md bg-amber-50 px-2 py-1 text-xs text-amber-800" role="status">
-            ⚠ This turnout diverges into the track it sits on, so it has no
-            second route and nothing will draw. Pick a different track above.
-          </p>
-        )}
-        <div className="grid grid-cols-2 gap-2">
-          <label className="block text-xs font-medium text-gray-600">
             Hand
             <select
               value={t.kind}
@@ -5315,6 +5246,75 @@ function Inspector({
             </span>
           )}
         </label>
+        <div className="grid grid-cols-2 gap-2">
+          <label className="block text-xs font-medium text-gray-600">
+            On track
+            <select
+              value={t.onTrack}
+              onChange={(e) =>
+                patch((s) => {
+                  const v = e.target.value;
+                  const cur = s.turnouts[i];
+                  // Picking the track it currently diverges to would make it
+                  // diverge into itself (onTrack === divergeTrack) — the false
+                  // "no second route" warning on a reversed transition (#172).
+                  // Swap instead, so it keeps a valid second route.
+                  if (cur.divergeTrack === v) cur.divergeTrack = cur.onTrack;
+                  cur.onTrack = v;
+                })
+              }
+              className={`mt-0.5 ${inp}`}
+            >
+              {trackOptions.map((o) => (
+                <option key={o.value} value={o.value}>{o.label}</option>
+              ))}
+            </select>
+          </label>
+          <label className="block text-xs font-medium text-gray-600">
+            Diverges to
+            <select
+              value={t.divergeTrack}
+              onChange={(e) => {
+                const v = e.target.value;
+                // Turnout-first creation (#136): these mint a new track for the
+                // turnout to feed instead of picking an existing one.
+                if (v === "__new_spur__") onNewDivergeTrack(t.id, "spur");
+                else if (v === "__new_siding__") onNewDivergeTrack(t.id, "siding");
+                else if (v.startsWith("__to_ep__"))
+                  onDivergeToEndplate(t.id, v.slice("__to_ep__".length));
+                else patch((s) => (s.turnouts[i].divergeTrack = v));
+              }}
+              className={`mt-0.5 ${inp}`}
+            >
+              {/* A turnout can't diverge into the track it sits on — there'd be
+                  no second route, so nothing renders and the turnout silently
+                  does nothing. The list used to offer it. */}
+              {trackOptions
+                .filter((o) => o.value !== t.onTrack)
+                .map((o) => (
+                  <option key={o.value} value={o.value}>{o.label}</option>
+                ))}
+              <option disabled>──────────</option>
+              <option value="__new_spur__">＋ New spur…</option>
+              <option value="__new_siding__">＋ New siding…</option>
+              {/* Draw a branch route out to a placed 3rd+ endplate (#170). */}
+              {state.branches.map((_, bi) => {
+                const epId = String.fromCharCode(67 + bi);
+                return (
+                  <option key={`ep${epId}`} value={`__to_ep__${epId}`}>
+                    → Endplate {epId}
+                  </option>
+                );
+              })}
+            </select>
+          </label>
+        </div>
+        {t.divergeTrack === t.onTrack && (
+          <p className="rounded-md bg-amber-50 px-2 py-1 text-xs text-amber-800" role="status">
+            ⚠ This turnout diverges into the track it sits on, so it has no
+            second route and nothing will draw. Pick a different track.
+          </p>
+        )}
         <label className="flex items-center gap-2 text-xs font-medium text-gray-600">
           <input
             type="checkbox"

@@ -5,6 +5,15 @@ Headings are `version — date` (YYYY-MM-DD).
 
 ---
 
+## v0.81.0 — 2026-08-07
+
+### Changed
+- **The turnout panel now asks about the turnout before asking what it feeds.** Working down the fields, you used to reach the diverging-track choice — and "＋ New spur", which jumps you into editing that new track — before you had said which way the turnout throws, what frog number it is, or which part it is. The order is now Name, frog position, hand, turnout #, part, and then the track it diverges to. Reported by Steve Branton.
+
+  ⓘ Nothing was removed and no module changes. Creating a spur or siding straight from the dropdown still works exactly as before; it is simply the last thing you are asked, once the turnout itself is described.
+
+---
+
 ## v0.80.2 — 2026-08-07
 
 ### Fixed
