@@ -5,6 +5,17 @@ Headings are `version — date` (YYYY-MM-DD).
 
 ---
 
+## v0.82.0 — 2026-08-07
+
+### Added
+- **Removing something now tells you what else it affects, before you do it.** Removing a track says which turnouts and endplates it will disconnect; removing a branch endplate says that the track it carries goes with it, and names that track. The note appears on the Remove button and in the right-click menu.
+
+  ⓘ **"Disconnects" is not "deletes".** Removing a track leaves every turnout and endplate in place — only the link between them is cleared, and you can re-point it. The only removal that takes a second object with it is a branch endplate, which owns the track running to it; that one says so by name.
+
+  ⓘ No confirmation box. Everything here is undoable with Ctrl+Z, and a dialog on every delete would interrupt the ordinary case to guard the rare one.
+
+---
+
 ## v0.81.0 — 2026-08-07
 
 ### Changed

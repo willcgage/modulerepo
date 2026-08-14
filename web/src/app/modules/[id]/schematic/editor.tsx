@@ -2323,7 +2323,35 @@ export function SchematicEditor({
    * stale**: right-pressing a turnout while endplate A was selected selected the
    * turnout and still showed endplate A's refusal.
    */
-  const removeCheck = (sel: Selection | null): { ok: true } | { ok: false; reason: string } => {
+  /**
+   * What removing this track does to everything pointing at it — **disconnects,
+   * never deletes** (#285).
+   *
+   * ⚠️ THE VERB MATTERS AND MY OWN ISSUE GOT IT WRONG. #285 was filed as "a
+   * cascading delete doesn't say what else it *takes with it*", which is true of
+   * a branch endplate and FALSE here: removing a track clears
+   * `turnout.divergeTrack` and `branch.trackId`, and every one of those objects
+   * survives. Saying "removes" would frighten an owner out of a safe edit.
+   *
+   * ⚠️ And this is the COMMON case — 48 turnouts point at a track across the
+   * catalogue, against 1 endplate that carries one. A confirm dialog here would
+   * nag on nearly every deletion while staying silent on the rare destructive
+   * one, which is why #285 gets a statement and not a modal.
+   */
+  const trackRemovalConsequence = (trackId: string): string | undefined => {
+    const turnouts = state.turnouts.filter((t) => t.divergeTrack === trackId).length;
+    const plates = state.branches.filter((b) => b.trackId === trackId).length;
+    if (!turnouts && !plates) return undefined;
+    const bits = [
+      turnouts ? `${turnouts === 1 ? "the turnout" : `${turnouts} turnouts`} feeding it` : null,
+      plates ? `${plates === 1 ? "the endplate" : `${plates} endplates`} it runs to` : null,
+    ].filter(Boolean);
+    return `Disconnects ${bits.join(" and ")} — nothing else is removed.`;
+  };
+
+  const removeCheck = (
+    sel: Selection | null,
+  ): { ok: true; consequence?: string } | { ok: false; reason: string } => {
     if (!sel) return { ok: false, reason: "Nothing is selected." };
     switch (sel.kind) {
       case "pieces":
@@ -2360,19 +2388,37 @@ export function SchematicEditor({
             reason:
               "The mainline is part of the module's structure and can't be deleted. Change the endplates if this module doesn't carry a main.",
           };
-        return state.extraTracks.some((t) => t.id === sel.id)
-          ? { ok: true }
-          : { ok: false, reason: "That track is no longer there." };
-      case "endplate":
+        if (!state.extraTracks.some((t) => t.id === sel.id))
+          return { ok: false, reason: "That track is no longer there." };
+        return { ok: true, consequence: trackRemovalConsequence(sel.id) };
+      case "endplate": {
         // Branch plates are C, D, … — the letter convention the rest of the
         // editor uses (`charCodeAt(0) - 67`).
-        return state.branches[sel.id.charCodeAt(0) - 67]
-          ? { ok: true }
-          : {
-              ok: false,
-              reason:
-                "Endplates A and B are part of the benchwork — they are where this module joins its neighbours. Reshape the board instead.",
-            };
+        const branch = state.branches[sel.id.charCodeAt(0) - 67];
+        if (!branch)
+          return {
+            ok: false,
+            reason:
+              "Endplates A and B are part of the benchwork — they are where this module joins its neighbours. Reshape the board instead.",
+          };
+        // ⚠️ THE ONE GENUINELY DESTRUCTIVE CASCADE: this plate OWNS the track it
+        // carries, so removing it deletes that track outright. Measured across
+        // the catalogue: 1 branch endplate of 32 modules carries one — rare,
+        // which is exactly why it must be SAID rather than left to be
+        // discovered (#285).
+        const carried = branch.trackId
+          ? state.extraTracks.findIndex((t) => t.id === branch.trackId)
+          : -1;
+        if (carried < 0) return { ok: true };
+        const name = trackLabel(state.extraTracks[carried], carried);
+        const fed = state.turnouts.filter((t) => t.divergeTrack === branch.trackId).length;
+        return {
+          ok: true,
+          consequence:
+            `Also removes ${name}, the track this endplate carries` +
+            (fed ? `, and disconnects ${fed === 1 ? "the turnout" : `${fed} turnouts`} feeding it.` : "."),
+        };
+      }
       case "flex":
         // A flex piece is a SPAN of a run, not an object of its own (#193).
         return {
@@ -2914,6 +2960,7 @@ export function SchematicEditor({
             state={state}
             patch={patch}
             onRemove={removeSelected}
+            checkRemove={removeCheck}
             setPieces={setPieces}
             graphReadout={graphReadout}
             onTurnoutPos={moveTurnout}
@@ -3017,6 +3064,15 @@ export function SchematicEditor({
           {!menuCan.ok && (
             <p className="max-w-56 px-3 pb-1 pt-0.5 text-[11px] leading-snug text-gray-500">
               {menuCan.reason}
+            </p>
+          )}
+          {/* ⭐ …and say what ELSE it does, BEFORE the click (#285). Stating the
+              consequence costs nothing and needs no dialog; a modal on every
+              delete would nag on the common, harmless case (disconnecting a
+              turnout) and carry no extra weight on the rare destructive one. */}
+          {menuCan.ok && menuCan.consequence && (
+            <p className="max-w-56 px-3 pb-1 pt-0.5 text-[11px] leading-snug text-amber-700">
+              {menuCan.consequence}
             </p>
           )}
         </div>
@@ -3992,6 +4048,7 @@ function Inspector({
   state,
   patch,
   onRemove,
+  checkRemove,
   onTurnoutPos,
   mains,
   flex,
@@ -4032,6 +4089,12 @@ function Inspector({
    * panel's button and the keyboard can never disagree about what removal means
    * or what it cascades to (#269). */
   onRemove: (sel: Selection | null) => { ok: true } | { ok: false; reason: string };
+  /** Ask what removal WOULD do without doing it — pure, so the panel can say
+   * what else goes before the owner commits (#285). Same function the canvas
+   * menu and the Delete key consult. */
+  checkRemove: (
+    sel: Selection | null,
+  ) => { ok: true; consequence?: string } | { ok: false; reason: string };
   /** Lay out the pieces (ADR 0001) — the graph's own setter, because it also
    * keeps `startAt` pointing at a piece that still exists. */
   setPieces: (next: TrackPiece[], opts?: { commit?: boolean }) => void;
@@ -4550,6 +4613,18 @@ function Inspector({
         </button>
       </div>
       <div className="space-y-3">{body}</div>
+      {/* ⭐ What else this removal does, stated BEFORE the button is pressed
+          (#285) — the same sentence the canvas menu shows, from the same pure
+          check, so the two paths cannot describe the act differently. */}
+      {remove &&
+        (() => {
+          const c = checkRemove(selection);
+          return c.ok && c.consequence ? (
+            <p className="mt-3 rounded-md bg-amber-50 px-2 py-1 text-[11px] leading-snug text-amber-800">
+              {c.consequence}
+            </p>
+          ) : null;
+        })()}
       {remove && (
         <button
           type="button"
