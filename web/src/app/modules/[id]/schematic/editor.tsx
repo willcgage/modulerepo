@@ -705,6 +705,34 @@ export function SchematicEditor({
     return rows;
   }, [doc, isDouble, mainDrawn, state.mainPath, state.main2Path, state.lengthInches]);
   /**
+   * ⭐⭐ THE PIECES A GRAPH MODULE IS ACTUALLY BUILT FROM (#290, ADR 0001).
+   *
+   * The Objects list was entirely 1-D: it listed a **derived** main and the
+   * **derived** flex cuts under it, and never once read `state.graph`. So on a
+   * graph module it showed a run nobody laid, with a cut list nobody could
+   * build, while the real pieces were selectable only on the canvas.
+   *
+   * ⛔ FMN-0079 nearly hid this: it has two laid pieces (30″ + 18″) and the list
+   * read *"2 pieces"* — but a 48″ run at a 30″ stock length DERIVES to 30 + 18,
+   * so the numbers coincide and prove nothing. `flexByTrack` never reads the
+   * graph; that is what settles it.
+   */
+  const pieceRows = useMemo(
+    () =>
+      (state.graph?.pieces ?? []).map((p, i) => ({
+        id: p.id,
+        // Named for the part it IS, the same way the inspector names it — a
+        // piece is a thing you could pick up, not "item 3".
+        label: partLibrary.find((x) => x.id === p.partId)?.name ?? p.partId,
+        sub:
+          typeof p.lengthInches === "number"
+            ? `${Math.round(p.lengthInches * 10) / 10}″`
+            : `#${i + 1}`,
+      })),
+    [state.graph?.pieces, partLibrary],
+  );
+
+  /**
    * Every run cut into lengths of flex track (#193).
    *
    * Everything that isn't a turnout or a crossing is flex, and flex comes in
@@ -2790,6 +2818,8 @@ export function SchematicEditor({
               setTool("benchwork");
             }}
             sectionsOwnShape={footprint.sectionOutlines.length > 0}
+            graphAuthoring={graphAuthoring}
+            pieceRows={pieceRows}
             add={{
               ...trackAdd,
               turnout: addTurnout,
@@ -6549,6 +6579,8 @@ function ObjectsList({
   setTool,
   onShapeSection,
   sectionsOwnShape,
+  graphAuthoring,
+  pieceRows,
   add,
   mains,
   flex,
@@ -6569,6 +6601,12 @@ function ObjectsList({
    * re-tested here so the list and the drawing can't disagree about which
    * polygon is real (#273). */
   sectionsOwnShape: boolean;
+  /** Whether this module is GRAPH-built, decided once by the editor (#255) and
+   * passed everywhere rather than re-derived. */
+  graphAuthoring: boolean;
+  /** The pieces a graph module is built from — its real track (#290). Prepared
+   * by the editor, so this list needs no parts library of its own. */
+  pieceRows: { id: string; label: string; sub: string }[];
   add: {
     passingSiding: () => void;
     spur: () => void;
@@ -6808,7 +6846,11 @@ function ObjectsList({
       <LayerHeading n={2}>Trackwork</LayerHeading>
       <Group
         title="Track"
-        count={state.extraTracks.length + mains.length}
+        count={
+          graphAuthoring
+            ? pieceRows.length + state.extraTracks.length
+            : state.extraTracks.length + mains.length
+        }
         actions={
           <AddTrackMenu
             add={add}
@@ -6818,12 +6860,32 @@ function ObjectsList({
           />
         }
       >
-        {/* THE MAINS. #185 gave the mainline an entry here, but only as a tool
-            shortcut — it wasn't selectable and had no details. Both mains are
-            now ordinary rows: they select like a siding, and selecting one is
-            what arms its handles (#192). They aren't `extraTracks` because the
-            main IS the module's centre-line, so they're listed explicitly. */}
-        {mains.map((m) => trackRows(m.id, m.label, { kind: "track", id: m.id }, m.sub))}
+        {/* ⭐⭐ A GRAPH MODULE LISTS ITS PIECES; A 1-D MODULE LISTS ITS MAINS
+            (#290, ADR 0001). The pieces ARE the track — listing a derived main
+            instead showed a run nobody laid, with a derived cut list nobody
+            could build, while the real pieces were selectable only on the
+            canvas. Removing the phantom WITHOUT this would have left a module
+            that has track showing none at all, which is worse.
+
+            ⚠️ #192's guarantee is untouched for 1-D modules: there the main
+            genuinely IS the module's spine, so it stays listed, selectable and
+            editable exactly as before. */}
+        {graphAuthoring ? (
+          pieceRows.length === 0 ? (
+            <p className="px-2 pb-1 text-[11px] text-gray-400">
+              No track laid yet. Use the Track tool (T) to lay pieces.
+            </p>
+          ) : (
+            pieceRows.map((p) => row(p.id, p.label, { kind: "pieces", ids: [p.id] }, p.sub))
+          )
+        ) : (
+          /* THE MAINS. #185 gave the mainline an entry here, but only as a tool
+             shortcut — it wasn't selectable and had no details. Both mains are
+             now ordinary rows: they select like a siding, and selecting one is
+             what arms its handles (#192). They aren't `extraTracks` because the
+             main IS the module's centre-line, so they're listed explicitly. */
+          mains.map((m) => trackRows(m.id, m.label, { kind: "track", id: m.id }, m.sub))
+        )}
         {state.extraTracks.map((t, i) => {
           // ⭐⭐ ONE SOURCE FOR "HOW LONG IS THIS RUN": `flexByTrack.runInches`,
           // the same number the flex panel and the cut list read. This row used
