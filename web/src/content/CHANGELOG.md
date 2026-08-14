@@ -8,12 +8,14 @@ Headings are `version — date` (YYYY-MM-DD).
 ## v0.77.0 — 2026-08-07
 
 ### Changed
-- **A module built from track pieces no longer invents a mainline.** If you haven't laid any track, the app used to work out a main from the module's length and shape and list it as though it were there — a run you never built, with flex pieces it never had. It now shows nothing until you lay something.
-
-  ⓘ This affects modules that have no track drawn on them yet. Your benchwork, endplates, dimensions and the board drawing are all unchanged — only the invented main goes.
 - **A new module no longer records its shape as "straight" before you've said so.** Creating a module used to write "straight" into the geometry field on your behalf. It's now left blank until you choose, and the Geometry field is where you set it.
 
   ⓘ Modules created before this are untouched, and one with the field already blank still draws exactly as it did.
+
+### Under the hood
+- **A module built from track pieces stops working out a mainline it was never given.** Nothing on screen changes today — the drawing already ignored that invented line — but it was still being calculated, and anything added later would have quietly picked it up and drawn in the wrong place. It is gone at the source now.
+
+  ⚠️ **Correction.** This entry first said the invented main would stop being *listed* under Track. That was wrong: a module with no track laid still shows a `Main` row with flex pieces, because that row is built from the module's own length rather than from the line this release removed. Removing it is a separate change and is being tracked on its own.
 
 ---
 
