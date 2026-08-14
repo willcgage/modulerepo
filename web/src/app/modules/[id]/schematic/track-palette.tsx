@@ -594,14 +594,31 @@ export function PieceGlyph({ name, className }: { name: GlyphName; className?: s
         return <path d="M3 14 Q14 4 25 4" {...s} />;
       case "flex":
         return <path d="M3 12 Q9 4 14 9 T25 6" {...s} />;
-      case "turnout-right":
+      /**
+       * ⭐⭐ WHICH WAY A HAND DIVERGES ON SCREEN — and these were MIRRORED until
+       * Steve Branton reported it (FMN-0040, 2026-08-07): *"the drawings on the
+       * turnout buttons are backwards. Left hand turnouts are drawn as right
+       * diverging and vice versa."*
+       *
+       * ⚠️ IT IS NOT A MATTER OF CONVENTION — the icon contradicted what this
+       * same app drew on the board two inches away:
+       *   · `divergeSideForHand("left", +1)` = **+1**, the "above" side;
+       *   · the canvas renders with `sy = (y) => -y`, so **above is UP on
+       *     screen**;
+       *   ⇒ a placed LEFT-hand turnout diverges UP, so its icon must too.
+       *
+       * ⛔ SVG y grows DOWNWARD, which is the trap: `L25 3` is UP the screen and
+       * `L25 15` is DOWN. Reading these as model coordinates gets it backwards,
+       * which is presumably how they were written.
+       */
+      case "turnout-left":
         return (
           <>
             {main}
             <path d="M10 9 L25 3" {...s} />
           </>
         );
-      case "turnout-left":
+      case "turnout-right":
         return (
           <>
             {main}
@@ -615,14 +632,17 @@ export function PieceGlyph({ name, className }: { name: GlyphName; className?: s
             <path d="M11 9 L25 4 M11 9 L25 14" {...s} />
           </>
         );
-      case "curved-right":
+      // Same mirroring, same fix: on a curved turnout BOTH routes bend, so the
+      // pair swaps together — the diverging leg (the one starting at x=10) goes
+      // UP for a left hand, DOWN for a right.
+      case "curved-left":
         return (
           <>
             <path d="M3 9 Q16 10 25 13" {...s} />
             <path d="M10 9 Q19 6 25 3" {...s} />
           </>
         );
-      case "curved-left":
+      case "curved-right":
         return (
           <>
             <path d="M3 9 Q16 8 25 5" {...s} />
