@@ -152,6 +152,11 @@ type Selection =
 /** The four build-order layers (#47, #270). Benchwork → Trackwork → Control
  * points → Industries, and a layer may read the layers below it, never above. */
 const LAYER_NAMES = ["Benchwork", "Trackwork", "Control points", "Industries"] as const;
+
+/** A graph module's empty centre-line (#255). Module-level so its identity is
+ * stable — a fresh `[]` every render would change the prop each time and defeat
+ * every memo downstream that keys off it. */
+const EMPTY_CENTERLINE: BenchworkPoint[] = [];
 type LayerNumber = 1 | 2 | 3 | 4;
 
 /**
@@ -416,6 +421,30 @@ export function SchematicEditor({
   // The real physical module — its centre-line drives where track, turnouts and
   // signals actually sit on the board (not just in the straightened view).
   const mainDrawn = state.mainPath.length >= 2;
+
+  /**
+   * ⭐⭐ IS THIS MODULE GRAPH-BUILT? **ONE definition, computed here and passed
+   * down** — the canvas used to work this out from its own props (#255).
+   *
+   * ⛔ Two copies of this predicate is precisely the bug class that produced
+   * #205 *and* #207: each overlay decided for itself whether the 1-D model
+   * applied, so gating one left the next still drawing a phantom main. The
+   * canvas now takes it as a prop.
+   *
+   * ⚠️ `doc.tracks` minus the main, NOT `state.extraTracks` — they differ.
+   * `extraTracks` excludes Main 2, so a plain double-track module would come
+   * out "graph-built" here and "1-D" in the canvas, which is exactly the drift
+   * this is meant to end.
+   */
+  const graphAuthoring = useMemo(() => {
+    const laidTracks = (doc.tracks ?? []).filter((t) => t.id !== MAIN_TRACK_ID);
+    const authored1D =
+      state.mainPath.length >= 2 || laidTracks.length > 0 || state.turnouts.length > 0;
+    // Pieces win when there are any: a rebuilt module derives tracks and
+    // turnouts, and the derived document must not take its authoring rights
+    // away.
+    return (state.graph?.pieces?.length ?? 0) > 0 || !authored1D;
+  }, [doc.tracks, state.mainPath.length, state.turnouts.length, state.graph?.pieces?.length]);
   const footprint = useMemo(
     () =>
       moduleFootprint({
@@ -452,6 +481,26 @@ export function SchematicEditor({
     ],
   );
 
+  /**
+   * ⭐⭐ A GRAPH-BUILT MODULE HAS NO CENTRE-LINE (#255, ADR 0001). Its pieces are
+   * the truth; a module-level line derived from `geometry_type` is a main
+   * nobody laid.
+   *
+   * ⛔ THIS IS THE SOURCE, and that is the whole point. #205 gated the mainline
+   * band and rails out of `trackLines`; #207 gated `flexJoints`, `trackJoints`,
+   * `turnoutPts`, `danglingRailEnds` and the track-end handles — two rounds of
+   * gating SYMPTOMS, each found only after an overlay was seen drawing in the
+   * wrong place. Emptying the line itself means an overlay added later inherits
+   * the right behaviour instead of the bug.
+   *
+   * ⚠️ BENCHWORK MUST NOT READ THIS. The board is shaped by `footprint.spine`
+   * (pkg 0.132.0), which stays populated — a layer may read the layers below
+   * it, never above. Everything that survives an empty centre-line was measured
+   * before this shipped: endplate poses take no centre-line at all, `band` and
+   * `endplateFaces` come from the spine, and `bounds` seeds from the module
+   * length and the outline.
+   */
+  const centerline = graphAuthoring ? EMPTY_CENTERLINE : footprint.centerline;
 
   /**
    * ⭐ THE BOARD'S MAXIMUM EXTENTS — how much room this module actually takes.
@@ -542,7 +591,7 @@ export function SchematicEditor({
   const mainReachesPlate = useMemo(() => {
     const out: Record<string, { gap: number; past: boolean }> = {};
     if (!mainDrawn) return out;
-    const c = footprint.centerline;
+    const c = centerline;
     if (c.length < 2) return out;
     for (const p of derivedPoses) {
       if (p.id !== "A" && p.id !== "B") continue;
@@ -555,7 +604,7 @@ export function SchematicEditor({
       out[p.id] = { gap: Math.hypot(dx, dy), past: along > 0.05 };
     }
     return out;
-  }, [mainDrawn, derivedPoses, footprint]);
+  }, [mainDrawn, derivedPoses, centerline]);
 
   /** Everything except the main itself — the main IS the centre-line. */
   const canvasTracks = useMemo(() => {
@@ -670,7 +719,7 @@ export function SchematicEditor({
     const tracks = doc.tracks ?? [];
     // The module's centre-line — the host a turnout on the main sits on. Needed
     // to place a turnout's rail end relative to the route it feeds (#235).
-    const center = footprint.centerline;
+    const center = centerline;
     // Where each track ends up, for the facing rule — the end of a diverging
     // track furthest from its turnout is the way that turnout points.
     const extentOf = (id: string) => {
@@ -904,6 +953,7 @@ export function SchematicEditor({
     }
     return out;
   }, [
+    centerline,
     doc,
     state.turnouts,
     state.crossings,
@@ -913,7 +963,6 @@ export function SchematicEditor({
     state.mainPath,
     state.main2Path,
     partLibrary,
-    footprint,
   ]);
 
   /**
@@ -1363,7 +1412,7 @@ export function SchematicEditor({
     const sp = sectionSpans({ sections: state.sections }).find((x) => x.id === activeSection.id);
     if (!sp) return null;
     return sectionBand(
-      footprint.centerline,
+      footprint.spine,
       sp.fromPos,
       sp.toPos,
       state.endplateWidths.A ?? 24,
@@ -1371,7 +1420,7 @@ export function SchematicEditor({
       renderTrackOffsets.A,
       renderTrackOffsets.B,
     );
-  }, [activeSection, state.sections, state.endplateWidths, footprint.centerline, renderTrackOffsets]);
+  }, [activeSection, state.sections, state.endplateWidths, footprint.spine, renderTrackOffsets]);
 
   /** Every OTHER section's shape, drawn as context behind the one being
    * edited so you can see what the board has to meet. */
@@ -1660,7 +1709,7 @@ export function SchematicEditor({
   const divergeToEndplate = (turnoutId: string, endplateId: string) => {
     const tn = state.turnouts.find((t) => t.id === turnoutId);
     const epPose = poses.find((p) => p.id === endplateId);
-    const center = footprint.centerline;
+    const center = centerline;
     if (!tn || !epPose || center.length < 2) return;
     const id = nextId("branch", state.extraTracks.map((t) => t.id));
     const rnd = (v: number) => Math.round(v * 1000) / 1000;
@@ -2596,7 +2645,8 @@ export function SchematicEditor({
                 onMain2PathChange={(next) => patch((s) => (s.main2Path = next))}
                 endplateWidths={state.endplateWidths}
                 endplateTrackOffsets={renderTrackOffsets}
-                centerline={footprint.centerline}
+                centerline={centerline}
+                graphAuthoring={graphAuthoring}
                 mainLane={doc.tracks.find((t) => t.id === MAIN_TRACK_ID)?.lane ?? 0}
                 sectionBreaks={canvasSectionBreaks}
                 onSectionBreakMove={moveSectionJoint}

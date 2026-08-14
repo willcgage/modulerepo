@@ -5,6 +5,18 @@ Headings are `version — date` (YYYY-MM-DD).
 
 ---
 
+## v0.77.0 — 2026-08-07
+
+### Changed
+- **A module built from track pieces no longer invents a mainline.** If you haven't laid any track, the app used to work out a main from the module's length and shape and list it as though it were there — a run you never built, with flex pieces it never had. It now shows nothing until you lay something.
+
+  ⓘ This affects modules that have no track drawn on them yet. Your benchwork, endplates, dimensions and the board drawing are all unchanged — only the invented main goes.
+- **A new module no longer records its shape as "straight" before you've said so.** Creating a module used to write "straight" into the geometry field on your behalf. It's now left blank until you choose, and the Geometry field is where you set it.
+
+  ⓘ Modules created before this are untouched, and one with the field already blank still draws exactly as it did.
+
+---
+
 ## v0.76.0 — 2026-08-07
 
 ### Changed
