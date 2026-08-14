@@ -5,6 +5,15 @@ Headings are `version — date` (YYYY-MM-DD).
 
 ---
 
+## v0.79.0 — 2026-08-07
+
+### Added
+- **Every Remove button now shows its keyboard shortcut.** `Remove turnout` reads `Remove turnout ⌫Del`, so the gesture that already works on everything is finally something you can discover instead of having to know.
+
+  ⓘ Nothing on the drawing itself changed. A delete control sitting on the board is easy to hit by accident while you're editing, so the shortcut is taught where removal already happens — on the button you're about to press.
+
+---
+
 ## v0.78.1 — 2026-08-07
 
 ### Fixed
