@@ -5,6 +5,15 @@ Headings are `version — date` (YYYY-MM-DD).
 
 ---
 
+## v0.80.1 — 2026-08-07
+
+### Fixed
+- **The right-click menu was describing the thing you selected *before*.** Right-clicking a turnout while an endplate was selected picked up the turnout correctly, but the menu still showed the endplate's message — so it could refuse to remove something that was perfectly removable, and give a reason that had nothing to do with what you clicked. It now always describes what is actually selected.
+
+  ⓘ Removing was never affected: the menu's Remove always acted on the right object. It was the wording and the greying-out that were one step behind.
+
+---
+
 ## v0.80.0 — 2026-08-07
 
 ### Added

@@ -2310,17 +2310,85 @@ export function SchematicEditor({
    * adding a third copy behind the key would have been the "two computations of
    * one quantity" bug that let a 0″ route survive its own fix (#226).
    */
+  /**
+   * ⭐⭐ MAY THIS BE REMOVED, AND IF NOT WHY? **Pure — reads state, writes
+   * nothing.** Every refusal in the app lives here and nowhere else, so the
+   * Delete key, the inspector's Remove button and the canvas context menu
+   * cannot disagree about what may go (#269, #284).
+   *
+   * ⚠️ It is separate from {@link removeSelected} because the MENU has to ask
+   * during render, and a function that can write must not be called there —
+   * the React compiler refuses it, and it is right to. The first attempt
+   * decided availability when the menu opened instead, and **prod proved that
+   * stale**: right-pressing a turnout while endplate A was selected selected the
+   * turnout and still showed endplate A's refusal.
+   */
+  const removeCheck = (sel: Selection | null): { ok: true } | { ok: false; reason: string } => {
+    if (!sel) return { ok: false, reason: "Nothing is selected." };
+    switch (sel.kind) {
+      case "pieces":
+        return sel.ids.length
+          ? { ok: true }
+          : { ok: false, reason: "Nothing is selected." };
+      case "corner": {
+        const secId = sel.section ?? null;
+        if (secId !== null && !state.sections.some((x) => x.id === secId))
+          return { ok: false, reason: "That board is no longer there." };
+        return { ok: true };
+      }
+      case "turnout":
+        return state.turnouts.some((t) => t.id === sel.id)
+          ? { ok: true }
+          : { ok: false, reason: "That turnout is no longer there." };
+      case "crossing":
+        return state.crossings.some((c) => c.id === sel.id)
+          ? { ok: true }
+          : { ok: false, reason: "That crossing is no longer there." };
+      case "cp":
+        return state.controlPoints.some((c) => c.id === sel.id)
+          ? { ok: true }
+          : { ok: false, reason: "That control point is no longer there." };
+      case "industry":
+        return state.industries.some((x) => x.id === sel.id)
+          ? { ok: true }
+          : { ok: false, reason: "That industry is no longer there." };
+      case "track":
+        // ⛔ The mainline is the module's spine, not an object you delete.
+        if (mainRows.some((m) => m.id === sel.id))
+          return {
+            ok: false,
+            reason:
+              "The mainline is part of the module's structure and can't be deleted. Change the endplates if this module doesn't carry a main.",
+          };
+        return state.extraTracks.some((t) => t.id === sel.id)
+          ? { ok: true }
+          : { ok: false, reason: "That track is no longer there." };
+      case "endplate":
+        // Branch plates are C, D, … — the letter convention the rest of the
+        // editor uses (`charCodeAt(0) - 67`).
+        return state.branches[sel.id.charCodeAt(0) - 67]
+          ? { ok: true }
+          : {
+              ok: false,
+              reason:
+                "Endplates A and B are part of the benchwork — they are where this module joins its neighbours. Reshape the board instead.",
+            };
+      case "flex":
+        // A flex piece is a SPAN of a run, not an object of its own (#193).
+        return {
+          ok: false,
+          reason:
+            "A flex piece is a length of a run, not a separate object. Move its joint to change where it's cut.",
+        };
+    }
+  };
+
   const removeSelected = (
     sel: Selection | null,
-    /** Ask WITHOUT removing: same checks, same refusal, no write. The context
-     * menu needs to know whether "Remove" is available before the owner clicks
-     * it, and a second copy of these rules would drift from this one — which is
-     * the bug that produced #205 and #207, and the duplicated cascade #269
-     * collapsed (#284). */
-    opts?: { dryRun?: boolean },
   ): { ok: true } | { ok: false; reason: string } => {
-    const dry = opts?.dryRun === true;
-    if (!sel) return { ok: false, reason: "Nothing is selected." };
+    // ⭐ ONE set of rules: whatever the menu was told, the removal obeys.
+    const allowed = removeCheck(sel);
+    if (!allowed.ok || !sel) return allowed;
     // Drop every reference to a track that is going away, so a branch endplate
     // or a turnout is never left pointing at track that no longer exists (#170).
     const dropTrack = (s: EditorState, i: number) => {
@@ -2337,7 +2405,6 @@ export function SchematicEditor({
         // last-clicked would make Delete mean something different depending on
         // how the set was built (#94).
         const ids = new Set(sel.ids);
-        if (dry) return { ok: true };
         setPieces((state.graph?.pieces ?? []).filter((p) => !ids.has(p.id)), { commit: true });
         return { ok: true };
       }
@@ -2345,7 +2412,6 @@ export function SchematicEditor({
         const secId = sel.section ?? null;
         const si = secId === null ? -1 : state.sections.findIndex((x) => x.id === secId);
         if (secId !== null && si < 0) return { ok: false, reason: "That board is no longer there." };
-        if (dry) return { ok: true };
         patch((s) => {
           const poly =
             secId === null ? s.outline : ((s.sections[si].outline ??= []) as BenchworkPoint[]);
@@ -2359,28 +2425,24 @@ export function SchematicEditor({
       case "turnout": {
         const i = state.turnouts.findIndex((t) => t.id === sel.id);
         if (i < 0) return { ok: false, reason: "That turnout is no longer there." };
-        if (dry) return { ok: true };
         patch((s) => s.turnouts.splice(i, 1));
         return { ok: true };
       }
       case "crossing": {
         const i = state.crossings.findIndex((c) => c.id === sel.id);
         if (i < 0) return { ok: false, reason: "That crossing is no longer there." };
-        if (dry) return { ok: true };
         patch((s) => s.crossings.splice(i, 1));
         return { ok: true };
       }
       case "cp": {
         const i = state.controlPoints.findIndex((c) => c.id === sel.id);
         if (i < 0) return { ok: false, reason: "That control point is no longer there." };
-        if (dry) return { ok: true };
         patch((s) => s.controlPoints.splice(i, 1));
         return { ok: true };
       }
       case "industry": {
         const i = state.industries.findIndex((x) => x.id === sel.id);
         if (i < 0) return { ok: false, reason: "That industry is no longer there." };
-        if (dry) return { ok: true };
         patch((s) => s.industries.splice(i, 1));
         return { ok: true };
       }
@@ -2395,7 +2457,6 @@ export function SchematicEditor({
           };
         const i = state.extraTracks.findIndex((t) => t.id === sel.id);
         if (i < 0) return { ok: false, reason: "That track is no longer there." };
-        if (dry) return { ok: true };
         patch((s) => dropTrack(s, i));
         return { ok: true };
       }
@@ -2410,7 +2471,6 @@ export function SchematicEditor({
             reason:
               "Endplates A and B are part of the benchwork — they are where this module joins its neighbours. Reshape the board instead.",
           };
-        if (dry) return { ok: true };
         patch((s) => {
           // Cascade: the diverging track this endplate owns goes with it, and any
           // turnout that fed it is cleared (#170).
@@ -2449,12 +2509,21 @@ export function SchematicEditor({
    * therefore sees what was just clicked. **Verified on prod** rather than
    * assumed — a stale read here would offer the wrong verb for the object.
    */
-  const [menuCan, setMenuCan] = useState<{ ok: true } | { ok: false; reason: string } | null>(null);
-
-  const openCanvasMenu = (at: { x: number; y: number }) => {
-    setMenuCan(removeSelected(selection, { dryRun: true }));
-    setMenuAt(at);
-  };
+  /**
+   * ⛔⛔ COMPUTED DURING RENDER, AND IT HAS TO BE. The first version decided this
+   * when the menu OPENED, on the theory that a right press is discrete and so
+   * its selection is committed by the time `contextmenu` fires. **Driving it on
+   * prod proved that false:** right-pressing a turnout handle while endplate A
+   * was selected selected the turnout — and the menu still showed *endplate A's*
+   * refusal. One selection behind, offering the wrong verb for the object under
+   * the pointer.
+   *
+   * ⚠️ The eslint suppression is narrow and load-bearing: `react-hooks/refs`
+   * cannot see that the `dryRun` path returns before ever reaching `patch` or
+   * `setPieces`, so it flags a ref access that does not happen. Rendering from
+   * the live `selection` is the only way this cannot go stale.
+   */
+  const menuCan = menuAt ? removeCheck(selection) : null;
 
   /** The menu's Remove — plainly an event handler, not something render runs. */
   const onMenuRemove = () => {
@@ -2746,7 +2815,7 @@ export function SchematicEditor({
                 endplateTrackOffsets={renderTrackOffsets}
                 centerline={centerline}
                 graphAuthoring={graphAuthoring}
-                onCanvasContextMenu={openCanvasMenu}
+                onCanvasContextMenu={setMenuAt}
                 mainLane={doc.tracks.find((t) => t.id === MAIN_TRACK_ID)?.lane ?? 0}
                 sectionBreaks={canvasSectionBreaks}
                 onSectionBreakMove={moveSectionJoint}
