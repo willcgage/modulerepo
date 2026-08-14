@@ -279,6 +279,7 @@ export function BenchworkEditor({
   selection = null,
   onSelect,
   outlineSection = null,
+  graphAuthoring: graphAuthoringProp,
   tool = "select",
   partLibrary = PART_LIBRARY,
   pieces = [],
@@ -429,6 +430,11 @@ export function BenchworkEditor({
   /** Selection is owned by the editor, which renders the inspector for it. */
   selection?: CanvasSelection | null;
   onSelect?: (s: CanvasSelection | null) => void;
+  /** Whether this module is GRAPH-built, decided once by the editor (#255).
+   * Omit and the canvas falls back to working it out from its own props, which
+   * is what it did before — but two copies of that predicate is the bug that
+   * produced #205 and #207. */
+  graphAuthoring?: boolean;
   /** Whose polygon `outline` is: null for the module's own, else the id of the
    * section being shaped. Corner selections are stamped with it so an index is
    * never read against the wrong polygon (#273). */
@@ -1961,11 +1967,22 @@ export function BenchworkEditor({
    * ⭐ ADR 0001 + Will 2026-07-29: **a module is EITHER graph-built or 1-D, and
    * it says which by what it already has. NEW modules are graph-built.**
    *
-   * Pieces win when there are any — a rebuilt module derives tracks and
-   * turnouts, so `authored1D` goes true the moment it is converted, and the
-   * derived document must never take the graph's authoring rights away.
+   * ⛔⛔ **COMPUTED BY THE EDITOR NOW, NOT HERE (#255).** It used to be worked
+   * out from this component's own props, so the editor — which gates the
+   * centre-line on the same question — would have held a SECOND copy. Two
+   * copies of this predicate is exactly what produced #205 and #207: each
+   * overlay decided for itself whether the 1-D model applied, so gating one
+   * left the next drawing a phantom main.
+   *
+   * ⚠️ The old local version read `tracks.length`, which INCLUDES Main 2 —
+   * `state.extraTracks` does not. The editor's version keeps that reading
+   * deliberately (`doc.tracks` minus the main), so a plain double-track module
+   * classifies the same as it always did.
+   *
+   * Falls back to the local computation only when the prop is absent, so the
+   * canvas still works standalone.
    */
-  const graphAuthoring = pieces.length > 0 || !authored1D;
+  const graphAuthoring = graphAuthoringProp ?? (pieces.length > 0 || !authored1D);
   /** T on a graph-built module: the parts palette lays real pieces. */
   const piecesMode = tool === "track" && graphAuthoring;
   /**

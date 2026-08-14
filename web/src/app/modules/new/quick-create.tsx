@@ -48,13 +48,20 @@ export function QuickCreate({
       module_name: name,
       description: "",
       category,
-      // Straight, not blank (#103). Without a geometry the module has no
-      // centre-line at all, and everything derived from one — section joints,
-      // lane offsets, endplate normals — silently stops drawing on a board
-      // that otherwise looks finished. A straight board of the length just
-      // entered is the right reading for the large majority; the canvas's
-      // Geometry field changes it.
-      geometry_type: "straight",
+      // ⭐⭐ BLANK, because a new module is GRAPH-BUILT and has no main until
+      // one is laid (#255, ADR 0001). This used to write "straight" literally
+      // (#103) so that the derived centre-line had something to work with —
+      // but that recorded a geometry the owner never chose, and it recorded it
+      // as though they had. The document said "straight" about a board with no
+      // track on it at all.
+      //
+      // ⚠️ #103's fear is still real for 1-D modules, and still handled: the
+      // editor keeps coercing a null geometry to "straight" FOR DERIVATION
+      // (`editor.tsx`, `geometry` memo), so an older module with the field
+      // unset draws exactly as it did. What changes is only that a new module
+      // stops claiming a shape it hasn't got — and a graph module derives no
+      // centre-line anyway, so it has nothing to lose.
+      geometry_type: "",
       geometry_degrees: "",
       geometry_offset_inches: "",
       length_total_inches: length,
