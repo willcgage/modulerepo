@@ -5,6 +5,17 @@ Headings are `version — date` (YYYY-MM-DD).
 
 ---
 
+## v0.80.0 — 2026-08-07
+
+### Added
+- **Right-click anything on the board to remove it.** Removal is finally part of the drawing, rather than something you had to find at the foot of a panel or already know the key for. Right-clicking selects whatever is under the pointer and offers **Remove**.
+
+  ⓘ When something can't be removed — endplates A and B, the mainline, a length of flex — the menu says so, and why, instead of offering an action that would do nothing.
+
+  ⓘ Right-clicking never drags, draws, or starts a selection box, so opening the menu can't move or create anything by accident.
+
+---
+
 ## v0.79.0 — 2026-08-07
 
 ### Added

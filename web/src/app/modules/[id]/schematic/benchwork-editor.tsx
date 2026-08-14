@@ -280,6 +280,7 @@ export function BenchworkEditor({
   onSelect,
   outlineSection = null,
   graphAuthoring: graphAuthoringProp,
+  onCanvasContextMenu,
   tool = "select",
   partLibrary = PART_LIBRARY,
   pieces = [],
@@ -435,6 +436,10 @@ export function BenchworkEditor({
    * is what it did before — but two copies of that predicate is the bug that
    * produced #205 and #207. */
   graphAuthoring?: boolean;
+  /** A right-click on the board, in SCREEN pixels. The editor owns the menu
+   * because it owns removal and the selection; the canvas only reports where
+   * the pointer was (#284). */
+  onCanvasContextMenu?: (at: { x: number; y: number }) => void;
   /** Whose polygon `outline` is: null for the module's own, else the id of the
    * section being shaped. Corner selections are stamped with it so an index is
    * never read against the wrong polygon (#273). */
@@ -2542,6 +2547,10 @@ export function BenchworkEditor({
 
   const onBgDown = (e: React.PointerEvent) => {
     if (dragRef.current) return;
+    // ⛔ A RIGHT PRESS ON THE BACKGROUND DOES NOTHING (#284). Without this it
+    // fell straight through to draw-to-create and the marquee, so opening a
+    // context menu on empty board would start laying track.
+    if (e.button === 2) return;
     if (dropWarn) setDropWarn(null); // any fresh action clears a stale warning
     // Space-drag or middle-button pans, whatever the tool.
     if (spaceHeld || e.button === 1) {
@@ -2674,18 +2683,10 @@ export function BenchworkEditor({
     return pieces.filter((p) => p.x >= x0 && p.x <= x1 && p.y >= y0 && p.y <= y1).map((p) => p.id);
   };
 
-  const beginDrag = (
-    e: React.PointerEvent,
-    d: NonNullable<typeof dragRef.current>,
-  ) => {
-    e.stopPropagation();
-    try {
-      (e.target as Element).setPointerCapture?.(e.pointerId);
-    } catch {
-      /* best-effort */
-    }
-    dragRef.current = d;
-    // Grabbing something selects it — the editor shows its inspector.
+  /** What grabbing a handle selects — the editor then shows its inspector.
+   * Extracted so a LEFT press (which drags) and a RIGHT press (which only
+   * selects, then opens the menu) can never disagree about what was clicked. */
+  const selectFromDrag = (d: NonNullable<typeof dragRef.current>) => {
     if (d.kind === "vertex") onSelect?.(cornerSel(d.i));
     else if (d.kind === "turnout") onSelect?.({ kind: "turnout", id: d.id });
     else if (d.kind === "trackEnd") onSelect?.({ kind: "track", id: d.id });
@@ -2696,6 +2697,28 @@ export function BenchworkEditor({
       onSelect?.({ kind: "track", id: MAIN_TRACK_ID });
     else if (d.kind === "main2Vertex" || d.kind === "main2Edge")
       onSelect?.({ kind: "track", id: MAIN2_TRACK_ID });
+  };
+
+  const beginDrag = (
+    e: React.PointerEvent,
+    d: NonNullable<typeof dragRef.current>,
+  ) => {
+    e.stopPropagation();
+    // ⭐⭐ A RIGHT-CLICK SELECTS BUT NEVER DRAGS (#284). Nothing here filtered on
+    // the button, so opening a context menu on an object would have grabbed it
+    // at the same time — press, menu, and the thing has moved under the menu.
+    // Selecting is still right: the menu then acts on what you clicked.
+    if (e.button === 2) {
+      selectFromDrag(d);
+      return;
+    }
+    try {
+      (e.target as Element).setPointerCapture?.(e.pointerId);
+    } catch {
+      /* best-effort */
+    }
+    dragRef.current = d;
+    selectFromDrag(d);
   };
   /** Pointer → inches along the main, clamped to the module. */
   const posFrom = (p: Pt) =>
@@ -4005,6 +4028,12 @@ const ENDPLATE_TAB = 5; // ballast-shoulder band width, inches
                 // on it set their own cursor, which wins.
                 "cursor-grab"
         }`}
+        onContextMenu={(e) => {
+          // Suppress the browser's own menu and offer ours instead. By now the
+          // right press has already selected whatever was under it.
+          e.preventDefault();
+          onCanvasContextMenu?.({ x: e.clientX, y: e.clientY });
+        }}
         onPointerDown={onBgDown}
         onPointerMove={onMove}
         onPointerUp={onUp}
