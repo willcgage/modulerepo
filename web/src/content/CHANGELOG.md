@@ -5,6 +5,15 @@ Headings are `version — date` (YYYY-MM-DD).
 
 ---
 
+## v0.80.2 — 2026-08-07
+
+### Fixed
+- **The turnout icons in the parts palette were mirrored.** A left-hand turnout was drawn diverging to the right and a right-hand one to the left, so the picture you picked from disagreed with the turnout you got. Curved turnouts had the same fault. Reported by Steve Branton.
+
+  ⓘ Only the icons were wrong. Turnouts already on your modules are drawn correctly and are unchanged — nothing needs re-entering.
+
+---
+
 ## v0.80.1 — 2026-08-07
 
 ### Fixed
