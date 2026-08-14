@@ -6851,6 +6851,9 @@ function ObjectsList({
             ? pieceRows.length + state.extraTracks.length
             : state.extraTracks.length + mains.length
         }
+        // Nothing laid yet ⇒ the group holds only the hint, so open it and let
+        // the hint be read. See `guides` on Group.
+        guides={graphAuthoring && pieceRows.length === 0 && state.extraTracks.length === 0}
         actions={
           <AddTrackMenu
             add={add}
@@ -7052,11 +7055,28 @@ function Group({
   title,
   count,
   warn = 0,
+  guides = false,
   actions,
   children,
 }: {
   title: string;
   count: number;
+  /**
+   * This group holds GUIDANCE rather than objects, so open it even though the
+   * count is zero.
+   *
+   * ⛔ Disclosure keyed to `count` alone is the #208/#209 trap: a group that
+   * stays shut because it holds nothing hides the very thing that explains why
+   * it holds nothing. The Track group on a module with no track laid says *"no
+   * track laid yet, use the Track tool"* — advice that is worth exactly nothing
+   * behind a closed disclosure, and a brand-new module is precisely when the
+   * count is zero AND the hint matters most (#290).
+   *
+   * ⚠️ Deliberately NOT `warn`: this is not a warning, it earns no amber badge,
+   * and a count of things that need attention must not be inflated by a
+   * sentence of help.
+   */
+  guides?: boolean;
   /** Things in this group that need attention but are NOT objects in the
    * document — kept apart from `count` because that badge means "this many
    * exist", and a warning about a crossing nobody authored must not be counted
@@ -7067,7 +7087,7 @@ function Group({
   children: React.ReactNode;
 }) {
   return (
-    <details open={count > 0 || warn > 0} className="group mb-1">
+    <details open={count > 0 || warn > 0 || guides} className="group mb-1">
       <summary className="flex cursor-pointer select-none list-none items-center gap-1.5 rounded px-1 py-1 text-xs font-medium text-gray-700 hover:bg-gray-50">
         <span className="text-gray-400 transition-transform group-open:rotate-90">▸</span>
         {title}

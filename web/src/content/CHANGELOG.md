@@ -5,6 +5,13 @@ Headings are `version — date` (YYYY-MM-DD).
 
 ---
 
+## v0.78.1 — 2026-08-07
+
+### Fixed
+- **"No track laid yet" is now actually on screen.** v0.78.0 added that note to the Track group, but the group starts closed when it holds nothing — so on a module with no track the advice sat behind a disclosure nobody had a reason to open. The Track group now opens when it has only that note to show.
+
+---
+
 ## v0.78.0 — 2026-08-07
 
 ### Fixed
