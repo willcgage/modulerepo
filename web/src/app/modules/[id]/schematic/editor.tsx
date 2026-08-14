@@ -4372,9 +4372,22 @@ function Inspector({
             remove.fn();
             select(null);
           }}
-          className="mt-3 w-full rounded-md border border-red-300 px-3 py-1 text-xs font-medium text-red-700 hover:bg-red-50"
+          className="mt-3 flex w-full items-center justify-center gap-1.5 rounded-md border border-red-300 px-3 py-1 text-xs font-medium text-red-700 hover:bg-red-50"
+          title={`${remove.label} — or press Delete with it selected`}
         >
           {remove.label}
+          {/* ⭐ TEACH THE GESTURE WHERE IT IS ALREADY BEING USED (#284). Since
+              #269 `Delete` removes whatever is selected, but nothing said so —
+              the owner had to already know. A shortcut printed on the button
+              they are about to press is the one place it is certain to be read,
+              and it costs no canvas real estate.
+              ⚠️ Deliberately NOT a control on the drawing: FMN-0068 lost its
+              branch track to a blind click that hit a Remove control, so a
+              delete affordance under the pointer during normal editing is a
+              demonstrated hazard, not a hypothetical one. */}
+          <kbd className="rounded border border-red-200 bg-red-50 px-1 text-[10px] font-normal text-red-500">
+            Del
+          </kbd>
         </button>
       )}
     </div>
