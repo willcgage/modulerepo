@@ -5,6 +5,16 @@ Headings are `version — date` (YYYY-MM-DD).
 
 ---
 
+## v0.78.0 — 2026-08-07
+
+### Fixed
+- **A module with no track laid no longer lists a mainline it hasn't got.** If you haven't laid any track, the Track group used to show a `Main` worked out from the module's length, together with a list of flex lengths to cut it from — a run you never built and a shopping list you couldn't use. It now says there's no track yet and points you at the Track tool.
+- **A module built from pieces lists those pieces.** Your actual track — each piece named for the part it is, with its length — is now in the Track group and selectable there, instead of being reachable only by clicking it on the board.
+
+  ⓘ Modules drawn the older way are unchanged: their Main 1 and Main 2 stay listed, selectable and editable exactly as before. This is the correction promised in v0.77.0.
+
+---
+
 ## v0.77.0 — 2026-08-07
 
 ### Changed
