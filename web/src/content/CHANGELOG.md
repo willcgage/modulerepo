@@ -5,6 +5,17 @@ Headings are `version — date` (YYYY-MM-DD).
 
 ---
 
+## v0.84.0 — 2026-08-15
+
+### Fixed
+- **A track you have drawn now records where its own rail begins, rather than where the turnout that opens it sits.** Those are two different places — about 1½ to 2 inches apart, the reach of the turnout — so a siding or spur has been storing a start, an end and a length that disagree with the line drawn on the board. The dispatcher reads those stored numbers rather than the drawing, which is why the same siding could appear in one place on the track plan and another in the dispatcher's view.
+
+  Each drawn track re-reads its start and end from its own line the next time the module is saved, and its capacity is re-measured from those ends.
+
+  ⓘ Only tracks you have drawn a path for — a track positioned by numbers alone is untouched, and nothing changes on a module until it is saved.
+
+---
+
 ## v0.83.0 — 2026-08-07
 
 ### Fixed
