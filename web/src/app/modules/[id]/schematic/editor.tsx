@@ -347,7 +347,85 @@ export function SchematicEditor({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [state, dims]);
 
-  const doc = useMemo(() => stateToDoc(state, recordNumber), [state, recordNumber]);
+  // Where each plate's CENTRE sits relative to its track point, in inches —
+  // the renderer's framing, the negation of the authored offset. Unauthored
+  // ends fall back to Free-moN §2.0's recommendation: a single end centred, a
+  // double end straddling the centre at ∓ half the 1.125″ track spacing.
+  const renderTrackOffsets = useMemo(() => {
+    // Main 2 sits above Main 1 by default, below when swapped (#131). A double
+    // end's plate centre is the midpoint of the two mains, so its default
+    // follows Main 2's side. An OWNER-authored offset always wins. The rule
+    // itself lives in the package, so this view and the read-only one can't
+    // drift apart again (#190).
+    const off = (config: "single" | "double" | "none", authored?: number) =>
+      endplateCentreOffsetInches({
+        config,
+        authoredTrackOffsetInches: authored,
+        main2Below: state.mainsSwapped === true,
+      });
+    return {
+      A: off(state.configA, state.endplateTrackOffsets.A),
+      B: off(state.configB, state.endplateTrackOffsets.B),
+    };
+  }, [state.configA, state.configB, state.endplateTrackOffsets, state.mainsSwapped]);
+
+  /**
+   * ⚠️ DEFINED BEFORE `doc` ON PURPOSE (#253). A drawn track's `fromPos`/`toPos`
+   * are read off the line the owner drew, and a position is ARC LENGTH along
+   * this centre-line — so `stateToDoc` cannot build the document without it.
+   *
+   * There is no cycle: the footprint is a fact about the BENCHWORK and reads
+   * only `state` and the geometry fields, never the document. That is the same
+   * layer rule that put `spine` here in the first place — a layer may read the
+   * layers below it, never above.
+   */
+  const footprint = useMemo(
+    () =>
+      moduleFootprint({
+        lengthInches: state.lengthInches,
+        geometryType: geometry.type,
+        geometryDegrees: geometry.degrees,
+        geometryOffsetInches: geometry.offset,
+        endplateWidths: state.endplateWidths,
+        endplateTrackOffsets: renderTrackOffsets,
+        outline: state.outline,
+        // Shaped sections take over as the module's footprint (#96 phase 2);
+        // authoring them per-section is 2b, this just keeps the derived
+        // footprint honest for docs that already carry them.
+        sections: state.sections,
+        mainPath: state.mainPath,
+        // A loop's centre-line ends at the throat — no far endplate face there.
+        loop: state.loop,
+        // …and neither does an end of the line / pocket, which presents one face
+        // and stops. Without this the board drew a plate at an end it hasn't got
+        // (#191).
+        endplateConfigs: [state.configA, state.configB],
+      }),
+    [
+      state.lengthInches,
+      state.endplateWidths,
+      renderTrackOffsets,
+      state.outline,
+      state.sections,
+      state.mainPath,
+      state.loop,
+      state.configA,
+      state.configB,
+      geometry,
+    ],
+  );
+
+  const doc = useMemo(
+    // ⭐ The centre-line is what makes a drawn run's stored start mean "where
+    // this track begins" rather than "where the turnout that opens it is"
+    // (#253). Passing the FOOTPRINT's line, not the graph-gated `centerline`
+    // below: that one is emptied for piece-authored modules, which `stateToDoc`
+    // already refuses to re-derive for its own reasons (their positions come
+    // from anchors) — and reading it here would need `graphAuthoring`, which
+    // needs `doc`.
+    () => stateToDoc(state, recordNumber, { centerline: footprint.centerline }),
+    [state, recordNumber, footprint.centerline],
+  );
   /** Crossings the drawing implies and the document never declared — a spur
    * thrown past Main 2 is drawn straight through it, and that is a diamond
    * somebody has to build (Will, 2026-07-30). Flagged, never created: crossing
@@ -397,27 +475,6 @@ export function SchematicEditor({
     [state, geometry],
   );
   const wantsManualPose = poseNeedsManual(geometry.type) || state.loop;
-  // Where each plate's CENTRE sits relative to its track point, in inches —
-  // the renderer's framing, the negation of the authored offset. Unauthored
-  // ends fall back to Free-moN §2.0's recommendation: a single end centred, a
-  // double end straddling the centre at ∓ half the 1.125″ track spacing.
-  const renderTrackOffsets = useMemo(() => {
-    // Main 2 sits above Main 1 by default, below when swapped (#131). A double
-    // end's plate centre is the midpoint of the two mains, so its default
-    // follows Main 2's side. An OWNER-authored offset always wins. The rule
-    // itself lives in the package, so this view and the read-only one can't
-    // drift apart again (#190).
-    const off = (config: "single" | "double" | "none", authored?: number) =>
-      endplateCentreOffsetInches({
-        config,
-        authoredTrackOffsetInches: authored,
-        main2Below: state.mainsSwapped === true,
-      });
-    return {
-      A: off(state.configA, state.endplateTrackOffsets.A),
-      B: off(state.configB, state.endplateTrackOffsets.B),
-    };
-  }, [state.configA, state.configB, state.endplateTrackOffsets, state.mainsSwapped]);
   // The real physical module — its centre-line drives where track, turnouts and
   // signals actually sit on the board (not just in the straightened view).
   const mainDrawn = state.mainPath.length >= 2;
@@ -445,42 +502,6 @@ export function SchematicEditor({
     // away.
     return (state.graph?.pieces?.length ?? 0) > 0 || !authored1D;
   }, [doc.tracks, state.mainPath.length, state.turnouts.length, state.graph?.pieces?.length]);
-  const footprint = useMemo(
-    () =>
-      moduleFootprint({
-        lengthInches: state.lengthInches,
-        geometryType: geometry.type,
-        geometryDegrees: geometry.degrees,
-        geometryOffsetInches: geometry.offset,
-        endplateWidths: state.endplateWidths,
-        endplateTrackOffsets: renderTrackOffsets,
-        outline: state.outline,
-        // Shaped sections take over as the module's footprint (#96 phase 2);
-        // authoring them per-section is 2b, this just keeps the derived
-        // footprint honest for docs that already carry them.
-        sections: state.sections,
-        mainPath: state.mainPath,
-        // A loop's centre-line ends at the throat — no far endplate face there.
-        loop: state.loop,
-        // …and neither does an end of the line / pocket, which presents one face
-        // and stops. Without this the board drew a plate at an end it hasn't got
-        // (#191).
-        endplateConfigs: [state.configA, state.configB],
-      }),
-    [
-      state.lengthInches,
-      state.endplateWidths,
-      renderTrackOffsets,
-      state.outline,
-      state.sections,
-      state.mainPath,
-      state.loop,
-      state.configA,
-      state.configB,
-      geometry,
-    ],
-  );
-
   /**
    * ⭐⭐ A GRAPH-BUILT MODULE HAS NO CENTRE-LINE (#255, ADR 0001). Its pieces are
    * the truth; a module-level line derived from `geometry_type` is a main
