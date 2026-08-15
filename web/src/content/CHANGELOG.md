@@ -5,6 +5,15 @@ Headings are `version — date` (YYYY-MM-DD).
 
 ---
 
+## v0.83.0 — 2026-08-07
+
+### Fixed
+- **The first run of track on a blank module now starts exactly at the endplate.** Laying the first piece had nothing to snap to, so the run began wherever the pointer happened to be — usually a fraction of an inch off the plate it has to join. Nothing corrected it afterwards, because every later piece snaps to the first, so the whole module ended up offset by that amount. Starting within reach of an endplate now anchors the run to that plate's track point and squares it up to the face.
+
+  ⓘ Only when you start near an endplate. A run laid across the middle of the board is left exactly where you drew it.
+
+---
+
 ## v0.82.0 — 2026-08-07
 
 ### Added
