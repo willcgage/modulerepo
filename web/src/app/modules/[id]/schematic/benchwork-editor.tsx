@@ -3274,6 +3274,32 @@ export function BenchworkEditor({
    */
   const grabInches = Math.min(world(14), FREEMO_TRACK_SPACING_INCHES / 2);
 
+  /**
+   * ⭐⭐ AN ENDPLATE'S OWN TRACK POINT, when a press lands within reach of one
+   * (#254).
+   *
+   * `snapPiece` only offers the open joints of EXISTING pieces, and a blank
+   * module has none — so the first run began wherever the pointer happened to
+   * be, typically a fraction of an inch off the one place it almost certainly
+   * belongs. That error never gets corrected: every later piece snaps to the
+   * first, so the whole module ends up offset from the plate it has to join.
+   *
+   * ⚠️ Same `grabInches` as every other snap, so it stays CONDITIONAL — a spur
+   * laid across the middle of a blank board is nowhere near a plate and is left
+   * exactly where it was drawn. #239's rule: a snap needs one test proving it
+   * fires and one proving it has not become unconditional.
+   */
+  const endplateAnchorNear = (p: Pt, within: number) => {
+    let best: { pt: Pt; heading: number; id: string; d: number } | null = null;
+    for (const e of poses) {
+      // `EndplatePose.x/y` IS the track point — where Main 1 crosses the face.
+      const d = Math.hypot(e.x - p.x, e.y - p.y);
+      if (d > within) continue;
+      if (!best || d < best.d) best = { pt: { x: e.x, y: e.y }, heading: e.heading, id: e.id, d };
+    }
+    return best;
+  };
+
   const layPiece = (spec: PieceSpec, at: Pt) => {
     if (!onPiecesChange) return;
     const part = partLibrary.find((p) => p.id === spec.partId);
@@ -3341,8 +3367,24 @@ export function BenchworkEditor({
     const head = newPiece(spec, from, pieces, partLibrary.find((p) => p.id === spec.partId));
     const aimed = { ...head, rotationDeg: (Math.atan2(to.y - from.y, to.x - from.x) * 180) / Math.PI };
     const snapped = snapPiece({ ...aimed, lengthInches: cuts[0].lengthInches }, pieces, partLibrary, grabInches)?.piece;
-    const origin: Pt = snapped ? { x: snapped.x, y: snapped.y } : { x: from.x, y: from.y };
-    const rotationDeg = snapped ? snapped.rotationDeg : aimed.rotationDeg;
+    // A piece to continue wins; failing that, an endplate's own track point —
+    // which on a blank module is the only known anchor there is (#254).
+    const plate = snapped ? null : endplateAnchorNear(from, grabInches);
+    const origin: Pt = snapped
+      ? { x: snapped.x, y: snapped.y }
+      : plate
+        ? plate.pt
+        : { x: from.x, y: from.y };
+    // ⭐ Re-aimed INWARD off the face (`heading` points outward), not merely
+    // started there. Free-moN §2.0 requires track to leave a plate square and
+    // stay straight for the first 4″, so squaring it up is the correct reading
+    // of the gesture — the same way snapping to a joint adopts that joint's
+    // heading rather than keeping the hand-drawn angle.
+    const rotationDeg = snapped
+      ? snapped.rotationDeg
+      : plate
+        ? plate.heading + 180
+        : aimed.rotationDeg;
     const rad = rotationDeg * DEG;
     const ux = Math.cos(rad);
     const uy = Math.sin(rad);
