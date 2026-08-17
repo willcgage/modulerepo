@@ -1265,7 +1265,25 @@ export function SchematicEditor({
     const center = footprint.centerline;
     if (center.length < 2) return null;
     const t = state.extraTracks.find((x) => x.id === trackId);
-    if (t?.path && t.path.length >= 2) return null;
+    /**
+     * ⛔⛔ MAIN 2 IS NOT IN `extraTracks`, so looking a drawn path up there
+     * missed it entirely — and a hand-drawn Main 2 was being laid on the
+     * MAIN's centre-line offset to a lane, which is not the line the owner
+     * drew. FMN-0075 gained "f-main2-0 is not reachable from the endplate"
+     * from exactly that.
+     *
+     * ⚠️ MAIN 1 IS DIFFERENT and must NOT be excluded: its drawn path IS the
+     * centre-line (`moduleCenterline` prefers `mainPath`), so sampling the
+     * centre-line for it is sampling the drawn path. Excluding it would
+     * switch the placer off on precisely the modules this exists for.
+     */
+    const drawn =
+      trackId === MAIN_TRACK_ID
+        ? null
+        : trackId === MAIN2_TRACK_ID
+          ? state.main2Path
+          : t?.path;
+    if (drawn && drawn.length >= 2) return null;
     const lane =
       trackId === MAIN_TRACK_ID
         ? 0

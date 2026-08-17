@@ -5,6 +5,13 @@ Headings are `version — date` (YYYY-MM-DD).
 
 ---
 
+## v0.85.1 — 2026-08-17
+
+### Fixed
+- **A hand-drawn second main is left where you drew it when rebuilding as pieces.** v0.85.0 laid it alongside the first main instead of along its own drawn line, which put its pieces somewhere the track does not go and left them reported as not connected. A Main 2 you have drawn is now treated the same as any other track you have drawn by hand.
+
+---
+
 ## v0.85.0 — 2026-08-17
 
 ### Fixed
