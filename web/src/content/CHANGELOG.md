@@ -5,6 +5,15 @@ Headings are `version — date` (YYYY-MM-DD).
 
 ---
 
+## v0.85.0 — 2026-08-17
+
+### Fixed
+- **Rebuilding a curved or multi-board module as pieces now lays the track where it actually runs.** Until now the rebuild laid every piece along the module's straight axis, so on a board that curves — or one made of several sections that turn — the pieces came out somewhere the track never went. They now follow the module's own centre-line, and a siding or spur sits on its own side of it.
+
+  ⓘ A track you have drawn a path for by hand is unchanged for now: those pieces still lay straight, and getting them onto the drawn line is the next step.
+
+---
+
 ## v0.84.0 — 2026-08-15
 
 ### Fixed
