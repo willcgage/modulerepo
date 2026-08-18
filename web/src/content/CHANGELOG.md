@@ -5,6 +5,13 @@ Headings are `version — date` (YYYY-MM-DD).
 
 ---
 
+## v0.86.0 — 2026-08-18
+
+### Fixed
+- **A track the rebuild says it could not lay is no longer built anyway.** The panel that offers to rebuild a module as pieces lists any track it could not fit, and then laid the opening and closing curves of those tracks regardless — so what you were handed did not match what you had just been shown. On FMN-0003 an 18″ siding came back as a 9″ spur, with a second stub of track beside it that appears in no document at all. Track that cannot be laid is now left out altogether, and the turnouts that open it are reported plainly as leading nowhere.
+
+---
+
 ## v0.85.1 — 2026-08-17
 
 ### Fixed
