@@ -5,6 +5,17 @@ Headings are `version — date` (YYYY-MM-DD).
 
 ---
 
+## v0.92.0 — 2026-08-22
+
+### Fixed
+- **An endplate that the board has made narrower is now checked at its real width — and says so.** When an endplate is bound to a benchwork edge, its face width is whatever that edge gives it, and shortening the board narrows the plate. The standard's 12″ minimum was being checked against the width you had typed rather than the one on the board, so a plate that had quietly become too narrow passed without comment.
+
+  It is now checked at its built width, and if the two disagree the panel says which is which — for example, *"You asked for 24″, but the edge this plate is bound to only gives it 10″."*
+
+  ⓘ **Your number is left exactly as you typed it.** The note points out the disagreement; it does not change anything.
+
+---
+
 ## v0.91.0 — 2026-08-22
 
 ### Added
