@@ -5,6 +5,15 @@ Headings are `version — date` (YYYY-MM-DD).
 
 ---
 
+## v0.87.0 — 2026-08-22
+
+### Changed
+- **A siding or spur no longer reports a car capacity — an industry does.** The number a track showed was worked out from how far it ran *along the module*, which on a curved module is not the same as how much rail is actually there: on the inside of a bend it claimed more room than the track has, and on the outside less. Capacity belongs to the rail you have assigned to an industry, so that is where the car count now lives. A track still shows its usable length.
+
+  ⓘ **Any capacity you have already recorded is left exactly as you entered it.** Nothing rewrites or deletes it; it simply is not shown against the track any more.
+
+---
+
 ## v0.86.0 — 2026-08-18
 
 ### Fixed
