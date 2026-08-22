@@ -69,7 +69,6 @@ import {
   type TrackPart,
   type TrackConfig,
   nextId,
-  carCapacity,
   type BenchworkPoint,
   type EditorState,
   type TrackRole,
@@ -1099,11 +1098,16 @@ export function SchematicEditor({
           toPos: number,
           side: "above" | "below",
           editable: boolean,
+          cars: number | null | undefined,
         ): CanvasIndustry => {
-          const cars = carCapacity(fromPos, toPos);
+          // ⛔ THE OWNER'S FIGURE, and nothing at all when they have not given
+          // one (#310). Never "0 cars" for an industry nobody has counted —
+          // not recorded and holds nothing are different statements.
           const sub =
             ind.labelMode === "cars"
-              ? `${cars} cars`
+              ? cars != null
+                ? `${cars} cars`
+                : ""
               : ind.labelMode === "inches"
                 ? `${Math.round(Math.abs(toPos - fromPos))}″`
                 : "";
@@ -1122,9 +1126,9 @@ export function SchematicEditor({
           };
         };
         return [
-          spot(ind.id, ind.track, ind.fromPos, ind.toPos, ind.side, true),
+          spot(ind.id, ind.track, ind.fromPos, ind.toPos, ind.side, true, ind.cars),
           ...(ind.spots ?? []).map((sp, i) =>
-            spot(`${ind.id}#${i}`, sp.track, sp.fromPos, sp.toPos, sp.side ?? ind.side, false),
+            spot(`${ind.id}#${i}`, sp.track, sp.fromPos, sp.toPos, sp.side ?? ind.side, false, sp.cars),
           ),
         ];
       }),
@@ -5915,9 +5919,33 @@ function Inspector({
     const ind = state.industries[idx];
     const up = (fn: (x: EditorState["industries"][number]) => void) =>
       patch((s) => fn(s.industries[idx]));
-    const cars =
-      carCapacity(ind.fromPos, ind.toPos) +
-      ind.spots.reduce((n, sp) => n + carCapacity(sp.fromPos, sp.toPos), 0);
+    /**
+     * ⛔ THE TOTAL IS A SUM OF WHAT THE OWNER ENTERED (#310), not a derivation.
+     *
+     * Will, 2026-08-22: "the owner should put the number of cars that the
+     * industry supports per track." It used to be `carCapacity(span)` per
+     * track, which measured along the MODULE — wrong on a curve — and answered
+     * the wrong question anyway: a dock with three doors holds three cars
+     * whether or not the rail beside it could take ten.
+     *
+     * `null` when NOTHING has been entered anywhere, so the readout can say so
+     * rather than claiming a confident zero.
+     */
+    const carFigures = [ind.cars, ...ind.spots.map((sp) => sp.cars)].filter(
+      (n): n is number => typeof n === "number",
+    );
+    const cars = carFigures.length
+      ? carFigures.reduce((a, b) => a + b, 0)
+      : null;
+    /** Set a per-track figure; a blank field means NOT RECORDED, not zero. */
+    const setCars = (
+      v: string,
+      apply: (x: EditorState["industries"][number], n: number | null) => void,
+    ) => {
+      const t = v.trim();
+      const n = t === "" ? null : Number(t);
+      up((x) => apply(x, t === "" || !Number.isFinite(n!) || n! < 0 ? null : Math.round(n!)));
+    };
     /**
      * Does this spot's span actually fit on the track it spots (#194)? Nothing
      * checked, so an industry could claim car spots with no rail under them —
@@ -5948,7 +5976,6 @@ function Inspector({
       if (o.overhangInches < 0.05) return null;
       const name =
         trackOptions.find((x) => x.value === track)?.label ?? track;
-      const lost = carCapacity(fromPos, toPos) - carCapacity(0, o.onTrackInches);
       const r1 = (v: number) => Math.round(v * 10) / 10;
       const ends = [
         o.beforeInches >= 0.05 ? `${r1(o.beforeInches)}″ before its start` : null,
@@ -5956,12 +5983,14 @@ function Inspector({
       ].filter(Boolean);
       return (
         <p className="rounded-md bg-amber-50 px-2 py-1 text-xs text-amber-800" role="status">
+          {/* ⛔ NO LONGER CLAIMS A CAR LOSS. It used to say how many of "the
+              cars counted below" could not be spotted — but that count was
+              derived from the span, and the figure is the owner's now (#310).
+              Saying which of THEIR cars are unspottable would be guessing on
+              their behalf. The geometry is the finding; the count is theirs. */}
           ⚠ This span runs off <span className="font-medium">{name}</span> —{" "}
-          {ends.join(" and ")}. Only {r1(o.onTrackInches)}″ of it has rail under it
-          {lost > 0
-            ? `, so ${lost} of the cars counted below can't actually be spotted`
-            : ""}
-          . Shorten the span, or extend the track to meet it.
+          {ends.join(" and ")}. Only {r1(o.onTrackInches)}″ of it has rail under it.
+          Shorten the span, or extend the track to meet it.
         </p>
       );
     };
@@ -6037,11 +6066,26 @@ function Inspector({
             </select>
           </label>
           <label className="block text-xs font-medium text-gray-600">
-            Capacity
-            <div className={`mt-0.5 ${inp} bg-gray-50 text-gray-600`} title="Total across all this industry's tracks.">
-              {cars} cars
-            </div>
+            Cars on this track
+            <input
+              type="number"
+              min={0}
+              step={1}
+              value={ind.cars ?? ""}
+              onChange={(e) => setCars(e.target.value, (x, n) => (x.cars = n))}
+              className={`mt-0.5 ${inp}`}
+              placeholder="not recorded"
+              title="How many cars this industry can take on its primary track. Yours to state — it is not worked out from the drawing."
+            />
           </label>
+        </div>
+        <div className="rounded-md bg-gray-50 px-2 py-1.5 text-xs text-gray-600">
+          <div className="flex justify-between">
+            <span>Total across its tracks</span>
+            <span className="tabular-nums font-medium text-gray-800">
+              {cars != null ? `${cars} cars` : "not recorded"}
+            </span>
+          </div>
         </div>
         {spanWarning(ind.track, ind.fromPos, ind.toPos)}
         <div className="border-t border-gray-100 pt-2">
@@ -6087,6 +6131,22 @@ function Inspector({
                         <option key={o.value} value={o.value}>{o.label}</option>
                       ))}
                     </select>
+                    {/* Per track, because that is the question (#310): the same
+                        industry may take four cars at its dock and one on a
+                        house track. */}
+                    <input
+                      type="number"
+                      min={0}
+                      step={1}
+                      value={sp.cars ?? ""}
+                      onChange={(e) =>
+                        setCars(e.target.value, (x, n) => (x.spots[si].cars = n))
+                      }
+                      className={`${inp} w-20 text-xs`}
+                      placeholder="cars"
+                      aria-label="Cars on this track"
+                      title="How many cars this industry can take on this track."
+                    />
                     <button
                       type="button"
                       onClick={() => up((x) => x.spots.splice(si, 1))}
@@ -7342,7 +7402,14 @@ function ObjectsList({
             ind.id,
             ind.name || "unnamed",
             { kind: "industry", id: ind.id },
-            `${carCapacity(ind.fromPos, ind.toPos)} cars`,
+            // The owner's figures across this industry's tracks (#310), not a
+            // number worked out from the drawn span.
+            (() => {
+              const ns = [ind.cars, ...(ind.spots ?? []).map((sp) => sp.cars)].filter(
+                (n): n is number => typeof n === "number",
+              );
+              return ns.length ? `${ns.reduce((a, b) => a + b, 0)} cars` : "—";
+            })(),
           ),
         )}
       </Group>

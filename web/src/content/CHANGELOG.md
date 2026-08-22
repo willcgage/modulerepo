@@ -5,6 +5,17 @@ Headings are `version — date` (YYYY-MM-DD).
 
 ---
 
+## v0.89.0 — 2026-08-22
+
+### Changed
+- **You now say how many cars an industry can take, on each of its tracks.** The app used to work that number out from how long the industry's span was drawn — which was never really the question. A dock with three doors holds three cars whether or not the rail beside it could take ten, and on a curved module the worked-out figure was wrong anyway: it measured along the module rather than along the rail, claiming more room on the inside of a bend and less on the outside.
+
+  There is now a **Cars on this track** box on an industry, and one on each house-track spot it serves, because the answer can differ per track.
+
+  ⓘ **Existing industries show no car count until you enter one.** Nothing has been guessed on your behalf, and a blank box means *not recorded* rather than *holds nothing*.
+
+---
+
 ## v0.88.0 — 2026-08-22
 
 ### Fixed
