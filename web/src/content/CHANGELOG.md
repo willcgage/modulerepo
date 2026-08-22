@@ -5,6 +5,15 @@ Headings are `version — date` (YYYY-MM-DD).
 
 ---
 
+## v0.91.0 — 2026-08-22
+
+### Added
+- **You can now say where along a benchwork edge an endplate starts.** Binding an endplate to an edge already kept the face width you had set, but where it sat on that edge could only be changed by dragging it. There is now a **Starts along the edge** box, measured from that edge's first corner, with the edge's length and the range you have to play with shown beside it.
+
+  ⓘ The plate keeps its width: a start that would push it past the end slides it back onto the edge rather than making it narrower.
+
+---
+
 ## v0.90.0 — 2026-08-22
 
 ### Added

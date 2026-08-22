@@ -38,6 +38,8 @@ import {
   deriveEndplatePoses,
   benchworkLengthInches,
   endplateSpanOnEdge,
+  endplateSpanFromStart,
+  benchworkEdgeLength,
   endplateEdgePose,
   type EndplatePose,
   poseNeedsManual,
@@ -1373,6 +1375,36 @@ export function SchematicEditor({
       const here = derivedPoses.find((p) => p.id === id);
       if (!here) return;
       const span = endplateSpanOnEdge(s.outline, bound.index, here, w);
+      if (span && s.endplateEdges) s.endplateEdges[id] = { ...bound, ...span };
+    });
+
+  /**
+   * ⭐ WHERE ALONG THE EDGE THE PLATE STARTS (#275).
+   *
+   * Will, 2026-08-01: *"This should be allowed to be set for where it starts on
+   * the edge and where it ends."* Until now a bound plate's span was always
+   * CENTRED on wherever it happened to sit, so the start was not authorable at
+   * all — only its width.
+   *
+   * Measured from the edge's first vertex, in inches, because that is what the
+   * owner reads off the board. The package clamps it so the whole face stays on
+   * the edge WITHOUT narrowing the plate, and refuses outright when the edge is
+   * too short for the width — in which case the binding is left exactly as it
+   * was rather than replaced by a guess.
+   */
+  const setEndplateEdgeStart = (id: string, raw: string) =>
+    patch((s) => {
+      const bound = s.endplateEdges?.[id];
+      if (!bound) return;
+      const shape =
+        bound.section == null
+          ? s.outline
+          : (s.sections ?? []).find((x) => x.id === bound.section)?.outline;
+      const w =
+        s.endplateWidths?.[id] ?? FREEMO_ENDPLATE_WIDTH_RECOMMENDED_INCHES;
+      const start = Number(raw);
+      if (!Number.isFinite(start)) return;
+      const span = endplateSpanFromStart(shape, bound.index, start, w);
       if (span && s.endplateEdges) s.endplateEdges[id] = { ...bound, ...span };
     });
 
@@ -3063,6 +3095,7 @@ export function SchematicEditor({
             mainReachesPlate={mainReachesPlate}
             wantsManualPose={wantsManualPose}
             setEndplateWidth={setEndplateWidth}
+            setEndplateEdgeStart={setEndplateEdgeStart}
             setEndplateLabel={setEndplateLabel}
             setEndplateTrackOffset={setEndplateTrackOffset}
             setSections={setSections}
@@ -4150,6 +4183,7 @@ function Inspector({
   mainReachesPlate,
   wantsManualPose,
   setEndplateWidth,
+  setEndplateEdgeStart,
   setEndplateLabel,
   setEndplateTrackOffset,
   setSections,
@@ -4232,6 +4266,7 @@ function Inspector({
   mainReachesPlate: Record<string, { gap: number; past: boolean }>;
   wantsManualPose: boolean;
   setEndplateWidth: (id: string, raw: string) => void;
+  setEndplateEdgeStart: (id: string, raw: string) => void;
   setEndplateLabel: (id: string, raw: string) => void;
   setEndplateTrackOffset: (id: string, raw: string) => void;
   setSections: (next: SchematicSection[]) => void;
@@ -5113,12 +5148,51 @@ function Inspector({
           {noEdgeReason ? (
             <p className="mt-1 text-xs text-gray-500">{noEdgeReason}</p>
           ) : bound && pose.boundToEdge ? (
-            <p className="mt-1 text-xs text-gray-600">
-              On the board&apos;s edge, <span className="font-medium">{Math.round((pose.widthInches ?? 0) * 10) / 10}″</span> wide,
-              facing {Math.round(pose.heading)}°. Reshape the benchwork and this
-              endplate moves with it — its width is the edge&apos;s own, so the
-              two can&apos;t disagree.
-            </p>
+            <>
+              <p className="mt-1 text-xs text-gray-600">
+                On the board&apos;s edge, <span className="font-medium">{Math.round((pose.widthInches ?? 0) * 10) / 10}″</span> wide,
+                facing {Math.round(pose.heading)}°. Reshape the benchwork and this
+                endplate moves with it — its width is the edge&apos;s own, so the
+                two can&apos;t disagree.
+              </p>
+              {/* ⭐ WHERE THE PLATE STARTS ALONG THAT EDGE (#275). Will:
+                  "This should be allowed to be set for where it starts on the
+                  edge and where it ends." The width above answers "how big";
+                  this answers "where", which until now could only be got at by
+                  dragging the plate. Measured from the edge's first corner,
+                  because that is what a tape measure gives you. */}
+              {(() => {
+                const shape =
+                  bound.section == null
+                    ? state.outline
+                    : (state.sections ?? []).find((x) => x.id === bound.section)?.outline;
+                const edgeLen = benchworkEdgeLength(shape, bound.index);
+                if (edgeLen == null) return null;
+                const w = pose.widthInches ?? 0;
+                const startNow = (bound.fromT ?? 0) * edgeLen;
+                const maxStart = Math.max(0, edgeLen - w);
+                const r1 = (v: number) => Math.round(v * 10) / 10;
+                return (
+                  <label className="mt-1.5 block text-xs font-medium text-gray-600">
+                    Starts along the edge (in)
+                    <input
+                      type="number"
+                      min={0}
+                      max={r1(maxStart)}
+                      step={0.5}
+                      value={r1(startNow)}
+                      onChange={(e) => setEndplateEdgeStart(id, e.target.value)}
+                      className={`mt-0.5 ${inp}`}
+                      title="Measured from the first corner of this edge. The plate keeps its width — a start past the end slides it back onto the edge rather than shrinking it."
+                    />
+                    <span className="mt-0.5 block font-normal text-gray-500">
+                      Edge is {r1(edgeLen)}″ long; this plate is {r1(w)}″, so the
+                      start can run 0–{r1(maxStart)}″.
+                    </span>
+                  </label>
+                );
+              })()}
+            </>
           ) : bound ? (
             <p className="mt-1 text-xs text-amber-700">
               ⚠ That edge isn&apos;t usable any more — the board may have been
