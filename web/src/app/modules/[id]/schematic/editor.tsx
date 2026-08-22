@@ -14,10 +14,24 @@ import { RebuildAsPieces } from "./rebuild-as-pieces";
  * to hold this went with the one palette: every turnout an owner places
  * deliberately now says its own frog number on the button they clicked, and a
  * second control that could disagree with the part is a contradiction you could
- * author. #6 because that is the standard's floor for a main line — and the
- * turnout inspector's own size field is right there to change it.
+ * author.
+ *
+ * ⛔⛔ AND IT IS NO LONGER WRITTEN TO THE DOCUMENT (#248). It used to be, on the
+ * two paths that create a turnout from a gesture — so dragging a main onto an
+ * endplate recorded `size: 6` while the amber "+ Add transition" button, which
+ * makes the SAME End-of-Double-Track turnout via `buildTransition`, recorded
+ * nothing. Two ways to build one thing, two different documents.
+ *
+ * Silence is meaningful: an owner who has not said what a turnout is has NOT
+ * said it is a #6. That is what ADR 0004's placeholder is for, and the one
+ * question #199's conversion exists to ask — answering it on their behalf, from
+ * a gesture that named no part, is the app inventing a fact.
+ *
+ * ⭐ SO THIS IS NOW A DRAWING FALLBACK ONLY. The board still has to draw
+ * something, and #6 is the standard's floor for a main line; that is a decision
+ * about pixels, not a claim about the layout. Never assign it to `size`.
  */
-const DEFAULT_TURNOUT_SIZE = 6;
+const DRAWN_TURNOUT_SIZE_FALLBACK = 6;
 import { Fragment, useCallback, useEffect, useMemo, useRef, useState, useTransition } from "react";
 import Link from "next/link";
 import {
@@ -852,7 +866,7 @@ export function SchematicEditor({
       const occupied: { fromPos: number; toPos: number }[] = [];
       for (const sw of state.turnouts) {
         if (sw.onTrack !== t.id) continue;
-        const size = sw.size ?? 6;
+        const size = sw.size ?? DRAWN_TURNOUT_SIZE_FALLBACK;
         // A named part answers for itself, exactly as the tie strip does — the
         // two must agree, or the flex would start somewhere the drawn moulding
         // doesn't end (#187).
@@ -916,7 +930,7 @@ export function SchematicEditor({
         // Only a turnout on the MAIN, whose `pos` is arc length along the
         // centre-line we have. Anything else and we cannot place it: fail closed.
         if (feeder && (feeder.onTrack ?? MAIN_TRACK_ID) === MAIN_TRACK_ID) {
-          const size = feeder.size ?? 6;
+          const size = feeder.size ?? DRAWN_TURNOUT_SIZE_FALLBACK;
           const named = feeder.partId ? partLibrary.find((p) => p.id === feeder.partId) : undefined;
           const leg = turnoutDivergingLeg({
             sampleAt: (rel) => ({ x: rel, y: 0, nx: 0, ny: 1 }),
@@ -1945,7 +1959,8 @@ export function SchematicEditor({
         onTrack: MAIN_TRACK_ID,
         divergeTrack: diverge,
         kind: "right",
-        size: DEFAULT_TURNOUT_SIZE,
+        // ⛔ NO `size` (#248). This gesture named no part, so the document says
+        // nothing — and the inspector shows "Not recorded", which is the truth.
       });
     });
   }
@@ -2174,7 +2189,9 @@ export function SchematicEditor({
           // Main 2 extends toward the double end (touchesA = double at A/west).
           kind:
             (touchesA ? -1 : 1) === (s.mainsSwapped ? -1 : 1) ? "left" : "right",
-          size: DEFAULT_TURNOUT_SIZE,
+          // ⛔ NO `size` (#248) — and this is THE site the issue is about: the
+          // comment above says "matches buildTransition", which writes no size
+          // at all. Now it really does match.
         });
         const cpId = nextId("cp", s.controlPoints.map((c) => c.id));
         s.controlPoints.push({

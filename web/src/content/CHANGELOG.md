@@ -5,6 +5,17 @@ Headings are `version — date` (YYYY-MM-DD).
 
 ---
 
+## v0.94.0 — 2026-08-22
+
+### Fixed
+- **A turnout the app creates for you no longer claims to be a #6.** Dragging a main onto an endplate, or adding a turnout from the panel, used to record a frog number of 6 — even though nothing in that gesture said what the turnout is. The amber **+ Add transition** button, which builds the same End-of-Double-Track turnout, recorded nothing, so the two disagreed about the same piece of track.
+
+  Neither records a size now. The turnout reads **Not recorded** until you say what it is, which is the honest answer and the one the rebuild questionnaire asks about.
+
+  ⓘ The board still has to draw something, so it draws a #6 — that is a decision about the picture, not a claim about your layout. Nothing you have already recorded changes.
+
+---
+
 ## v0.93.0 — 2026-08-22
 
 ### Fixed
