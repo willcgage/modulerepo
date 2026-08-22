@@ -4,7 +4,6 @@ import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import {
-  inchesToScaleFeet,
   endplateWidthInches,
   measuredAlongPath,
   type ModuleSchematicDoc,
@@ -115,9 +114,14 @@ export async function saveModuleSchematic(
     // along the main". That is a fact about the geometry, and `measuredAlongPath`
     // is exactly it (#226) — so the test now says it instead of asking the stored
     // `role`, which is the owner's label and would have let a return loop through
-    // on a technicality. Capacity here is DERIVED from `toPos − fromPos`, which
-    // for such a track is zero; a zero capacity is what the CHECK constraint
-    // below rejects, so this exclusion is load-bearing, not tidiness.
+    // on a technicality.
+    //
+    // ⚠️ THAT ARGUMENT USED A SECOND LEG THAT IS NOW GONE: capacity used to be
+    // DERIVED here from `toPos − fromPos`, which for such a track is zero, and
+    // a zero would be rejected by the CHECK constraint. Nothing is derived any
+    // more (#310), so the constraint can no longer be what makes this exclusion
+    // matter. The exclusion STANDS on the first leg alone — a route across the
+    // board is not a car-spotting track — and is still not tidiness.
     //
     // ⭐ A CROSSOVER CONNECTOR IS THE SAME KIND OF THING. You cannot stand cars
     // on a crossover — it is a way BETWEEN two mains, not a place to put a cut —
@@ -129,21 +133,45 @@ export async function saveModuleSchematic(
     );
     const keptIds: number[] = [];
     for (const t of extraTracks) {
-      // ⚠️ `?? ` DOES NOT CATCH ZERO. A track that round-trips through the editor
-      // with no capacity comes back as `capacityFeet: 0`, which is not nullish,
-      // so the derived fallback was skipped and a 0 went to a column with
-      // CHECK (capacity_scale_feet > 0). Treat a non-positive stored capacity as
-      // "not recorded" and derive it; if that is still not positive the track
-      // holds nothing, and null says so honestly.
-      const stored = t.capacityFeet != null && t.capacityFeet > 0 ? t.capacityFeet : null;
-      const derived = Math.round(inchesToScaleFeet(Math.abs((t.toPos ?? 0) - (t.fromPos ?? 0))));
-      const capacity = stored ?? (derived > 0 ? derived : null);
+      /**
+       * ⛔⛔ NOTHING IS INVENTED HERE ANY MORE (#310).
+       *
+       * This used to fall back to `inchesToScaleFeet(toPos − fromPos)` whenever
+       * no capacity was stored. That is a car capacity manufactured from the
+       * span ALONG THE MODULE, and on a curve the module is not the rail — it
+       * claimed more room than exists on the inside of every bend and less on
+       * the outside. Will's call, 2026-08-22: capacity belongs to the rail
+       * assigned to an INDUSTRY, so a plain track's car figure is not ours to
+       * compute — and manufacturing one and then WRITING IT to the row of
+       * record is worse than showing it, because it outlives the screen.
+       *
+       * ⚠️ `?? ` STILL DOES NOT CATCH ZERO, and the reason is unchanged: a
+       * track that round-trips through the editor with no capacity comes back
+       * as `capacityFeet: 0`, which is not nullish, and the column is
+       * CHECK (capacity_scale_feet > 0). A non-positive figure is "not
+       * recorded", not a value to write.
+       */
+      const authored = t.capacityFeet != null && t.capacityFeet > 0 ? t.capacityFeet : null;
       const trackName = t.trackName?.trim() || null;
 
       if (t.moduleTrackId != null) {
+        /**
+         * ⛔ THE COLUMN IS OMITTED, NOT NULLED, when nothing is authored.
+         *
+         * `module_tracks.capacity_scale_feet` is the row of record — it is what
+         * the wizard writes and what the catalogue reads — and `docToState` has
+         * never read it back into the editor. So for a module whose owner typed
+         * a capacity years ago, that row may be the ONLY place their figure
+         * still exists. Writing `null` here would delete it in the name of "not
+         * inventing one", which is the same silent-rewrite this issue is about,
+         * pointed the other way. Leave it exactly as it is.
+         */
         const { error } = await supabase
           .from("module_tracks")
-          .update({ track_name: trackName, capacity_scale_feet: capacity })
+          .update({
+            track_name: trackName,
+            ...(authored != null ? { capacity_scale_feet: authored } : {}),
+          })
           .eq("id", t.moduleTrackId)
           .eq("module_id", moduleId);
         if (error) return { error: error.message };
@@ -151,7 +179,7 @@ export async function saveModuleSchematic(
       } else {
         const { data: inserted, error } = await supabase
           .from("module_tracks")
-          .insert({ module_id: moduleId, track_name: trackName, capacity_scale_feet: capacity })
+          .insert({ module_id: moduleId, track_name: trackName, capacity_scale_feet: authored })
           .select("id")
           .single();
         if (error || !inserted) return { error: error?.message ?? "insert failed" };
