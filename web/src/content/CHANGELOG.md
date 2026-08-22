@@ -5,6 +5,13 @@ Headings are `version — date` (YYYY-MM-DD).
 
 ---
 
+## v0.93.0 — 2026-08-22
+
+### Fixed
+- **An endplate dropped near the end of a benchwork edge now slides onto it instead of being trimmed.** Placing a plate so that part of it hung past a corner used to shave it down to whatever fitted — a 12″ plate could quietly become 6″. It now moves back onto the edge at its full size, and if the edge is genuinely too short to hold it, nothing is resized behind your back: the panel says the two disagree and leaves your figure alone.
+
+---
+
 ## v0.92.0 — 2026-08-22
 
 ### Fixed
