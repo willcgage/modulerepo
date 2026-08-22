@@ -5,6 +5,15 @@ Headings are `version — date` (YYYY-MM-DD).
 
 ---
 
+## v0.88.0 — 2026-08-22
+
+### Fixed
+- **The capacity you recorded for a track is no longer quietly rewritten when you save.** Until now, opening a module and saving it recalculated that figure from how far the track runs along the module — so a number you had entered yourself could be replaced by one the app worked out, without anything saying so. Your figure is now left exactly as you entered it.
+
+  ⓘ This completes the change in v0.87.0: a track shows a usable length, and the car count belongs to an industry and the rail assigned to it.
+
+---
+
 ## v0.87.0 — 2026-08-22
 
 ### Changed
