@@ -4270,7 +4270,16 @@ const ENDPLATE_TAB = 5; // ballast-shoulder band width, inches
                   stroke="#64748b"
                   strokeWidth={world(1)}
                   strokeDasharray={`${world(3)} ${world(2)}`}
-                />
+                >
+                  {/* Dashed on purpose: an endplate face is drawn solid because
+                      it is a standardised interface; a joint is internal bench
+                      work and is bound by none of those rules (#96). */}
+                  <title>
+                    Section joint — internal to the module. Endplate rules
+                    (square crossing, 4″ setbacks, track spacing) do not apply
+                    here.
+                  </title>
+                </line>
                 <text
                   x={p.x + p.nx * half}
                   y={sy(p.y + p.ny * half) - world(2)}
@@ -4291,7 +4300,18 @@ const ENDPLATE_TAB = 5; // ballast-shoulder band width, inches
                     className="cursor-ew-resize"
                     onPointerDown={(e) => beginDrag(e, { kind: "sectionBreak", i })}
                   >
-                    <title>Drag to move this section joint</title>
+                    {/* ⭐ SAY WHAT A JOINT IS, not just how to move it (#96).
+                        The dashed line already looks different from an
+                        endplate's solid face; the wording is what stops an
+                        owner reading it AS one. The standard: "standards for
+                        module end interfaces do not apply to inter-section
+                        interfaces, as these are considered to be internal to
+                        the module." */}
+                    <title>
+                      Section joint — a construction and transport seam inside
+                      the module, not a standardised interface. Track may cross
+                      it at any angle. Drag to move it.
+                    </title>
                   </circle>
                 ) : null}
               </g>

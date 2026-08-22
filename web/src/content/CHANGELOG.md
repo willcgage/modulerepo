@@ -5,6 +5,13 @@ Headings are `version — date` (YYYY-MM-DD).
 
 ---
 
+## v0.96.0 — 2026-08-22
+
+### Changed
+- **A section joint now says what it is.** Hovering the dashed divider between two sections explains that it is a construction and transport seam inside your module — not a standardised interface — and that track may cross it at any angle. The endplate rules (square crossing, 4″ setbacks, track spacing) apply at the module's ends and deliberately not here, which is what the Free-moN standard says about boundaries between sections.
+
+---
+
 ## v0.95.0 — 2026-08-22
 
 ### Fixed
