@@ -5,6 +5,15 @@ Headings are `version — date` (YYYY-MM-DD).
 
 ---
 
+## v0.90.0 — 2026-08-22
+
+### Added
+- **A note when an industry is set to hold more cars than its rail has room for.** If you say a spot takes six cars but the track under it only has room for three, the builder now says so, with the length it measured and the number it would fit.
+
+  ⓘ **Your figure is kept exactly as you entered it** — the note is there to point out a disagreement, not to change your number. It measures along the rail, so it accounts for a track on the inside of a curve having less room than its span suggests.
+
+---
+
 ## v0.89.0 — 2026-08-22
 
 ### Changed

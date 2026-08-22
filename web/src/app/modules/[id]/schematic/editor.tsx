@@ -70,6 +70,8 @@ import {
   type TrackConfig,
   nextId,
   type BenchworkPoint,
+  railLengthBetween,
+  carCapacity,
   type EditorState,
   type TrackRole,
   type TurnoutKind,
@@ -3075,6 +3077,7 @@ export function SchematicEditor({
             sectionMeets={sectionMeets}
             floatingSections={floatingSections}
             trackOptions={trackOptions}
+            centerline={centerline}
             industryTypes={industryTypes}
             carTypes={carTypeOptions}
             onCarTypeSuggested={addCarTypeOption}
@@ -4158,6 +4161,7 @@ function Inspector({
   sectionMeets,
   floatingSections,
   trackOptions,
+  centerline,
   industryTypes,
   carTypes,
   onCarTypeSuggested,
@@ -4240,6 +4244,10 @@ function Inspector({
   sectionMeets: { a: string; b: string; lengthInches: number }[];
   floatingSections: Set<string>;
   trackOptions: { value: string; label: string }[];
+  /** The module's centre-line, for measuring how much RAIL a span really has
+   * (#310). Empty in graph-authoring mode, where the flag correctly stays
+   * quiet. */
+  centerline: { x: number; y: number }[];
   industryTypes: { value: string; display_label: string }[];
   carTypes: { value: string; display_label: string }[];
   onCarTypeSuggested: (o: { value: string; display_label: string }) => void;
@@ -5956,6 +5964,62 @@ function Inspector({
      * that's how an off-centre endplate (#190) and an over-long flex piece
      * (#193) are handled too.
      */
+    /**
+     * ⭐ DOES THE OWNER'S CAR COUNT ACTUALLY FIT ON THE RAIL? (#310)
+     *
+     * The count is theirs to state and this does NOT change it — the house rule
+     * is flag it, don't correct it. It only says when the two disagree, which
+     * is a thing the drawing knows and the owner may not: on a curve, a lane on
+     * the INSIDE of a bend has less rail than the span it covers.
+     *
+     * ⚠️ THE SPAN IS CLAMPED TO THE TRACK'S OWN EXTENT FIRST. A positional
+     * track's rail is the centre-line offset to its lane, which runs the whole
+     * module — so measuring an over-long span unclamped would count rail where
+     * that track does not exist and quietly excuse the overflow. Rail that runs
+     * off the end is `spanWarning`'s finding, not this one's.
+     */
+    const carsWarning = (
+      track: string,
+      fromPos: number,
+      toPos: number,
+      cars: number | null | undefined,
+    ) => {
+      if (cars == null || cars <= 0) return null; // not recorded ⇒ nothing to check
+      const m = mains.find((x) => x.id === track);
+      const et = state.extraTracks.find((x) => x.id === track);
+      const ext = m
+        ? { from: m.fromPos, to: m.toPos }
+        : et
+          ? { from: et.fromPos, to: et.toPos }
+          : null;
+      if (!ext) return null;
+      const lo = Math.max(Math.min(fromPos, toPos), Math.min(ext.from, ext.to));
+      const hi = Math.min(Math.max(fromPos, toPos), Math.max(ext.from, ext.to));
+      if (hi - lo < 0.05) return null;
+      const rail = railLengthBetween(
+        et ?? { lane: m?.lane ?? 0 },
+        lo,
+        hi,
+        // ⭐ EMPTY in graph-authoring mode, where positions come from the pieces
+        // instead — and railLengthBetween returns null for an empty centre-line,
+        // so the flag simply does not fire there. Fails closed.
+        centerline,
+      );
+      if (rail == null) return null; // no frame to measure in ⇒ say nothing
+      const fits = carCapacity(0, rail);
+      if (cars <= fits) return null;
+      const name = trackOptions.find((x) => x.value === track)?.label ?? track;
+      const r1 = (v: number) => Math.round(v * 10) / 10;
+      return (
+        <p className="rounded-md bg-amber-50 px-2 py-1 text-xs text-amber-800" role="status">
+          ⚠ {cars} cars is more than this span holds on{" "}
+          <span className="font-medium">{name}</span> — {r1(rail)}″ of rail, room
+          for {fits}. Your figure is kept as you entered it; lengthen the span,
+          or lower the number if it was a slip.
+        </p>
+      );
+    };
+
     const spanWarning = (track: string, fromPos: number, toPos: number) => {
       // The mains carry their extents already (#192); everything else is an
       // extraTrack. A spot on a track that no longer exists warns about nothing.
@@ -6088,6 +6152,7 @@ function Inspector({
           </div>
         </div>
         {spanWarning(ind.track, ind.fromPos, ind.toPos)}
+        {carsWarning(ind.track, ind.fromPos, ind.toPos, ind.cars)}
         <div className="border-t border-gray-100 pt-2">
           <div className="flex items-center justify-between">
             <span className="text-xs font-medium text-gray-600">House-track spots</span>
@@ -6175,6 +6240,7 @@ function Inspector({
                   </div>
                   {/* Each spot rides its own track, so each is checked (#194). */}
                   {spanWarning(sp.track, sp.fromPos, sp.toPos)}
+                  {carsWarning(sp.track, sp.fromPos, sp.toPos, sp.cars)}
                 </div>
               ))}
             </div>
