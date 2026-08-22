@@ -6645,15 +6645,12 @@ function Inspector({
             inp={inp}
           />
         </label>
-        <label className="block text-xs font-medium text-gray-600">
-          Capacity
-          <div
-            className={`mt-0.5 ${inp} bg-gray-50 text-gray-600`}
-            title="Usable capacity — measured from the governing turnout's clearance point, not rail end to rail end."
-          >
-            {cap.cars} cars · {cap.scaleFeet} ft
-          </div>
-        </label>
+        {/* ⛔ NO CAR COUNT ON A PLAIN TRACK (#310). Will, 2026-08-22: capacity
+            belongs to the rail assigned to an INDUSTRY, so a track reports a
+            physical usable length and nothing else. The figure shown here was
+            derived from the span along the MODULE, which on a curve is not the
+            rail — it overstated what fits on the inside of every bend and
+            understated it on the outside. An industry still shows its cars. */}
       </div>
       {/* ⭐ USABLE capacity, per the clearance-point standard (#19). Physical
           length is not capacity: a car standing short of the clearance point
