@@ -5035,6 +5035,28 @@ function Inspector({
             title="Free-moN §1.1: endplates shall be a minimum 12 in wide. Track must also clear either fascia by 4 in (§2.0)."
           />
         </label>
+        {/* ⚠️ THE BOARD AND THE AUTHORED NUMBER DISAGREE — say so rather than
+            silently preferring one. `endplateSpanOnEdge` clamps a span to the
+            edge, so a plate wider than its edge comes back narrower than the
+            owner asked for, with nothing announcing it. Flag it, don't correct
+            it: their number stays as typed. */}
+        {(() => {
+          if (!bound || !pose.boundToEdge) return null;
+          const real = pose.widthInches;
+          const asked = state.endplateWidths[id];
+          if (!Number.isFinite(real) || !Number.isFinite(asked)) return null;
+          if (Math.abs((real as number) - (asked as number)) < 0.05) return null;
+          const r1 = (v: number) => Math.round(v * 10) / 10;
+          return (
+            <p className="rounded-md bg-amber-50 px-2 py-1 text-xs text-amber-800" role="status">
+              ⚠ You asked for {r1(asked as number)}″, but the edge this plate is
+              bound to only gives it{" "}
+              <span className="font-medium">{r1(real as number)}″</span> — that
+              is the width being built, and the one checked against the standard.
+              Lengthen the edge, or narrow the plate to match.
+            </p>
+          );
+        })()}
         {/* Where MAIN 1 crosses this plate. §2.0 requires only that every track
             clear either fascia by 4″; the 20220628 revision relaxed centring to
             a recommendation, so an offset end is legal — a transition section
@@ -5065,8 +5087,27 @@ function Inspector({
           Blank uses the recommended placement. Track always crosses the plate at
           90°, and on a double end the two tracks stay 1.125″ apart.
         </p>
+        {/* ⭐⭐ VALIDATE THE WIDTH THAT IS ACTUALLY ON THE BOARD (#321).
+            
+            This used to check `state.endplateWidths[id]` — the AUTHORED number —
+            while a bound plate's real face width is derived from its span
+            (`EndplateEdgePose.widthInches`, documented as "the face's real
+            width, not a separate number that might disagree with the board").
+            
+            They diverge for an ordinary reason: `fromT`/`toT` are FRACTIONS of
+            the edge, so shortening a board narrows the plate while the authored
+            number stays put. Measured: an edge of 10″ carrying a plate authored
+            at 24″ derives to 10.000″ — `checkEndplateWidth(24)` is silent while
+            `checkEndplateWidth(10)` reports "the standard requires at least
+            12″". A plate breaching §1.1 on the board passed validation.
+            
+            Unbound there is no edge to read from, so the authored number IS the
+            plate and is what gets checked. */}
         {checkEndplateWidth({
-          widthInches: state.endplateWidths[id],
+          widthInches:
+            bound && pose.boundToEdge && Number.isFinite(pose.widthInches)
+              ? pose.widthInches
+              : state.endplateWidths[id],
           config: id === "A" ? state.configA : id === "B" ? state.configB : "single",
           trackOffsetInches: state.endplateTrackOffsets[id],
           // Which side Main 2 is on decides which track sits nearest a fascia,
