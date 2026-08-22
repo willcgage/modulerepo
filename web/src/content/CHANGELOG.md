@@ -5,6 +5,15 @@ Headings are `version — date` (YYYY-MM-DD).
 
 ---
 
+## v0.95.0 — 2026-08-22
+
+### Fixed
+- **Adding a turnout no longer conjures a second mainline.** On a module with no siding or spur yet, **+ Turnout** used to create a turnout that diverged onto the very track it sat on — and the app then repaired that by pointing it at a Main 2, inventing one if the module didn't have it. A single-track module could quietly become a double-track module.
+
+  The button now offers Main 2 when your module has one, and when there is nowhere at all for a turnout to lead it is disabled and says why: *"Nothing to diverge onto yet — add a siding or spur first, or make an end double so there is a Main 2."*
+
+---
+
 ## v0.94.0 — 2026-08-22
 
 ### Fixed

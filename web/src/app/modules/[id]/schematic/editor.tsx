@@ -32,6 +32,15 @@ import { RebuildAsPieces } from "./rebuild-as-pieces";
  * about pixels, not a claim about the layout. Never assign it to `size`.
  */
 const DRAWN_TURNOUT_SIZE_FALLBACK = 6;
+
+/** See {@link addTurnout} — a turnout needs a track to lead onto (#325). */
+function canAddTurnoutIn(s: {
+  extraTracks: { id: string }[];
+  configA?: string;
+  configB?: string;
+}): boolean {
+  return s.extraTracks.length > 0 || s.configA === "double" || s.configB === "double";
+}
 import { Fragment, useCallback, useEffect, useMemo, useRef, useState, useTransition } from "react";
 import Link from "next/link";
 import {
@@ -1949,9 +1958,40 @@ export function SchematicEditor({
       }
     });
   }
+  /**
+   * ⛔⛔ A TURNOUT NEEDS SOMEWHERE TO DIVERGE, AND THIS USED TO INVENT ONE (#325).
+   *
+   * It read `s.extraTracks[0]?.id ?? MAIN_TRACK_ID`, and `docToState` filters
+   * `role === "main"` out of `extraTracks` — so **Main 2 is not in there**
+   * (#181). On a module whose only tracks are mains, `extraTracks` is empty and
+   * the fallback pointed the turnout at the track it already sits on.
+   *
+   * That was not merely odd: `healSelfDivergingTurnouts` then repointed it at
+   * Main 2 whether or not one existed, and the derivation MATERIALISED that
+   * track. Measured before the fix — a single-track module came back with
+   * `tracks: ["main", "main2"]`, a second main nobody asked for.
+   *
+   * ⭐ MAIN 2 IS THE RIGHT ANSWER WHEN THERE IS ONE. A turnout off Main 1 onto
+   * Main 2 is exactly the End-of-Double-Track turnout, so it belongs in the
+   * candidates — it was only ever missing because it is a main.
+   */
+  const turnoutDivergeCandidate = (s: EditorState): string | null =>
+    s.extraTracks[0]?.id ?? (isDouble ? MAIN2_TRACK_ID : null);
+
+  /**
+   * Is there anywhere for a new turnout to diverge? Main 2 counts — it is only
+   * absent from `extraTracks` because it is a main (#181, #325).
+   *
+   * ⭐ ONE DEFINITION, TWO CALLERS: the guard inside `addTurnout` and the
+   * button that offers it, which live in different components. Computing it
+   * twice is exactly how a disabled button and an enabled action drift apart.
+   */
   function addTurnout() {
     patch((s) => {
-      const diverge = s.extraTracks[0]?.id ?? MAIN_TRACK_ID;
+      const diverge = canAddTurnoutIn(s) ? turnoutDivergeCandidate(s) : null;
+      // Nothing to diverge onto: refuse rather than point it at itself. The
+      // button is disabled for this, so this is the belt to that brace.
+      if (!diverge) return;
       s.turnouts.push({
         id: nextId("sw", s.turnouts.map((t) => t.id)),
         name: "",
@@ -7519,7 +7559,21 @@ function ObjectsList({
         title="Turnouts"
         count={state.turnouts.length}
         actions={
-          <button type="button" onClick={add.turnout} className={addBtn}>
+          /* ⛔ DISABLED WHEN THERE IS NOWHERE TO DIVERGE (#325). A turnout off
+             Main 1 needs a second main or a siding to lead onto; with neither,
+             the old button pointed it at Main 1 itself and the package's heal
+             then conjured a Main 2. Saying why beats silently making one. */
+          <button
+            type="button"
+            onClick={add.turnout}
+            className={addBtn}
+            disabled={!canAddTurnoutIn(state)}
+            title={
+              canAddTurnoutIn(state)
+                ? undefined
+                : "Nothing to diverge onto yet — add a siding or spur first, or make an end double so there is a Main 2."
+            }
+          >
             + Turnout
           </button>
         }
