@@ -5,6 +5,13 @@ Headings are `version — date` (YYYY-MM-DD).
 
 ---
 
+## v0.100.0 — 2026-08-23
+
+### Under the hood
+- **A module with no endplate at one end stops describing its mainline as running to an endplate B.** Nothing on screen changes and nothing you have saved is altered — the document simply stops naming an end the module hasn't got, and gives the mainline's length instead. It matters for what Free-Dispatcher is handed, not for what you see. Your existing modules keep what they have until you next save them.
+
+---
+
 ## v0.99.0 — 2026-08-23
 
 ### Fixed
