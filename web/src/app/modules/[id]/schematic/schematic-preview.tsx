@@ -43,7 +43,12 @@ export function SchematicPreview({
   return (
     <div className="rounded-md border border-gray-200 bg-gray-50 p-2">
       <div className="mb-1 flex items-center justify-between text-xs text-gray-500">
-        <span>Operations preview (A → B)</span>
+        {/* ⭐ THE CAPTION MUST AGREE WITH THE DRAWING (#96). The far-end "B"
+            below is already guarded by `hasEndplateB` (#184/#191), so on an end
+            of the line the picture showed one end and the words above it still
+            promised "A → B" — the module announcing a plate it hasn't got, in
+            the one place an owner reads before looking. */}
+        <span>{f.hasEndplateB ? "Operations preview (A → B)" : "Operations preview (from A)"}</span>
         <span>
           {lengthInches}&Prime; · {feet} ft
         </span>
