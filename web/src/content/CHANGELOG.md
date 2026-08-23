@@ -5,6 +5,13 @@ Headings are `version — date` (YYYY-MM-DD).
 
 ---
 
+## v0.98.0 — 2026-08-23
+
+### Fixed
+- **The operations preview no longer says a module runs "A → B" when it has no B.** The picture had this right already — it stopped drawing the far end's label — but the caption above it still promised an endplate the module hasn't got, in the line an owner reads before looking at the drawing. The dispatcher strip's heading said the same thing and now doesn't either.
+
+---
+
 ## v0.97.0 — 2026-08-22
 
 ### Fixed

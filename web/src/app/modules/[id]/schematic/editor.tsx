@@ -4125,7 +4125,11 @@ function DispatcherStrip({
       >
         <span className={`text-gray-400 transition-transform ${open ? "" : "-rotate-90"}`}>▾</span>
         Dispatcher view
-        <span className="font-normal text-gray-400">— derived, A → B</span>
+        {/* Same rule as the preview's own caption — a module with no far
+            endplate does not run "A → B" (#96). */}
+        <span className="font-normal text-gray-400">
+          — derived, {doc.endplates.some((e) => e.id === "B") ? "A → B" : "from A"}
+        </span>
       </button>
       {open && (
         <div className="max-h-44 overflow-auto px-3 pb-3">
