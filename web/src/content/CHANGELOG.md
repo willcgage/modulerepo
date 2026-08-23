@@ -5,6 +5,13 @@ Headings are `version — date` (YYYY-MM-DD).
 
 ---
 
+## v0.99.0 — 2026-08-23
+
+### Fixed
+- **A double-track endplate's two tracks are 1.125″ apart again, not 2″.** When you start laying pieces against a double end, the builder offers you two places to begin — one per track. Those two points were being worked out with Free-mo HO's track spacing instead of Free-moN's, so they sat 2″ apart where the standard puts them 1.125″ apart, and a run snapped to the second one started 0.44″ off. Everything else in the app already used the right number; this one calculation didn't.
+
+---
+
 ## v0.98.0 — 2026-08-23
 
 ### Fixed
