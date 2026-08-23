@@ -5,6 +5,14 @@ Headings are `version — date` (YYYY-MM-DD).
 
 ---
 
+## v0.97.0 — 2026-08-22
+
+### Fixed
+- **A module with no far endplate is no longer given one.** If you have said an end of your module has no endplate — an end of the line, a pocket — drawing a second main out to that end, or dragging an End-of-Double-Track turnout onto it, used to quietly create endplate B and call the module double-track there. Neither does now: the track stays an ordinary track, and the end you removed stays removed.
+- **A branch endplate set to Double is now checked as a double end.** Endplates C, D and beyond were measured against the standard as if they carried one track, whichever you had chosen, so a double branch endplate could breach §2.0's 4″ fascia clearance — and the off-centre note — without a word. The recommended Main 1 offset shown for such an end was the single-track one too.
+
+---
+
 ## v0.96.0 — 2026-08-22
 
 ### Changed

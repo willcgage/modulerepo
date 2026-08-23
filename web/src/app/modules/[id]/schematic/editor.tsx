@@ -2207,7 +2207,22 @@ export function SchematicEditor({
       const lo2 = Math.min(A.fromPos, A.toPos);
       const hi2 = Math.max(A.fromPos, A.toPos);
       const touchesA = lo2 <= plateEps;
-      const touchesB = hi2 >= s.lengthInches - plateEps;
+      /**
+       * ⛔ A MODULE WITH NO FAR ENDPLATE HAS NO FAR PLATE TO TOUCH (#96).
+       *
+       * `configB: "none"` is an authored fact — an end of the line, a pocket, a
+       * pure turnback (#184). Reaching that end used to set `configB =
+       * "double"`, INVENTING the very plate the owner had removed, and with it
+       * a second main crossing a face the module hasn't got. `s.loop` was
+       * already excluded above; "none" is the same statement made on an
+       * ordinary straight board, and was not.
+       *
+       * Same family as #325 (adding a turnout invented a Main 2) and the house
+       * rule behind it: the app does not quietly author what nobody asked for.
+       * A double end A still transitions correctly — only the far end stops
+       * being treated as a plate.
+       */
+      const touchesB = s.configB !== "none" && hi2 >= s.lengthInches - plateEps;
       if (!touchesA && !touchesB) return;
       repoint(A.id, MAIN2_TRACK_ID);
       s.extraTracks.splice(s.extraTracks.findIndex((t) => t.id === A.id), 1);
@@ -2257,6 +2272,10 @@ export function SchematicEditor({
       const aD = s.configA === "double";
       const bD = s.configB === "double";
       if (aD === bD) return; // not a transition module
+      // ⛔ …and neither is a module with no far endplate. Completing the double
+      // onto end B means giving B two tracks, which a module that has no B
+      // cannot do — it would invent the plate (#96). See `touchesB` above.
+      if (s.configB === "none") return;
       const eps = 0.5;
       const atFarPlate = aD ? sw.pos >= s.lengthInches - eps : sw.pos <= eps;
       if (!atFarPlate) return;
@@ -4850,6 +4869,26 @@ function Inspector({
     // A/B are the schematic's drawing axis; C+ are authored branches.
     const bi = id.charCodeAt(0) - 67;
     const branch = bi >= 0 ? state.branches[bi] : undefined;
+    /**
+     * ⭐ HOW MANY TRACKS CROSS **THIS** PLATE — for every plate the module has,
+     * not just the two on the axis (#96, "endplates … usually two").
+     *
+     * A branch endplate carries its own `config` and the Endplate-track select
+     * above really does offer Double, but the two readers below asked
+     * `id === "A" ? … : id === "B" ? … : "single"` — so C+ was checked and
+     * placed as single-track whatever the owner chose. Measured on a 15″ plate
+     * with Main 1 3″ off centre: as single `checkEndplateWidth` returns NO
+     * issues, as double it returns BOTH `clearance` ("track sits 3.38″ from the
+     * fascia", §2.0 wants 4″) and `offcentre`. A plate breaching the standard
+     * passed validation in silence — the same shape as #321, one plate along.
+     */
+    const plateConfig: "single" | "double" | "none" = branch
+      ? branch.config
+      : id === "A"
+        ? state.configA
+        : id === "B"
+          ? state.configB
+          : "single";
     // The benchwork's edges, as things an endplate can BE (ADR 0001). A curved
     // edge is offered but disabled rather than hidden, so it is clear why it
     // can't be chosen instead of leaving someone hunting for a missing option.
@@ -5131,7 +5170,7 @@ function Inspector({
             placeholder={String(
               endplateTrackOffsetInches(
                 undefined,
-                id === "A" ? state.configA : id === "B" ? state.configB : "single",
+                plateConfig,
                 state.mainsSwapped === true,
               ),
             )}
@@ -5165,7 +5204,7 @@ function Inspector({
             bound && pose.boundToEdge && Number.isFinite(pose.widthInches)
               ? pose.widthInches
               : state.endplateWidths[id],
-          config: id === "A" ? state.configA : id === "B" ? state.configB : "single",
+          config: plateConfig,
           trackOffsetInches: state.endplateTrackOffsets[id],
           // Which side Main 2 is on decides which track sits nearest a fascia,
           // and whether the pair straddles the plate at all (#190).
