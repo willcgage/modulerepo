@@ -5,6 +5,13 @@ Headings are `version — date` (YYYY-MM-DD).
 
 ---
 
+## v0.104.0 — 2026-08-24
+
+### Fixed
+- **The flex track list now counts what you would actually cut.** Lengths of flex were being measured straight down the module rather than along the rail, so a run that curves away from the centre line was reported longer than it is — and sometimes broken into more pieces than it needs. A siding around a 90° bend that fits in a single 30″ length of Atlas flex was being listed as two pieces with a rail joint in the middle of the curve. Runs on the centre line and straight track are unchanged.
+
+---
+
 ## v0.103.0 — 2026-08-24
 
 ### Fixed
