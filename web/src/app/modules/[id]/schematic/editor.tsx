@@ -1788,6 +1788,15 @@ export function SchematicEditor({
     setPendingTrack("spur");
     setTool("track");
   }
+  /**
+   * ⭐ THE DEFAULT LENGTH OF A NEW SPUR STUB — ONE DEFINITION, TWO CALLERS
+   * (`onDropTurnout` from the parts palette, and `addTurnout` below). A short
+   * length the owner then pulls out: ~12% of the board, at least 6″, and never
+   * past the far endplate.
+   */
+  const defaultStubInches = (lengthInches: number, pos: number) =>
+    Math.round(Math.max(6, Math.min(lengthInches - pos, lengthInches * 0.12)) * 10) / 10;
+
   const nextLane = (s: EditorState) => {
     // Lane 1 is Main 2 on a double module; first free lane is above it.
     const base = s.configA === "double" || s.configB === "double" ? 2 : 1;
@@ -1986,16 +1995,51 @@ export function SchematicEditor({
    * button that offers it, which live in different components. Computing it
    * twice is exactly how a disabled button and an enabled action drift apart.
    */
+  /**
+   * ⭐⭐ A TURNOUT ARRIVES WITH SOMEWHERE TO GO (#334).
+   *
+   * #325 stopped this pointing a turnout at the track it already sits on, which
+   * made the package's heal conjure a Main 2 nobody asked for. The guard was
+   * right; disabling the button for it was the mistake. On a SINGLE-track module
+   * with no track yet, `+ Turnout` was disabled ("nothing to diverge onto") and
+   * Siding/Spur were disabled ("add a turnout first") — **the two messages
+   * pointed at each other and there was no way to begin.** That is the commonest
+   * Free-moN module there is: single track with an industry spur.
+   *
+   * ⭐ The answer was already in the file. `onDropTurnout` — the parts-palette
+   * drop — has always created the turnout AND a short spur stub for it to
+   * diverge onto, in one patch. Doing the same here breaks the deadlock without
+   * touching #325's rule, because the diverge target is a real track created in
+   * the same breath: nothing is ever pointed at itself, and no Main 2 is
+   * invented. When there IS somewhere to diverge (a siding, or Main 2 on a
+   * double module) that is still preferred and nothing new is created.
+   */
   function addTurnout() {
+    let created: string | null = null;
     patch((s) => {
-      const diverge = canAddTurnoutIn(s) ? turnoutDivergeCandidate(s) : null;
-      // Nothing to diverge onto: refuse rather than point it at itself. The
-      // button is disabled for this, so this is the belt to that brace.
-      if (!diverge) return;
+      const pos = Math.round(s.lengthInches * 0.5);
+      // Prefer an existing home: a drawn track, or Main 2 on a double module.
+      let diverge = canAddTurnoutIn(s) ? turnoutDivergeCandidate(s) : null;
+      if (!diverge) {
+        // Nothing to diverge onto — so give it a spur of its own rather than
+        // refusing. Same pairing, same default length as the palette drop.
+        const spId = nextId("spur", s.extraTracks.map((t) => t.id));
+        s.extraTracks.push({
+          id: spId,
+          role: "spur",
+          lane: nextLane(s),
+          fromPos: pos,
+          toPos: Math.min(s.lengthInches, pos + defaultStubInches(s.lengthInches, pos)),
+          moduleTrackId: null,
+          trackName: "",
+        });
+        diverge = spId;
+        created = spId;
+      }
       s.turnouts.push({
         id: nextId("sw", s.turnouts.map((t) => t.id)),
         name: "",
-        pos: Math.round(s.lengthInches * 0.5),
+        pos,
         onTrack: MAIN_TRACK_ID,
         divergeTrack: diverge,
         kind: "right",
@@ -2003,6 +2047,9 @@ export function SchematicEditor({
         // nothing — and the inspector shows "Not recorded", which is the truth.
       });
     });
+    // Select the new stub so its end ○ is right there to pull out to length —
+    // the same follow-through as the palette drop.
+    if (created) setSelection({ kind: "track", id: created });
   }
   /** Turnout (W) tool: drop a turnout of a chosen hand at `pos` on a track, and
    * give it a short diverging spur stub straight away (#turnout-palette). The
@@ -2020,9 +2067,7 @@ export function SchematicEditor({
     const p = Math.round(pos * 10) / 10;
     // A short default the owner extends — ~12% of the board, at least 6″, and
     // never past the far endplate.
-    const stub =
-      Math.round(Math.max(6, Math.min(state.lengthInches - p, state.lengthInches * 0.12)) * 10) /
-      10;
+    const stub = defaultStubInches(state.lengthInches, p);
     patch((s) => {
       s.extraTracks.push({
         id: spId,
@@ -7602,19 +7647,22 @@ function ObjectsList({
         title="Turnouts"
         count={state.turnouts.length}
         actions={
-          /* ⛔ DISABLED WHEN THERE IS NOWHERE TO DIVERGE (#325). A turnout off
-             Main 1 needs a second main or a siding to lead onto; with neither,
-             the old button pointed it at Main 1 itself and the package's heal
-             then conjured a Main 2. Saying why beats silently making one. */
+          /* ⭐ NO LONGER DISABLED (#334). It used to be, because #325 found that a
+             turnout with nowhere to diverge got pointed at Main 1 itself and the
+             package's heal then conjured a Main 2. But Siding and Spur are
+             disabled until a turnout exists, so on a single-track module the two
+             messages pointed at each other and trackwork could not be started at
+             all. `addTurnout` now brings a spur stub with it when there is no
+             other home — #325's rule holds (the diverge target is a real track,
+             created in the same patch), and the deadlock is gone. */
           <button
             type="button"
             onClick={add.turnout}
             className={addBtn}
-            disabled={!canAddTurnoutIn(state)}
             title={
               canAddTurnoutIn(state)
                 ? undefined
-                : "Nothing to diverge onto yet — add a siding or spur first, or make an end double so there is a Main 2."
+                : "Adds a turnout with a short spur for it to diverge onto — drag the spur's end to length."
             }
           >
             + Turnout
