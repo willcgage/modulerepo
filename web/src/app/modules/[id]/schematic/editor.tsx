@@ -6990,13 +6990,28 @@ function Inspector({
   const i = state.extraTracks.findIndex((t) => t.id === selection.id);
   if (i < 0) return null;
   const t = state.extraTracks[i];
-  // What this track actually holds, to the clearance-point standard (#19/#20).
+  /**
+   * What this track actually holds, to the clearance-point standard (#19/#20) —
+   * and measured ALONG ITS RAIL, not along the module axis (#335).
+   *
+   * ⛔ Without the centre-line this panel and the industry over-capacity flag
+   * described the same siding differently: "Drawn 30.5″ · Usable 21.2″" here
+   * against "27.6″ of rail" there, on FMN-0085's east bend. The flag was right —
+   * it has always used `railLengthBetween`. Passing the track and the
+   * centre-line is what makes the two agree.
+   *
+   * ⚠️ The track carries its own `lane` (and `path`, if it was drawn), which is
+   * the whole point: the offset from the centre-line is what makes the inside of
+   * a bend shorter and the outside longer.
+   */
   const cap = usableCapacity({
     fromPos: t.fromPos,
     toPos: t.toPos,
     governing: state.turnouts.filter((sw) => sw.divergeTrack === t.id),
     measuredUsableInches: t.measuredUsableInches,
     library: partLibrary,
+    track: { lane: t.lane, ...(t.path ? { path: t.path } : {}) },
+    centerline,
   });
   const round1 = (v: number) => Math.round(v * 10) / 10;
   /**
