@@ -1077,7 +1077,25 @@ export function SchematicEditor({
          * quantity is exactly how that fix missed the Objects row (#230); now the
          * frame is decided once, above, and everything reads it.
          */
-        runInches: Math.abs(ext.to - ext.from),
+        /**
+         * ⭐ A LENGTH, SO IT IS MEASURED ON THE RAIL (#340). `ext` is positions;
+         * the inches between them are not the same thing once the run bends
+         * away from the centre line. This is the number the Objects row and the
+         * flex panel both print, and it used to read 30.5″ for a siding whose
+         * rail is 27.6″.
+         *
+         * ⚠️ A run measured ALONG ITS OWN PATH already has its true length —
+         * `ext` is arc length on the drawn polyline there, not module inches —
+         * so it must NOT be re-projected onto the centre-line.
+         */
+        runInches: alongPath
+          ? Math.abs(ext.to - ext.from)
+          : (railLengthBetween(
+              { lane: t.lane, ...(t.path ? { path: t.path } : {}) },
+              ext.from,
+              ext.to,
+              center,
+            ) ?? Math.abs(ext.to - ext.from)),
         pieces: unmapped
           ? []
           : flexPieces({
@@ -1086,6 +1104,14 @@ export function SchematicEditor({
               maxPieceInches: maxFlexPieceInches(partId, partLibrary),
               occupied,
               cuts: f?.cuts ?? null,
+              // Count and cut by rail, unless the run is already measured along
+              // its own drawn path (#340).
+              ...(alongPath
+                ? {}
+                : {
+                    track: { lane: t.lane, ...(t.path ? { path: t.path } : {}) },
+                    centerline: center,
+                  }),
             }),
       };
     }
