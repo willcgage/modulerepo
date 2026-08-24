@@ -5,6 +5,13 @@ Headings are `version — date` (YYYY-MM-DD).
 
 ---
 
+## v0.103.0 — 2026-08-24
+
+### Fixed
+- **A siding's length is now measured along its own rail, not straight down the module.** On a curve those are not the same: a track on the inside of a bend is shorter than the module span suggests, one on the outside is longer. The track panel was reporting the module span — so a siding around a 90° bend read 30.5″ when its rail is 27.6″, while the warning about an industry holding more cars than its track has been quietly using the real figure all along. The two now agree. Straight track, and track on the centre line, are unaffected.
+
+---
+
 ## v0.102.0 — 2026-08-24
 
 ### Fixed
