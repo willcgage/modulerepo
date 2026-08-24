@@ -5,6 +5,13 @@ Headings are `version — date` (YYYY-MM-DD).
 
 ---
 
+## v0.101.0 — 2026-08-23
+
+### Fixed
+- **You can start laying track on a single-track module again.** Adding a siding or a spur asked you to add a turnout first, and adding a turnout said there was nowhere for it to diverge yet — the two pointed at each other, so on an ordinary single-track module there was no way to begin. **+ Turnout** now brings a short spur with it when there is nothing else to diverge onto, and selects that spur so you can drag its end straight out to the length you want. On a module that already has a siding, or a second main, nothing changes — the turnout still joins what is already there.
+
+---
+
 ## v0.100.0 — 2026-08-23
 
 ### Under the hood
