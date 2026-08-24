@@ -5,6 +5,16 @@ Headings are `version — date` (YYYY-MM-DD).
 
 ---
 
+## v0.102.0 — 2026-08-24
+
+### Fixed
+- **A module built from boards is no longer told its benchwork isn't drawn.** The build-order checklist only ever looked for a drawn outline, so a module whose boards are described as sections — with their own lengths, shapes and bends — was reported as having no benchwork at all. It now recognises boards however you described them: a drawn outline, a shaped board, or simply more than one of them.
+
+### Changed
+- **Track cannot be built before there is benchwork.** A module *is* benchwork — one or more sections, with one or more endplates — and the track sits on it, so the Track, Signal and Industry tools are not offered until the module has boards to put them on. In practice every module has them from the moment it is created, so this is a backstop rather than a step: it exists so a module can never end up carrying track that rests on nothing.
+
+---
+
 ## v0.101.0 — 2026-08-23
 
 ### Fixed

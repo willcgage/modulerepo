@@ -33,6 +33,68 @@ import { RebuildAsPieces } from "./rebuild-as-pieces";
  */
 const DRAWN_TURNOUT_SIZE_FALLBACK = 6;
 
+/**
+ * ⭐⭐ DOES THIS MODULE HAVE BENCHWORK AT ALL? (#337)
+ *
+ * Will, 2026-08-24: *"A module is comprised of benchwork of one or multiple
+ * sections with one or more endplates."* — and *"we can't build track without
+ * having benchwork."* Layer 2 cannot exist before layer 1; that is the physical
+ * truth the four layers encode, not a UI preference.
+ *
+ * ⛔⛔ THE REPRESENTATION VARIES, AND THAT IS WHY THIS IS NOT `sections.length`.
+ * Sections only became how a module is born with #108. Checked against the
+ * catalogue before writing this: **32 of the 39 stored documents have no
+ * `sections` array at all**, and every one of them already carries track — they
+ * describe their boards with a module-level outline and length instead. Asking
+ * for sections alone would have hidden the Trackwork layer on almost every
+ * module an owner has, and nothing is auto-migrated to fix that.
+ *
+ * ⭐ SO THIS IS A SAFETY NET, DELIBERATELY (Will's call). It asks whether the
+ * boards are described in whichever form this module uses. **0 of 39 stored
+ * modules fail it** — it is here to catch a document that genuinely has no
+ * benchwork, not to be a step in anyone's day. If you are looking for "has the
+ * owner described their boards yet", that is {@link benchworkDescribed}.
+ */
+function hasBenchwork(s: {
+  sections: { id: string }[];
+  outline: unknown[];
+  lengthInches: number;
+  configA?: string;
+  configB?: string;
+  branches?: unknown[];
+}): boolean {
+  // "one or more endplates" — A always exists; B is optional (#184), C+ are branches.
+  const endplates = 1 + (s.configB !== "none" ? 1 : 0) + (s.branches?.length ?? 0);
+  const boards = s.sections.length > 0 || s.outline.length >= 3 || s.lengthInches > 0;
+  return endplates >= 1 && boards;
+}
+
+/**
+ * ⭐ HAS THE OWNER DESCRIBED THEIR BENCHWORK YET? — the build-order checklist's
+ * question, which is NOT {@link hasBenchwork}'s (#337).
+ *
+ * ⛔ This used to ask `outline.length >= 3` — the module-level polygon and
+ * nothing else — so a module whose boards are authored AS SECTIONS read as
+ * "not drawn". Measured on FMN-0085: five boards, two of them authored 90°
+ * bends, a fully described U — and the checklist called its benchwork undrawn.
+ * The package had it right all along (`benchworkAuthored` counts section
+ * outlines); this predicate had simply never caught up with #108.
+ *
+ * A single default straight section is NOT a description — that is what every
+ * module is born with — so it still reads "not drawn" and the hint still nudges.
+ */
+function benchworkDescribed(s: {
+  sections: { outline?: unknown[] | null; geometryType?: string | null }[];
+  outline: unknown[];
+}): boolean {
+  return (
+    s.outline.length >= 3 ||
+    s.sections.some((sec) => (sec.outline?.length ?? 0) >= 3) ||
+    s.sections.length > 1 ||
+    s.sections.some((sec) => !!sec.geometryType && sec.geometryType !== "straight")
+  );
+}
+
 /** See {@link addTurnout} — a turnout needs a track to lead onto (#325). */
 function canAddTurnoutIn(s: {
   extraTracks: { id: string }[];
@@ -3046,7 +3108,7 @@ export function SchematicEditor({
 
       {/* Body: tool rail | canvas (+ dispatcher strip) | inspector */}
       <div className="flex min-h-0 flex-1">
-        <ToolRail tool={tool} setTool={setTool} />
+        <ToolRail tool={tool} setTool={setTool} benchwork={hasBenchwork(state)} />
         {/* ⭐ THE CENTRE COLUMN SCROLLS. The page is `h-dvh overflow-hidden` —
             "an editor is not an article… each panel scrolls itself" — and the
             right-hand inspector duly got `overflow-y-auto`. This column never
@@ -4061,9 +4123,22 @@ function SectionList({
 function ToolRail({
   tool,
   setTool,
+  benchwork = true,
 }: {
   tool: CanvasTool;
   setTool: (t: CanvasTool) => void;
+  /**
+   * ⭐ THE SAFETY NET (#337). Track sits on boards, so layers 2–4 cannot exist
+   * before layer 1 — the same direction the layer invariant already runs in (a
+   * layer may read the ones below it, never above). With no benchwork at all,
+   * those tools are not offered.
+   *
+   * ⚠️ This is a NET, NOT A STEP, and that was Will's explicit call: **0 of the
+   * 39 stored modules fail `hasBenchwork`**, so in normal use nothing is ever
+   * hidden. It exists for a document that genuinely has no boards. If it starts
+   * firing on real modules, the predicate is wrong — not the module.
+   */
+  benchwork?: boolean;
 }) {
   return (
     <div className="flex w-12 shrink-0 flex-col items-center gap-1 border-r border-gray-200 bg-white py-2">
@@ -4071,6 +4146,8 @@ function ToolRail({
         <Fragment key={gi}>
           {gi > 0 && <div className="my-1 h-px w-6 bg-gray-200" />}
           {group.map((t) => {
+            // Nothing above benchwork until there is benchwork (#337).
+            if (!benchwork && t.layer && t.layer >= 2) return null;
             if (t.soon || !t.id) {
               return (
                 <button
@@ -4207,8 +4284,19 @@ const STAGES: {
   {
     id: "benchwork",
     label: "Benchwork",
-    hint: (s) => (s.outline.length ? `${s.outline.length}-corner shape` : "not drawn"),
-    done: (s) => s.outline.length >= 3,
+    /* ⭐ Says which form the boards are described in, because there is more than
+       one (#337). A sections-first module is described by its BOARDS; a
+       pre-#108 one by a drawn outline. Saying "not drawn" to an owner who has
+       authored five boards, two of them curved, was simply wrong. */
+    hint: (s) =>
+      s.outline.length >= 3
+        ? `${s.outline.length}-corner shape`
+        : s.sections.some((sec) => (sec.outline?.length ?? 0) >= 3)
+          ? `${s.sections.length} board${s.sections.length === 1 ? "" : "s"}, shaped`
+          : benchworkDescribed(s)
+            ? `${s.sections.length} board${s.sections.length === 1 ? "" : "s"}`
+            : "not drawn",
+    done: benchworkDescribed,
     tool: "benchwork",
   },
   {
