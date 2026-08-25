@@ -5,6 +5,13 @@ Headings are `version — date` (YYYY-MM-DD).
 
 ---
 
+## v0.108.0 — 2026-08-25
+
+### Fixed
+- **A second turnout no longer arrives on top of the first.** *+ Turnout* always placed the new turnout at the middle of the module, whatever was already standing there — so adding a second one put two turnouts at the same spot on the same track, drawn one over the other, and each brought a spur starting at the same place. A new turnout now goes to the middle of the longest stretch of that track with nothing on it: the first still lands mid-module exactly as before, the second mid-way along the larger half, and so on. A diamond counts as something standing there too, so a turnout will not be dropped onto a crossing. *+ Crossing* had the same habit and got the same fix. Dropping a turnout from the parts palette is unchanged — there you choose the spot yourself.
+
+---
+
 ## v0.107.0 — 2026-08-25
 
 ### Fixed
