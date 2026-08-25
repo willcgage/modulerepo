@@ -288,6 +288,126 @@ const isCanvasSel = (s: Selection | null): s is CanvasSelection =>
     s.kind === "cp" ||
     s.kind === "pieces");
 
+/**
+ * ⭐⭐ EVERY "+ Add" DEFAULT ANSWERED A FIXED FRACTION OF THE MODULE (#342, #344).
+ *
+ * `addTurnout` said `lengthInches / 2`, `addCrossing` the same, `addControlPoint`
+ * a quarter, `addIndustry` 0.35→0.6, a house-track spot 0.4→0.5 — every press,
+ * whatever was already standing there. So a second press put the new object
+ * exactly on top of the first: two turnouts at one station, or two industries
+ * claiming one length of siding, which #310 then counts twice.
+ *
+ * ⭐⭐ **THE APP AUTHORED THOSE COLLISIONS, NOT THE OWNER** — the one case where
+ * choosing a better number is not correcting somebody's document (*flag it,
+ * don't correct it* binds AUTHORED values; a brand-new object's default is
+ * ours to pick).
+ *
+ * ONE SHAPE, THREE USES: find the LONGEST stretch of the track that nothing
+ * occupies, and answer inside it.
+ *
+ * ⭐ THE FIRST OBJECT OF ANY KIND DOES NOT MOVE. With nothing occupying the
+ * track these helpers return the historical fraction untouched — a guarantee
+ * by construction rather than an arithmetic coincidence, so no existing
+ * default shifts for an owner who only ever adds one.
+ */
+const gapsIn = (occupied: [number, number][], lo: number, hi: number) => {
+  const merged: [number, number][] = [];
+  for (const [a, b] of [...occupied].sort((x, y) => x[0] - y[0])) {
+    const last = merged[merged.length - 1];
+    if (last && a <= last[1]) last[1] = Math.max(last[1], b);
+    else merged.push([Math.max(a, lo), Math.min(b, hi)]);
+  }
+  const free: [number, number][] = [];
+  let at = lo;
+  for (const [a, b] of merged) {
+    if (a > at) free.push([at, a]);
+    at = Math.max(at, b);
+  }
+  if (at < hi) free.push([at, hi]);
+  return free;
+};
+const widestOf = (free: [number, number][]) =>
+  free.reduce<[number, number] | null>(
+    (best, g) => (!best || g[1] - g[0] > best[1] - best[0] ? g : best),
+    null,
+  );
+/** Whole inches while a whole inch still falls strictly inside, then tenths —
+ * so rounding a tight gap can never land the new object back on a neighbour. */
+const snapInside = (v: number, lo: number, hi: number) => {
+  for (const q of [1, 10]) {
+    const r = Math.round(v * q) / q;
+    if (r > lo && r < hi) return r;
+  }
+  return v;
+};
+/** The stretch a track actually occupies. A span placed beyond it would be
+ * rail-less — which the industry span check (#194) already calls out, so
+ * putting one there deliberately would be authoring a flagged module. */
+const trackBounds = (s: EditorState, trackId: string): [number, number] => {
+  const t = s.extraTracks.find((x) => x.id === trackId);
+  return t ? [Math.min(t.fromPos, t.toPos), Math.max(t.fromPos, t.toPos)] : [0, s.lengthInches];
+};
+
+/**
+ * A POINT on a track: a turnout, a crossing, a signal. `occupied` is what is
+ * already standing on it; `preferred` is the fraction this kind of object has
+ * always used, returned untouched while the track is clear.
+ *
+ * ⚠️ A crossing counts against BOTH tracks it joins, so a turnout is not
+ * dropped onto a diamond either.
+ */
+const defaultPosOn = (s: EditorState, occupied: number[], preferred: number) => {
+  if (occupied.length === 0) return Math.round(s.lengthInches * preferred);
+  const g = widestOf(gapsIn(occupied.map((v) => [v, v] as [number, number]), 0, s.lengthInches));
+  if (!g) return Math.round(s.lengthInches * preferred);
+  return snapInside((g[0] + g[1]) / 2, g[0], g[1]);
+};
+const turnoutAndCrossingPositions = (s: EditorState, trackId: string) =>
+  [
+    ...s.turnouts.filter((t) => t.onTrack === trackId).map((t) => t.pos),
+    ...s.crossings.filter((x) => x.trackA === trackId || x.trackB === trackId).map((x) => x.pos),
+  ].filter((v) => v > 0 && v < s.lengthInches);
+
+/** Every span already claimed on a track — industries and their house-track
+ * spots alike, because neither may sit on top of the other. */
+const claimedSpansOn = (s: EditorState, trackId: string): [number, number][] =>
+  s.industries
+    .flatMap((ind) => [
+      ...(ind.track === trackId ? [[ind.fromPos, ind.toPos] as [number, number]] : []),
+      ...(ind.spots ?? [])
+        .filter((sp) => sp.track === trackId)
+        .map((sp) => [sp.fromPos, sp.toPos] as [number, number]),
+    ])
+    .map(([a, b]) => [Math.min(a, b), Math.max(a, b)] as [number, number]);
+
+/**
+ * A SPAN on a track — an industry, a house-track spot. Unlike a point it has a
+ * length to keep, so: take the longest free stretch of that track and centre a
+ * bite of the wanted length in it, shortening the bite rather than overhanging.
+ *
+ * ⛔ WHEN THERE IS NO FREE ROOM AT ALL the preferred span is returned unchanged
+ * — stacked, exactly as today. That is deliberate: on a fully-claimed track
+ * there IS no better place, and inventing one would push the span off the rail,
+ * which #194 flags. This never makes anything worse; it improves every case
+ * where room exists.
+ */
+const defaultSpanOn = (
+  s: EditorState,
+  trackId: string,
+  preferred: [number, number],
+): [number, number] => {
+  const claimed = claimedSpansOn(s, trackId);
+  if (claimed.length === 0) return preferred;
+  const [lo, hi] = trackBounds(s, trackId);
+  const g = widestOf(gapsIn(claimed, lo, hi));
+  if (!g || g[1] - g[0] <= 0) return preferred;
+  const want = Math.min(Math.abs(preferred[1] - preferred[0]), g[1] - g[0]);
+  const mid = (g[0] + g[1]) / 2;
+  const from = Math.max(g[0], Math.min(g[1] - want, mid - want / 2));
+  const tenth = (v: number) => Math.round(v * 10) / 10;
+  return [tenth(from), tenth(from + want)];
+};
+
 export function SchematicEditor({
   moduleId,
   recordNumber,
@@ -1885,53 +2005,6 @@ export function SchematicEditor({
   const defaultStubInches = (lengthInches: number, pos: number) =>
     Math.round(Math.max(6, Math.min(lengthInches - pos, lengthInches * 0.12)) * 10) / 10;
 
-  /**
-   * ⭐⭐ WHERE A NEW TURNOUT OR CROSSING GOES (#342).
-   *
-   * Both `addTurnout` and `addCrossing` used to answer `lengthInches / 2` — the
-   * middle of the module, every time, whatever was already standing there. A
-   * second press put the new object exactly on top of the first: two turnouts
-   * at one station, which is track that cannot be built. **The app authored
-   * that collision, not the owner**, which is the one case where choosing a
-   * better number is not correcting somebody's document (*flag it, don't
-   * correct it* binds AUTHORED values — a brand-new object's default is ours).
-   *
-   * The answer: the middle of the LONGEST stretch of that track with nothing on
-   * it. With nothing on it that stretch is the whole board, so the first object
-   * still lands at the midpoint and no existing behaviour moves; a second lands
-   * mid-way along the larger half, a third in the largest gap left. Nothing to
-   * invent — no minimum-spacing constant to pick and defend — and the answer is
-   * always inside the module.
-   *
-   * ⚠️ A crossing counts against BOTH the tracks it joins, so a turnout will not
-   * be dropped onto a diamond either.
-   */
-  const defaultPosOn = (s: EditorState, trackId: string) => {
-    const occupied = [
-      ...s.turnouts.filter((t) => t.onTrack === trackId).map((t) => t.pos),
-      ...s.crossings.filter((x) => x.trackA === trackId || x.trackB === trackId).map((x) => x.pos),
-    ].filter((v) => v > 0 && v < s.lengthInches);
-    const edges = [0, ...occupied, s.lengthInches].sort((a, b) => a - b);
-    let widest = -1;
-    let lo = 0;
-    let hi = s.lengthInches;
-    for (let i = 0; i < edges.length - 1; i++) {
-      const gap = edges[i + 1] - edges[i];
-      if (gap > widest) {
-        widest = gap;
-        lo = edges[i];
-        hi = edges[i + 1];
-      }
-    }
-    const mid = (lo + hi) / 2;
-    // Whole inches when a whole inch still falls inside the gap, then tenths —
-    // so rounding a tight gap can never land the new object back on a neighbour.
-    for (const q of [1, 10]) {
-      const r = Math.round(mid * q) / q;
-      if (r > lo && r < hi) return r;
-    }
-    return mid;
-  };
 
   const nextLane = (s: EditorState) => {
     // Lane 1 is Main 2 on a double module; first free lane is above it.
@@ -2153,7 +2226,7 @@ export function SchematicEditor({
   function addTurnout() {
     let created: string | null = null;
     patch((s) => {
-      const pos = defaultPosOn(s, MAIN_TRACK_ID);
+      const pos = defaultPosOn(s, turnoutAndCrossingPositions(s, MAIN_TRACK_ID), 0.5);
       // Prefer an existing home: a drawn track, or Main 2 on a double module.
       let diverge = canAddTurnoutIn(s) ? turnoutDivergeCandidate(s) : null;
       if (!diverge) {
@@ -2475,7 +2548,7 @@ export function SchematicEditor({
       s.crossings.push({
         id: nextId("x", s.crossings.map((x) => x.id)),
         name: "",
-        pos: defaultPosOn(s, MAIN_TRACK_ID),
+        pos: defaultPosOn(s, turnoutAndCrossingPositions(s, MAIN_TRACK_ID), 0.5),
         trackA: MAIN_TRACK_ID,
         trackB: s.extraTracks[0]?.id ?? MAIN_TRACK_ID,
       });
@@ -2489,7 +2562,23 @@ export function SchematicEditor({
         name: "",
         turnouts: [],
         signals: [
-          { id: `${id}-AtoB`, pos: Math.round(s.lengthInches * 0.25), track: MAIN_TRACK_ID, facing: "AtoB", side: "above" },
+          {
+            id: `${id}-AtoB`,
+            // Other A→B signals on the main are what this one must not land on;
+            // a B→A signal at the same post is a different thing entirely.
+            pos: defaultPosOn(
+              s,
+              s.controlPoints.flatMap((cp) =>
+                cp.signals
+                  .filter((sg) => sg.track === MAIN_TRACK_ID && sg.facing === "AtoB")
+                  .map((sg) => sg.pos),
+              ),
+              0.25,
+            ),
+            track: MAIN_TRACK_ID,
+            facing: "AtoB",
+            side: "above",
+          },
         ],
       });
     });
@@ -2498,8 +2587,12 @@ export function SchematicEditor({
     patch((s) => {
       const spur = s.extraTracks.find((t) => t.role === "spur") ?? s.extraTracks[0];
       const track = spur?.id ?? MAIN_TRACK_ID;
-      const from = spur ? spur.fromPos : Math.round(s.lengthInches * 0.35);
-      const to = spur ? spur.toPos : Math.round(s.lengthInches * 0.6);
+      // ⚠️ The FIRST industry still adopts the spur's own span — that is a good
+      // guess and it stays. Only the second one has to go looking for room.
+      const [from, to] = defaultSpanOn(s, track, [
+        spur ? spur.fromPos : Math.round(s.lengthInches * 0.35),
+        spur ? spur.toPos : Math.round(s.lengthInches * 0.6),
+      ]);
       s.industries.push({
         id: nextId("ind", s.industries.map((i) => i.id)),
         name: "",
@@ -6605,14 +6698,15 @@ function Inspector({
               onClick={() =>
                 up((x) => {
                   const t = state.extraTracks[0]?.id ?? ind.track;
+                  // Not on top of the last spot, and not on top of an industry
+                  // either — both are counted against the same rail (#344).
+                  const [from, to] = defaultSpanOn(state, t, [
+                    Math.round(state.lengthInches * 0.4),
+                    Math.round(state.lengthInches * 0.5),
+                  ]);
                   x.spots = [
                     ...x.spots,
-                    {
-                      track: t,
-                      fromPos: Math.round(state.lengthInches * 0.4),
-                      toPos: Math.round(state.lengthInches * 0.5),
-                      side: x.side,
-                    },
+                    { track: t, fromPos: from, toPos: to, side: x.side },
                   ];
                 })
               }

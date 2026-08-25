@@ -5,6 +5,13 @@ Headings are `version — date` (YYYY-MM-DD).
 
 ---
 
+## v0.109.0 — 2026-08-25
+
+### Fixed
+- **Adding a second industry, control point or house-track spot no longer puts it on top of the first.** Each of those buttons answered with the same fixed spot on the module every time it was pressed, so a second one landed exactly where the first was — two industries claiming one length of siding, or two signals on one post. They now look for the longest stretch of that track with nothing on it, and go there. Two industries sharing a span mattered beyond the drawing: the room-for-N-cars figure is worked out per industry, so the same rail was being counted twice and neither industry looked wrong on its own. **The first of each kind is unchanged** — it still lands exactly where it always did. An industry created while a spur exists still adopts that spur's span, and a spur that is already fully spoken for is left alone rather than having something pushed off the end of the rail.
+
+---
+
 ## v0.108.0 — 2026-08-25
 
 ### Fixed
