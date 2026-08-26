@@ -3075,7 +3075,7 @@ export function SchematicEditor({
           <div className="truncate text-sm font-semibold text-gray-900">{moduleName}</div>
           <div className="truncate text-xs text-gray-500">{recordNumber}</div>
         </div>
-        <Readiness state={state} onGo={setTool} />
+        <Readiness state={state} floating={floatingSections} onGo={setTool} />
         {readOnly && (
           <span
             className="shrink-0 rounded-md border border-amber-300 bg-amber-50 px-2 py-1 text-xs font-medium text-amber-900"
@@ -4293,11 +4293,21 @@ function DispatcherStrip({
  * to enforce this order; the hints were the only completeness signal in the app,
  * so they survive here — now they say what's missing without locking anything.
  */
+/**
+ * ⭐⭐ WHAT THE CHECKLIST CANNOT ANSWER FROM `EditorState` ALONE (#346).
+ *
+ * Whether the boards actually MEET is geometry, not a field — it comes from the
+ * derived footprint, which the editor already computes. Passing it in beats
+ * recomputing it here: two answers to "is this module one piece?" would be one
+ * answer too many.
+ */
+type StageContext = { floating: ReadonlySet<string> };
+
 const STAGES: {
   id: string;
   label: string;
-  hint: (s: EditorState) => string;
-  done: (s: EditorState) => boolean;
+  hint: (s: EditorState, ctx: StageContext) => string;
+  done: (s: EditorState, ctx: StageContext) => boolean;
   tool?: CanvasTool;
 }[] = [
   {
@@ -4314,15 +4324,23 @@ const STAGES: {
        one (#337). A sections-first module is described by its BOARDS; a
        pre-#108 one by a drawn outline. Saying "not drawn" to an owner who has
        authored five boards, two of them curved, was simply wrong. */
-    hint: (s) =>
-      s.outline.length >= 3
-        ? `${s.outline.length}-corner shape`
-        : s.sections.some((sec) => (sec.outline?.length ?? 0) >= 3)
-          ? `${s.sections.length} board${s.sections.length === 1 ? "" : "s"}, shaped`
-          : benchworkDescribed(s)
-            ? `${s.sections.length} board${s.sections.length === 1 ? "" : "s"}`
-            : "not drawn",
-    done: benchworkDescribed,
+    /* ⛔ AND WHETHER THEY JOIN UP (#346). A module IS one piece of bench work,
+       so a board that touches nothing is not a finished module — but the only
+       place that said so was the section card, three scrolls down, while the
+       checklist up here said "✓ Benchwork · 2 boards". Will's report on
+       FMN-0082 was that the sections do not connect; the app knew, and never
+       said it where anyone was looking. */
+    hint: (s, ctx) =>
+      ctx.floating.size
+        ? `${ctx.floating.size} board${ctx.floating.size === 1 ? "" : "s"} not joined`
+        : s.outline.length >= 3
+          ? `${s.outline.length}-corner shape`
+          : s.sections.some((sec) => (sec.outline?.length ?? 0) >= 3)
+            ? `${s.sections.length} board${s.sections.length === 1 ? "" : "s"}, shaped`
+            : benchworkDescribed(s)
+              ? `${s.sections.length} board${s.sections.length === 1 ? "" : "s"}`
+              : "not drawn",
+    done: (s, ctx) => benchworkDescribed(s) && ctx.floating.size === 0,
     tool: "benchwork",
   },
   {
@@ -4354,12 +4372,16 @@ const STAGES: {
 
 function Readiness({
   state,
+  floating,
   onGo,
 }: {
   state: EditorState;
+  /** Boards not connected to the piece endplate A is on (#346). */
+  floating: ReadonlySet<string>;
   onGo: (t: CanvasTool) => void;
 }) {
-  const left = STAGES.filter((s) => !s.done(state)).length;
+  const ctx = { floating };
+  const left = STAGES.filter((s) => !s.done(state, ctx)).length;
   return (
     <details className="relative shrink-0">
       <summary className="flex cursor-pointer select-none list-none items-center gap-1.5 rounded-md border border-gray-300 px-2 py-1 text-xs font-medium text-gray-700 hover:bg-gray-50">
@@ -4372,12 +4394,12 @@ function Readiness({
           track, the track carries the signals.
         </p>
         {STAGES.map((s) => {
-          const ok = s.done(state);
+          const ok = s.done(state, ctx);
           return (
             <div key={s.id} className="flex items-center gap-2 rounded px-1 py-1 text-xs">
               <span className={ok ? "text-green-600" : "text-amber-500"}>{ok ? "✓" : "⚠"}</span>
               <span className="font-medium text-gray-800">{s.label}</span>
-              <span className="ml-auto text-gray-500">{s.hint(state)}</span>
+              <span className="ml-auto text-gray-500">{s.hint(state, ctx)}</span>
               {!ok && s.tool && (
                 <button
                   type="button"
