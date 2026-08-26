@@ -5,6 +5,13 @@ Headings are `version — date` (YYYY-MM-DD).
 
 ---
 
+## v0.113.0 — 2026-08-26
+
+### Fixed
+- **A siding now meets the turnout it diverges from.** A turnout is drawn as the real part, and a real turnout's diverging rail is still only about 0.6″ away from the main where the moulding ends — a #6 would need nearly 7″ to open out to a full track spacing, and the part is under 5″ long. The rest is flex you lay on the board. That flex was not being drawn, so a siding stood about half an inch clear of its turnout, and a siding two tracks over stood an inch and a half clear — and no amount of dragging the siding's end could close it, because dragging moves the end along the module while the siding is always drawn out at its own lane. The flex is now drawn, easing off the end of the turnout's rail out to the track's lane, exactly as it already was for a second mainline. Nothing is stretched to reach anything: the siding still runs between the positions you gave it, and the flex is drawn in front of that run.
+
+---
+
 ## v0.112.0 — 2026-08-26
 
 ### Added
