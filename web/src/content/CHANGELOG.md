@@ -5,6 +5,17 @@ Headings are `version — date` (YYYY-MM-DD).
 
 ---
 
+## v0.107.0 — 2026-08-25
+
+### Fixed
+- **A module with a curved board is no longer told its boards don't touch each other.** The shape of a board is worked out by sampling its curve into short straight steps, and the face at each end was being squared to the first of those steps rather than to the curve itself — about 3¾° out on a 90° board. That is enough for the app to decide a board misses its neighbour, so a module built from a straight board butted to a curved one was reported as two separate pieces of bench work, with advice — *"give this board a shape that meets a neighbour"* — that no shape or length could satisfy. A five-board U had **all five** of its boards flagged. The faces are now square to the module's own centre-line, and both of those modules read as one piece joined across the full width of every seam.
+- **An endplate at the end of a curve is drawn square.** The same 3¾° tilt reached the drawn endplate face, so it disagreed with the position the app had worked out for that very plate. Twelve stored modules are a single curved board and were drawn this way.
+
+### Changed
+- **The build checklist now says when a board doesn't join the rest.** A module is one piece of bench work, but the only place that said a board was floating was its own card in the sections list — the checklist above it happily read *"✓ Benchwork · 2 boards"*. It now reads **"1 board not joined"**, stays unticked until the module is one piece, and takes you to the Benchwork tool.
+
+---
+
 ## v0.104.0 — 2026-08-24
 
 ### Fixed
