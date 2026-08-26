@@ -5,6 +5,13 @@ Headings are `version — date` (YYYY-MM-DD).
 
 ---
 
+## v0.115.0 — 2026-08-26
+
+### Changed
+- **The board on a module you haven't drawn is a suggestion now, and it says so.** A module with no benchwork still gets a board shape worked out from its length and its endplates, and the panel used to quote that shape back as *"Board, at its widest: 48″ × 24″"* — the app describing bench work nobody built. It now leads with the plain fact that nothing has been drawn, and offers to **build that board for you** in one click. What it writes is exactly the shape already on the canvas, so nothing moves; from then on the board is yours, stored, and reshapeable with the Benchwork tool. The offer appears only where there is genuinely nothing drawn, and disappears the moment there is. Nothing is written on your behalf and nothing is blocked in the meantime — a module that already carries track keeps working exactly as before.
+
+---
+
 ## v0.114.0 — 2026-08-26
 
 ### Fixed
