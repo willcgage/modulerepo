@@ -2379,10 +2379,37 @@ export function BenchworkEditor({
           o.trackId === r.trackId &&
           Math.hypot(o.at.x - r.at.x, o.at.y - r.at.y) <= RAIL_SNAP_INCHES,
       );
+    /**
+     * ⭐⭐ A TRACK WHOSE PATH *IS* THE LEG IS CONNECTED TO IT (#360).
+     *
+     * `ends` holds only each track's FIRST and LAST point, which is the right
+     * question for a track that has to be brought to a rail. But a single-turnout
+     * spur is drawn by `divergingStubPath` as **the leg itself plus a tail**, so
+     * the rail end is a vertex in the MIDDLE of its own path and neither endpoint
+     * is anywhere near it. The check could therefore never be satisfied by a
+     * stub, and rang every one — two on FMN-0086, on track that is joined by
+     * construction and cannot be otherwise.
+     *
+     * ⛔ A ring on correctly built track is the #232 failure over again: loud when
+     * it is right, and therefore ignored when it is wrong.
+     *
+     * ⚠️ THE TOLERANCE HERE IS NOT `RAIL_SNAP_INCHES`, AND THAT IS THE WHOLE
+     * POINT. The snap is a generous 1.5″ because an owner is dragging; this asks
+     * a different question — *is this rail end literally a point of that track's
+     * drawn path?* At 1.5″ a lane-1 siding running past would answer yes from
+     * 0.518″ away and silence a genuine dangle, which is the one outcome worse
+     * than the false ring being fixed.
+     */
+    const SAME_POINT_INCHES = 1e-6;
+    const ownPathRunsThrough = (r: { at: Pt; trackId: string }) =>
+      (trackPaths.find((tp) => tp.id === r.trackId)?.pts ?? []).some(
+        (p) => Math.hypot(p.x - r.at.x, p.y - r.at.y) <= SAME_POINT_INCHES,
+      );
     return turnoutRailEnds.filter(
       (r) =>
         (main2Drawn || r.trackId !== MAIN2_TRACK_ID) &&
         !metByItsPartner(r) &&
+        !ownPathRunsThrough(r) &&
         !ends.some((e) => Math.hypot(e.x - r.at.x, e.y - r.at.y) <= RAIL_SNAP_INCHES),
     );
   }, [turnoutRailEnds, trackPaths, tracks]);

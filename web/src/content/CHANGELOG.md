@@ -5,6 +5,13 @@ Headings are `version — date` (YYYY-MM-DD).
 
 ---
 
+## v0.114.0 — 2026-08-26
+
+### Fixed
+- **A spur is no longer told nothing is connected to its own turnout.** A spur off a single turnout is drawn as the turnout's diverging rail continuing into the track, so it is joined by construction and cannot be otherwise — but the check that looks for a loose rail only ever compared a track's two *ends*, and on a spur like that the turnout's rail is a point in the middle of its own run. Every such spur therefore carried the warning. The check now also recognises a track whose drawn path runs through the rail, so the warning is left only where a rail really does have nothing on it.
+
+---
+
 ## v0.113.0 — 2026-08-26
 
 ### Fixed
