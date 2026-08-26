@@ -5548,10 +5548,80 @@ function Inspector({
             title="Signed distance of Main 1 from the centre of this endplate. Leave blank for the standard's recommendation (single centred, double straddling the centre). 0 means explicitly centred."
           />
         </label>
-        <p className="text-xs text-gray-500">
-          Blank uses the recommended placement. Track always crosses the plate at
-          90°, and on a double end the two tracks stay 1.125″ apart.
-        </p>
+        {/* ⭐⭐ SHOW WHERE THE TRACKS ACTUALLY LAND, AS THE NUMBER IS TYPED (#352).
+
+            The field means *Main 1's distance from the plate centre*. The
+            standard's own sentence is "each track 0.5625 inches from the
+            center" — so an owner copying the standard types 0.5625 and gets Main
+            1 at +0.5625 and Main 2 at +1.6875: the pair shoved a full track
+            spacing off centre, the OPPOSITE of what they were copying. Two
+            modules in the catalogue contain exactly that, and an authored 0 is
+            the same trap from the other side (#93). Five of the six off-centre
+            plates on record are one of those two misreadings.
+
+            ⛔ NOT a validation and NOT a correction — an off-centre plate is
+            legal (§2.0's centring is an RP, relaxed by the 20220628 revision).
+            This just shows the consequence while it can still be reconsidered,
+            instead of at drawing time. */}
+        {(() => {
+          const r2 = (v: number) => {
+            const n = Math.round(v * 100) / 100;
+            return `${n > 0 ? "+" : n < 0 ? "−" : ""}${Math.abs(n).toFixed(2)}″`;
+          };
+          const main1 = endplateTrackOffsetInches(
+            state.endplateTrackOffsets[id],
+            plateConfig,
+            state.mainsSwapped === true,
+          );
+          const recommended = endplateTrackOffsetInches(
+            undefined,
+            plateConfig,
+            state.mainsSwapped === true,
+          );
+          const atRecommendation = Math.abs(main1 - recommended) < 0.0005;
+          if (plateConfig === "none") return null;
+          if (plateConfig !== "double") {
+            return (
+              <p className="text-xs text-gray-500">
+                Main 1 crosses at <span className="font-medium">{r2(main1)}</span>
+                {Math.abs(main1) < 0.0005 ? " — on the centre." : " from the centre."}{" "}
+                Blank uses the recommended placement; track always crosses at 90°.
+              </p>
+            );
+          }
+          const main2 = main1 + (state.mainsSwapped === true ? -1 : 1) * FREEMO_TRACK_SPACING_INCHES;
+          const mid = (main1 + main2) / 2;
+          const straddles = Math.abs(mid) < 0.005;
+          return (
+            <div className="text-xs text-gray-500">
+              <p>
+                Main 1 at <span className="font-medium">{r2(main1)}</span>, Main 2 at{" "}
+                <span className="font-medium">{r2(main2)}</span>
+                {straddles ? (
+                  <> — straddling the centre, {FREEMO_TRACK_SPACING_INCHES}″ apart.</>
+                ) : (
+                  <>
+                    {" "}
+                    — both{" "}
+                    <span className="font-medium text-amber-700">
+                      {(Math.round(Math.abs(mid) * 100) / 100).toFixed(2)}″
+                    </span>{" "}
+                    to one side of the centre.
+                  </>
+                )}
+              </p>
+              {!atRecommendation && (
+                <button
+                  type="button"
+                  onClick={() => setEndplateTrackOffset(id, "")}
+                  className="mt-1 rounded-md border border-gray-300 px-2 py-0.5 text-xs font-medium text-gray-700 hover:bg-gray-50"
+                >
+                  Straddle the centre ({r2(recommended)})
+                </button>
+              )}
+            </div>
+          );
+        })()}
         {/* ⭐⭐ VALIDATE THE WIDTH THAT IS ACTUALLY ON THE BOARD (#321).
             
             This used to check `state.endplateWidths[id]` — the AUTHORED number —
