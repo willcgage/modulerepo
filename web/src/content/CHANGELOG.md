@@ -5,6 +5,13 @@ Headings are `version — date` (YYYY-MM-DD).
 
 ---
 
+## v0.112.0 — 2026-08-26
+
+### Added
+- **The endplate now shows where both tracks land as you type the offset.** The offset field asks for Main 1's distance from the centre of the plate, but the standard's own sentence is *"each track 0.5625 inches from the center"* — so copying that number out of the standard puts Main 1 at +0.5625 and Main 2 at +1.6875, the pair pushed a full track spacing to one side, which is the opposite of what it recommends. Two modules in the catalogue contain exactly that, and an entered 0 does the same thing from the other side. The plate now reads out both tracks live — *"Main 1 at −0.56″, Main 2 at +0.56″ — straddling the centre"* — and says plainly when they are both to one side, with a one-click **Straddle the centre** button to take the recommendation. Nothing is validated or changed for you: an off-centre plate is legal, and the standard relaxed centring to a recommendation in 2022.
+
+---
+
 ## v0.111.0 — 2026-08-26
 
 ### Added
