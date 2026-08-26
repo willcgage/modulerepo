@@ -1265,6 +1265,59 @@ export function BenchworkEditor({
     return [...leg.map((p) => ({ x: p.x, y: p.y })), { x: frog.x + dx * tailLen, y: frog.y + dy * tailLen }];
   };
 
+  /**
+   * ⭐⭐ WHERE A TRACK'S DRAWN RUN REALLY BEGINS — the flex bends off the RAIL
+   * END, it does not start at the lane (#349).
+   *
+   * A turnout's drawn leg stops at the end of the real part (#189), and that is
+   * only ~0.605″ off the main **whatever the frog number** — a #6 needs 6.75″ to
+   * reach one track spacing and its part is 4.813″ long. So a body drawn at the
+   * full lane offset can never meet it: 0.518″ short at lane 1, 1.643″ at lane 2.
+   * Measured on prod: FMN-0083 0.52″, FMN-0085 3.23″ — the gap Will reported
+   * twice.
+   *
+   * ⛔ AND NO DRAG COULD CLOSE IT. #189 says the run from the turnout out to the
+   * track is *"flex track they lay and snap"* — but dragging an end moves it
+   * ALONG the main, while the body is always drawn AT the lane. So the ring's
+   * instruction, *"drag the track's end onto it"*, asked for a gesture that does
+   * not exist for a siding.
+   *
+   * ⭐ The geometry to fix it was already built and already correct: `arrival`
+   * is computed for EVERY diverging track from that track's own lane, and Main 2
+   * has been using it since #189 — which is exactly why Main 2 meets its leg at
+   * **0.00″** on FMN-0075 while a siding on the same module stands 0.52″ off.
+   * It was never a Main 2 exception; it was the only case that had been wired up.
+   *
+   * ⚠️ THIS DOES NOT REVERSE #189. The track still runs between the positions
+   * its owner gave it — the ease is prepended, and the body starts where the
+   * ease hands over, so nothing is stretched to reach anything.
+   */
+  const withArrivals = (t: CanvasTrack, fromPos: number, toPos: number) => {
+    let from = fromPos;
+    let to = toPos;
+    let head: Pt[] | null = null;
+    let tail: Pt[] | null = null;
+    for (const l of legsByTrack.get(t.id) ?? []) {
+      if (!l.arrival || l.arrival.length < 2) continue;
+      const jp = projectToCenterline(centerline, l.join).pos;
+      // Where the eased arrival hands over to the plain lane run.
+      const end = l.arrival[l.arrival.length - 1];
+      const handover = projectToCenterline(centerline, end).pos;
+      // Which END of this track the leg belongs to — compared against the
+      // ORIGINAL extent, so a first leg that moves `from` cannot then mislead
+      // the second into thinking it is also the western one.
+      const west = Math.abs(fromPos - jp) <= Math.abs(toPos - jp);
+      if (west) {
+        from = handover;
+        head = l.arrival;
+      } else {
+        to = handover;
+        tail = l.arrival;
+      }
+    }
+    return { from, to, head, tail };
+  };
+
   /** A passing siding's BODY — the parallel run between its two turnouts,
    * clipped to their FROGS so it meets each diverging leg end-to-end. Without
    * this the body drew the full fromPos→toPos on the lane while the legs ended
@@ -1307,16 +1360,20 @@ export function BenchworkEditor({
     const off = side * (Math.abs(laneOffset(t.lane)) || LANE_SPACING_INCHES);
     const steps = 24;
     const body: Pt[] = [];
-    // ⚠️ Runs between the track's OWN extent, not frog to frog. A passing siding
-    // is as long as its owner said; the short run from each turnout out to it is
-    // flex track they lay and snap (#189).
+    // ⚠️ Runs between the track's OWN extent, not frog to frog — a passing siding
+    // is as long as its owner said (#189). What changed in #349 is only that the
+    // flex from each turnout is now DRAWN, easing off the rail end out to the
+    // lane, instead of being left as a hole the owner could not close.
+    const { from, to, head, tail } = withArrivals(t, t.fromPos, t.toPos);
     for (let i = 0; i <= steps; i++) {
-      const pos = t.fromPos + ((t.toPos - t.fromPos) * i) / steps;
+      const pos = from + ((to - from) * i) / steps;
       const c = sampleAt(centerline, pos);
       body.push({ x: c.x + c.nx * off, y: c.y + c.ny * off });
     }
     if (body.length < 2) return null;
-    return body;
+    // `body` runs west→east, so the west leg's ease goes in front and the east
+    // leg's on the end, reversed to keep the run in one direction.
+    return [...(head ?? []), ...body, ...(tail ? [...tail].reverse() : [])];
   };
 
   /** A plain lane-parallel body, CLIPPED to any turnout leg reaching it — so the
@@ -1327,17 +1384,17 @@ export function BenchworkEditor({
    * showed this plainly: body 0→17.4, leg 21.8→10.6 (#173 follow-up). Tracks
    * with two legs are handled by passingSidingBody; this covers the rest. */
   const laneBody = (t: CanvasTrack): Pt[] => {
-    // ⚠️ No longer pulled out to any turnout leg's join. A track runs between the
-    // positions its owner gave it; if that leaves a gap to the turnout, the gap
-    // is real and theirs to close by dragging the end onto the rail (#189).
+    // ⚠️ Still not PULLED OUT to any turnout's join: the track runs between the
+    // positions its owner gave it (#189). The turnout's flex is DRAWN in front
+    // of that run rather than the run being stretched back to meet it (#349).
     //
-    // MAIN 2 IS THE EXCEPTION, and it's a principled one: on a transition module
-    // Main 2's extent is DERIVED from the transition turnout rather than
-    // authored, and it has no draggable end (see `trackEnds`). Leaving it
-    // detached would show the owner a gap they have no way to close. It stays
-    // joined because they never positioned it in the first place.
-    if (t.id !== MAIN2_TRACK_ID)
-      return lanePath(centerline, t.fromPos, t.toPos, t.lane, 24, pinches);
+    // ⛔ THIS USED TO BE A MAIN 2 EXCEPTION, on the reasoning that Main 2's
+    // extent is derived and has no draggable end, so "leaving it detached would
+    // show the owner a gap they have no way to close". That reasoning turns out
+    // to cover EVERY track: dragging a siding's end moves it along the main
+    // while its body is drawn at the lane, so no drag closes the 0.518″ that a
+    // leg cannot reach. Main 2 was not the exception — it was the only case that
+    // had been wired up.
     /**
      * ⭐ THE FLEX BENDS OFF THE RAIL END — it doesn't start at the lane.
      *
@@ -1358,24 +1415,7 @@ export function BenchworkEditor({
      * at the frog angle, so continuing straight is tangent-continuous by
      * construction and there is no drawing convention to invent.
      */
-    let from = t.fromPos;
-    let to = t.toPos;
-    let head: Pt[] | null = null;
-    let tail: Pt[] | null = null;
-    for (const l of legsByTrack.get(t.id) ?? []) {
-      const jp = projectToCenterline(centerline, l.join).pos;
-      // Where the eased arrival hands over to the plain lane run.
-      const end = l.arrival?.[l.arrival.length - 1];
-      const handover = end ? projectToCenterline(centerline, end).pos : jp;
-      const west = Math.abs(from - jp) <= Math.abs(to - jp);
-      if (west) {
-        from = handover;
-        head = l.arrival;
-      } else {
-        to = handover;
-        tail = l.arrival;
-      }
-    }
+    const { from, to, head, tail } = withArrivals(t, t.fromPos, t.toPos);
     // `lanePath` always runs west→east, so the west leg's arrival goes in front
     // and the east leg's on the end, reversed to keep the run in one direction.
     const body = lanePath(centerline, from, to, t.lane, 24, pinches);
