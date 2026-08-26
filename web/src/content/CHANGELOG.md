@@ -5,6 +5,13 @@ Headings are `version — date` (YYYY-MM-DD).
 
 ---
 
+## v0.111.0 — 2026-08-26
+
+### Added
+- **A track nothing leads onto now says so.** A siding or spur exists to be diverged onto, so if no turnout reaches it, no train can either — and until now the app accepted that in silence. Three modules had one, and on one of them the unreachable spur was carrying an industry, so the dispatcher was being told about car spots on rail with no way in. The track now carries a note, and both of its ends are ringed on the canvas, in the same voice as the existing marker for the opposite case — a turnout's diverging rail with no track on it. Nothing is added or moved for you: which turnout the track should hang off is yours to decide. Mainlines are not flagged, because a main is reached by being coupled to at an endplate rather than through a turnout, and neither is a crossover, which is joined by a turnout at each end.
+
+---
+
 ## v0.110.0 — 2026-08-26
 
 ### Fixed

@@ -236,6 +236,8 @@ const NO_CONTEXT_OUTLINES: ContextOutline[] = [];
  * corner near one and it snaps, so the board meets the standard interface. Empty
  * outline = the layout falls back to the endplate-width band.
  */
+const EMPTY_IDS: ReadonlySet<string> = new Set<string>();
+
 export function BenchworkEditor({
   outline,
   outlineInner = [],
@@ -254,6 +256,7 @@ export function BenchworkEditor({
   onEndplateEndMove,
   onEndplateMove,
   tracks = [],
+  unreachableTracks = EMPTY_IDS,
   turnouts = [],
   signals = [],
   industries = [],
@@ -325,6 +328,10 @@ export function BenchworkEditor({
   onEndplateMove?: (id: string, pt: Pt) => void;
   /** Sidings/spurs/main-2, positioned along the main and offset to their lane. */
   tracks?: CanvasTrack[];
+  /** Ids of tracks no turnout leads onto — derived once by the editor and
+   * handed down, so the canvas and the inspector cannot disagree about which
+   * track is unreachable (#350). */
+  unreachableTracks?: ReadonlySet<string>;
   turnouts?: CanvasTurnout[];
   signals?: CanvasSignal[];
   /** Industries — car-spot spans beside their track. */
@@ -4254,6 +4261,36 @@ const ENDPLATE_TAB = 5; // ballast-shoulder band width, inches
             </title>
           </circle>
         ))}
+        {/* ⛔ TRACK NOTHING LEADS ONTO (#350) — the mirror of the dangling
+            rail ring above, and the worse of the two: an unreachable track
+            still counts toward capacity. Drawn at BOTH of its ends, because
+            which end should have met a turnout is exactly what the owner has
+            to decide. */}
+        {!graphAuthoring &&
+          trackPaths
+            .filter((tp) => unreachableTracks.has(tp.id) && tp.pts.length >= 2)
+            .flatMap((tp) => [tp.pts[0], tp.pts[tp.pts.length - 1]].map((at, k) => (
+              <circle
+                key={`unreachable${tp.id}-${k}`}
+                cx={at.x}
+                cy={sy(at.y)}
+                r={world(6)}
+                fill="none"
+                stroke="#d97706"
+                // Plain pixels, not world() — `non-scaling-stroke` already takes
+                // its width in screen units (see the dangling ring above).
+                strokeWidth={2}
+                strokeDasharray="1 3"
+                vectorEffect="non-scaling-stroke"
+                pointerEvents="none"
+              >
+                <title>
+                  Nothing leads onto this track, so no train can reach it — add a
+                  turnout that diverges onto it, or drag this end onto a
+                  turnout&apos;s diverging rail.
+                </title>
+              </circle>
+            )))}
         {/* Section joints — dashed dividers where the boards split (#48). */}
         {centerline.length >= 2 &&
           sectionBreaks.map((pos, i) => {

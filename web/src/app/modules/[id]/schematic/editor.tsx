@@ -95,6 +95,46 @@ function benchworkDescribed(s: {
   );
 }
 
+/**
+ * ⭐⭐ TRACK THAT NOTHING CAN REACH (#350).
+ *
+ * A siding or spur exists to be diverged onto: if no turnout names it, no train
+ * can enter it, and a stretch of rail nothing can reach is not track — it is a
+ * scenery detail. Will found one on FMN-0083 carrying an INDUSTRY, so the
+ * dispatcher was being told about car spots on rail with no way in.
+ *
+ * ⛔ THE MIRROR CASE WAS ALREADY HANDLED AND THIS ONE WAS NOT. `danglingRailEnds`
+ * rings a turnout whose diverging rail has no track on it; nothing said anything
+ * about a track with no turnout. Of the two, this is the worse: an unreachable
+ * rail still counts toward capacity.
+ *
+ * ⚠️ TOPOLOGY, NOT GEOMETRY — deliberately. Whether a track is REACHABLE is a
+ * fact about the document; whether its rails MEET is a fact about the drawing,
+ * and the drawing is separately wrong (#349). Asking the geometry here would
+ * make this warning fire for #349's reasons and go quiet when #349 is fixed.
+ *
+ * ⚠️ Mains are excluded: a main runs endplate to endplate and is reached by
+ * being coupled to, not by a turnout. So is a CROSSOVER connector, which is
+ * joined by a turnout at each end rather than named as a diverging target.
+ */
+function unreachableTracks(s: {
+  extraTracks: { id: string; role?: string | null }[];
+  turnouts: { divergeTrack?: string | null; onTrack?: string | null }[];
+}): Set<string> {
+  const reached = new Set<string>();
+  for (const sw of s.turnouts) {
+    if (sw.divergeTrack) reached.add(sw.divergeTrack);
+    // A turnout SITTING on a track is reached through it too — a ladder's second
+    // turnout sits on the spur its first one made (#50).
+    if (sw.onTrack) reached.add(sw.onTrack);
+  }
+  return new Set(
+    s.extraTracks
+      .filter((t) => t.role !== "main" && t.role !== "crossover" && !reached.has(t.id))
+      .map((t) => t.id),
+  );
+}
+
 /** See {@link addTurnout} — a turnout needs a track to lead onto (#325). */
 function canAddTurnoutIn(s: {
   extraTracks: { id: string }[];
@@ -1840,6 +1880,8 @@ export function SchematicEditor({
 
   /** Boards not connected to the piece endplate A is on. A module is one piece
    * of bench work; anything else is a board drawn somewhere it can't be. */
+  /** Tracks no turnout leads onto — see {@link unreachableTracks} (#350). */
+  const unreachable = useMemo(() => unreachableTracks(state), [state]);
   const floatingSections = useMemo(() => {
     // A loop's balloon boards form a RING that closes back on itself; the
     // linear "does each board meet a neighbour" check can't model that closure,
@@ -3292,6 +3334,7 @@ export function SchematicEditor({
           <div className="flex min-h-0 flex-1 flex-col p-3">
             <div className="min-h-[28rem] flex-1 rounded-lg border border-gray-200 bg-white p-2">
               <BenchworkEditor
+                unreachableTracks={unreachable}
                 outline={activeSection ? (activeSection.outline ?? []) : state.outline}
                 // The loop's donut hole — only for the whole-module board, not a
                 // section being shaped on its own.
@@ -7277,6 +7320,19 @@ function Inspector({
           ))}
         </select>
       </label>
+      {/* ⛔ Nothing leads onto this track (#350). Said here rather than fixed:
+          which turnout it ought to hang off is the owner's call, and inventing
+          one is exactly what this app does not do.
+          ⭐ ONE DEFINITION, TWO CALLERS — the canvas ring is handed the same set
+          from the editor, so the two can never disagree about which track is
+          unreachable. */}
+      {unreachableTracks(state).has(t.id) && (
+        <p className="rounded-md bg-amber-50 px-2 py-1 text-xs text-amber-800" role="status">
+          ⚠ Nothing leads onto this track, so no train can reach it. Add a
+          turnout that diverges onto it — or drag this track&rsquo;s end onto a
+          turnout&rsquo;s diverging rail.
+        </p>
+      )}
       <div className="grid grid-cols-2 gap-2">
         <label className="block text-xs font-medium text-gray-600">
           Starts (in from A)
