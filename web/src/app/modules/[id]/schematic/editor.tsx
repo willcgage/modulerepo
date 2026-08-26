@@ -1885,6 +1885,54 @@ export function SchematicEditor({
   const defaultStubInches = (lengthInches: number, pos: number) =>
     Math.round(Math.max(6, Math.min(lengthInches - pos, lengthInches * 0.12)) * 10) / 10;
 
+  /**
+   * ⭐⭐ WHERE A NEW TURNOUT OR CROSSING GOES (#342).
+   *
+   * Both `addTurnout` and `addCrossing` used to answer `lengthInches / 2` — the
+   * middle of the module, every time, whatever was already standing there. A
+   * second press put the new object exactly on top of the first: two turnouts
+   * at one station, which is track that cannot be built. **The app authored
+   * that collision, not the owner**, which is the one case where choosing a
+   * better number is not correcting somebody's document (*flag it, don't
+   * correct it* binds AUTHORED values — a brand-new object's default is ours).
+   *
+   * The answer: the middle of the LONGEST stretch of that track with nothing on
+   * it. With nothing on it that stretch is the whole board, so the first object
+   * still lands at the midpoint and no existing behaviour moves; a second lands
+   * mid-way along the larger half, a third in the largest gap left. Nothing to
+   * invent — no minimum-spacing constant to pick and defend — and the answer is
+   * always inside the module.
+   *
+   * ⚠️ A crossing counts against BOTH the tracks it joins, so a turnout will not
+   * be dropped onto a diamond either.
+   */
+  const defaultPosOn = (s: EditorState, trackId: string) => {
+    const occupied = [
+      ...s.turnouts.filter((t) => t.onTrack === trackId).map((t) => t.pos),
+      ...s.crossings.filter((x) => x.trackA === trackId || x.trackB === trackId).map((x) => x.pos),
+    ].filter((v) => v > 0 && v < s.lengthInches);
+    const edges = [0, ...occupied, s.lengthInches].sort((a, b) => a - b);
+    let widest = -1;
+    let lo = 0;
+    let hi = s.lengthInches;
+    for (let i = 0; i < edges.length - 1; i++) {
+      const gap = edges[i + 1] - edges[i];
+      if (gap > widest) {
+        widest = gap;
+        lo = edges[i];
+        hi = edges[i + 1];
+      }
+    }
+    const mid = (lo + hi) / 2;
+    // Whole inches when a whole inch still falls inside the gap, then tenths —
+    // so rounding a tight gap can never land the new object back on a neighbour.
+    for (const q of [1, 10]) {
+      const r = Math.round(mid * q) / q;
+      if (r > lo && r < hi) return r;
+    }
+    return mid;
+  };
+
   const nextLane = (s: EditorState) => {
     // Lane 1 is Main 2 on a double module; first free lane is above it.
     const base = s.configA === "double" || s.configB === "double" ? 2 : 1;
@@ -2105,7 +2153,7 @@ export function SchematicEditor({
   function addTurnout() {
     let created: string | null = null;
     patch((s) => {
-      const pos = Math.round(s.lengthInches * 0.5);
+      const pos = defaultPosOn(s, MAIN_TRACK_ID);
       // Prefer an existing home: a drawn track, or Main 2 on a double module.
       let diverge = canAddTurnoutIn(s) ? turnoutDivergeCandidate(s) : null;
       if (!diverge) {
@@ -2427,7 +2475,7 @@ export function SchematicEditor({
       s.crossings.push({
         id: nextId("x", s.crossings.map((x) => x.id)),
         name: "",
-        pos: Math.round(s.lengthInches * 0.5),
+        pos: defaultPosOn(s, MAIN_TRACK_ID),
         trackA: MAIN_TRACK_ID,
         trackB: s.extraTracks[0]?.id ?? MAIN_TRACK_ID,
       });
