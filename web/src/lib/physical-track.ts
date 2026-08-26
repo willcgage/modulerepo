@@ -10,6 +10,7 @@ export interface Pt {
 }
 
 import {
+  type BenchworkPoint,
   FREEMO_TRACK_SPACING_INCHES,
   laneOffsetAt,
   type LanePinch,
@@ -42,9 +43,40 @@ export function centerlineLength(center: Pt[]): number {
   return cum[cum.length - 1] ?? 0;
 }
 
+/** Shortest signed turn from `a` to `b`, in degrees. */
+function turnBetweenDeg(a: number, b: number): number {
+  const d = ((b - a) % 360 + 540) % 360 - 180;
+  return d;
+}
+
 /**
  * The point `pos` inches along the centre-line from endplate A, plus the unit
  * LEFT normal there (for offsetting lanes / signal sides). Clamps to the ends.
+ *
+ * ⭐⭐ THE DIRECTION COMES FROM THE SPINE, NOT FROM ITS CHORDS (#348).
+ *
+ * This used to answer with the normal of whichever chord `pos` landed in — and
+ * **a chord is the tangent at its own middle**, so on a curve sampled into 12
+ * steps it was out by up to half a step, 3.75° on a 90° board. Everything this
+ * positions inherited that: lanes, industry spans, signals, and the dashed
+ * section joints an owner can see. Measured on FMN-0085: the Base｜East bend
+ * joint at 108″ was drawn **3.75° off square**.
+ *
+ * ⛔⛔ AND IT COULD NOT BE FIXED HERE. Mid-arc the tangent at a vertex is the
+ * bisector of the two chords meeting there; at a straight→curve junction it is
+ * the STRAIGHT's own direction; and **a bare list of points cannot tell those
+ * apart**. A bisector rule was written and measured: it took the worst error on
+ * a pure 90° curve from 3.75° to 0.064° *and* pushed the section joints from 0°
+ * to 1.875°. Better in one place, worse in another, with no way to have both.
+ *
+ * ⭐ So the package says instead. `moduleCenterline` knows each board's turn and
+ * the running heading, and since **0.151.0** every spine vertex carries
+ * `tangentDeg`. This function interpolates that — no second derivation to drift
+ * out of step with the first, which is the whole shape of #346 and #348.
+ *
+ * ⚠️ A spine from a DRAWN main has no analytic form and carries no tangent. That
+ * is not an omission, so the chord fallback below stays — unchanged behaviour
+ * for exactly the inputs where nothing better exists.
  */
 export function sampleAt(center: Pt[], pos: number): Pt & { nx: number; ny: number } {
   if (center.length === 0) return { x: 0, y: 0, nx: 0, ny: 1 };
@@ -58,12 +90,23 @@ export function sampleAt(center: Pt[], pos: number): Pt & { nx: number; ny: numb
   const b = center[i];
   const segLen = cum[i] - cum[i - 1] || 1;
   const t = (d - cum[i - 1]) / segLen;
+  const x = a.x + (b.x - a.x) * t;
+  const y = a.y + (b.y - a.y) * t;
+  const ta = (a as BenchworkPoint).tangentDeg;
+  const tb = (b as BenchworkPoint).tangentDeg;
+  if (ta !== undefined && tb !== undefined) {
+    // Interpolate the ANGLE. Averaging the two unit vectors and renormalising
+    // would be a chord of its own, and would put back a smaller copy of the
+    // error this exists to remove.
+    const th = ((ta + turnBetweenDeg(ta, tb) * t) * Math.PI) / 180;
+    return { x, y, nx: -Math.sin(th), ny: Math.cos(th) };
+  }
   const dx = b.x - a.x;
   const dy = b.y - a.y;
   const len = Math.hypot(dx, dy) || 1;
   return {
-    x: a.x + dx * t,
-    y: a.y + dy * t,
+    x,
+    y,
     nx: -dy / len, // left normal
     ny: dx / len,
   };
