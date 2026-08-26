@@ -5,6 +5,13 @@ Headings are `version — date` (YYYY-MM-DD).
 
 ---
 
+## v0.110.0 — 2026-08-26
+
+### Fixed
+- **The dashed line where two boards meet is drawn square again.** A curve is worked out as a series of short straight steps, and the seam was being squared to one of those steps rather than to the curve itself — so on a module whose boards run straight, bend, straight, bend, straight, the seam just before the second bend came out about 3¾° crooked while the other three were fine. Every seam on that module now reads square. The same direction is used to place siding and spur lanes, industry markers and signals, so anything sitting on or just after a curve is now positioned against the real curve rather than a step of it. Straight modules are unchanged, to the digit.
+
+---
+
 ## v0.109.0 — 2026-08-25
 
 ### Fixed
