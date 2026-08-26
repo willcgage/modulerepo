@@ -3204,6 +3204,33 @@ export function SchematicEditor({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  /**
+   * ⭐⭐ THE APP DOES NOT DERIVE BENCHWORK — IT OFFERS TO BUILD IT (#351).
+   *
+   * Will, 2026-08-26: *"Do not derive benchwork. You can help an owner build,
+   * but don't make a decision on your own."*
+   *
+   * A module with no drawn board still gets a band on screen, derived from its
+   * length and endplate widths, and every surface then talked about it as though
+   * it were the board — *"Board, at its widest: 48″ × 24″"*. That is the app
+   * deciding the shape of somebody's bench work. **28 of 48 stored modules are in
+   * that state and 12 of them already carry track**, which is also why the band
+   * cannot simply be deleted: it would blank two thirds of the catalogue.
+   *
+   * So the band stays on screen as a PROPOSAL and this makes it real — one
+   * click, the owner's, writing exactly the shape they can already see so
+   * nothing moves. After it the board is authored, editable and theirs.
+   *
+   * ⛔ NO GATE. #337 measured what enforcing the build order literally would do:
+   * it would hide the Trackwork layer on almost every module an owner has, with
+   * nothing to auto-migrate them. Offering beats forbidding, and forbidding here
+   * would be the app making a bigger decision than the one being removed.
+   *
+   * ⚠️ WHERE it is written matters. A module-level outline goes STALE the moment
+   * a second board is added — the module grows and the polygon doesn't (#108) —
+   * so a sections-first module gets the shape on its SECTION. Only a module with
+   * no sections at all gets a module outline.
+   */
   // Shared "+ Track" wiring — used both on the Track drawing tool (canvas
   // context bar) and in the Objects list.
   const trackAdd = {
@@ -3483,6 +3510,7 @@ export function SchematicEditor({
             geoSpec={geoSpec}
             derivedPoses={derivedPoses}
             boardExtent={boardExtent}
+            boardProposal={footprint.band}
             benchworkLen={benchworkLen}
             benchworkAuthored={footprint.benchworkAuthored}
             mainReachesPlate={mainReachesPlate}
@@ -4606,6 +4634,48 @@ function Readiness({
  * which is where the old "mainline" stage's fields live now. That's what lets
  * the stage rail die without orphaning them.
  */
+/**
+ * ⭐⭐ THE APP DOES NOT DERIVE BENCHWORK — IT OFFERS TO BUILD IT (#351).
+ *
+ * Will, 2026-08-26: *"Do not derive benchwork. You can help an owner build, but
+ * don't make a decision on your own."*
+ *
+ * A module with no drawn board still gets a band on screen, worked out from its
+ * length and endplate widths, and every surface then talked about it as though
+ * it were the board — *"Board, at its widest: 48″ × 24″"*. That is the app
+ * deciding the shape of somebody's bench work.
+ *
+ * ⛔ THE BAND CANNOT SIMPLY GO. **28 of 48 stored modules have no drawn board and
+ * 12 of them already carry track** — deleting it would blank two thirds of the
+ * catalogue. So it stays on screen as a PROPOSAL, and this turns it into the
+ * owner's, in one click, writing exactly the shape they can already see so
+ * nothing moves.
+ *
+ * ⛔ AND NO GATE. #337 measured what enforcing the build order literally would
+ * do: hide the Trackwork layer on almost every module an owner has, with nothing
+ * to auto-migrate them. Forbidding here would be the app making a BIGGER
+ * decision than the one being removed.
+ *
+ * ⚠️ WHERE it is written matters. A module-level outline goes STALE the moment a
+ * second board is added — the module grows and the polygon does not (#108) — so
+ * a sections-first module gets the shape on its SECTION, and only a module with
+ * no sections at all gets a module outline.
+ */
+function boardOfferFor(
+  state: EditorState,
+  patch: (fn: (s: EditorState) => void) => void,
+  proposal: BenchworkPoint[],
+) {
+  const can = !benchworkDescribed(state) && proposal.length >= 3 && state.sections.length <= 1;
+  const build = () =>
+    patch((s) => {
+      const poly = proposal.map((p) => ({ x: p.x, y: p.y }));
+      if (s.sections.length === 1) s.sections[0].outline = poly;
+      else s.outline = poly;
+    });
+  return { can, build };
+}
+
 function Inspector({
   selection,
   select,
@@ -4623,6 +4693,7 @@ function Inspector({
   geoSpec,
   derivedPoses,
   boardExtent,
+  boardProposal,
   benchworkLen,
   benchworkAuthored,
   mainReachesPlate,
@@ -4699,6 +4770,9 @@ function Inspector({
    * measure. `drawn` is false when this is the derived band rather than a board
    * anyone drew. Measured off the benchwork only — never off the track. */
   boardExtent: { w: number; h: number; drawn: boolean } | null;
+  /** The derived band — the shape a module with no drawn board shows. Offered
+   * to the owner to make real, never written on their behalf (#351). */
+  boardProposal: BenchworkPoint[];
   /** The length the BENCHWORK reports — endplate A's face to endplate B's —
    * or null unless both ends are authored edge bindings (#268). */
   benchworkLen: number | null;
@@ -4732,6 +4806,8 @@ function Inspector({
   carTypes: { value: string; display_label: string }[];
   onCarTypeSuggested: (o: { value: string; display_label: string }) => void;
 }) {
+  // Offered, never taken on the owner's behalf — see boardOfferFor (#351).
+  const boardOffer = boardOfferFor(state, patch, boardProposal);
   const [loopShape, setLoopShape] = useState<ReturnLoopShape>("teardrop");
   /** Turn the lead into a return loop of the chosen shape: a computed loop
    * centre-line (a section chain can't express the sharp wye at the throat) set
@@ -4888,17 +4964,42 @@ function Inspector({
               16″ at one end and 32″ at the other, and 32″ is the space it needs.
               Read off the benchwork only: track that overhangs a fascia does not
               make the board bigger. */}
-          {boardExtent && (
+          {boardExtent && boardExtent.drawn && (
             <p className="rounded-md border border-gray-200 bg-gray-50 p-2 text-[11px] text-gray-600">
               Board, at its widest:{" "}
               <strong>
                 {Math.round(boardExtent.w * 10) / 10}″ left to right ×{" "}
                 {Math.round(boardExtent.h * 10) / 10}″ top to bottom
               </strong>
-              {!boardExtent.drawn && (
-                <> — derived from the dimensions; no benchwork has been drawn yet.</>
-              )}
             </p>
+          )}
+          {/* ⛔ NOT "the board" — nobody has drawn one (#351). Lead with the
+              absence and offer to make the shape on screen real, rather than
+              quoting a derived size as though it were a measurement of
+              something. See {@link buildBoardFromProposal}. */}
+          {boardExtent && !boardExtent.drawn && (
+            <div className="rounded-md border border-amber-300 bg-amber-50 p-2 text-[11px] text-amber-900">
+              <p>
+                <strong>No benchwork drawn yet.</strong> The board on the canvas is a shape
+                worked out from the length and the endplates — it is a suggestion, not
+                bench work you described. Everything else sits on it, so it is worth making
+                it real.
+              </p>
+              {boardOffer.can && (
+                <button
+                  type="button"
+                  onClick={boardOffer.build}
+                  className="mt-1.5 rounded-md border border-amber-400 bg-white px-2 py-1 text-[11px] font-medium text-amber-900 hover:bg-amber-100"
+                >
+                  Build this board — {Math.round(boardExtent.w * 10) / 10}″ ×{" "}
+                  {Math.round(boardExtent.h * 10) / 10}″
+                </button>
+              )}
+              <p className="mt-1 text-amber-800">
+                It keeps the shape you can see now, and you can reshape it afterwards with
+                the <strong>Benchwork</strong> tool (<kbd>B</kbd>).
+              </p>
+            </div>
           )}
           {/* ⭐ HOW FAR THE RAIL RUNS — the number the whole canvas is measured
               in, and until #246 it could be edited NOWHERE (modulerepo#246).
