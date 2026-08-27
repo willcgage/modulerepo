@@ -5,6 +5,13 @@ Headings are `version — date` (YYYY-MM-DD).
 
 ---
 
+## v0.117.0 — 2026-08-26
+
+### Fixed
+- **The dashed line for a seam is now drawn on the angle you set it to.** Setting a seam's angle reshaped the two boards either side of it, but the dashed line marking the joint stayed square — so the one thing on screen that shows where the cut is was the one thing that did not follow it. It now follows the cut, and the position label goes with it. A seam left square, or set to an angle steep enough to be unbuildable, draws exactly as before.
+
+---
+
 ## v0.116.0 — 2026-08-26
 
 ### Added
