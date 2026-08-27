@@ -4024,6 +4024,7 @@ function SectionList({
   onShape,
   meets,
   floating,
+  boardWidthInches,
   inp,
 }: {
   sections: SchematicSection[];
@@ -4045,6 +4046,8 @@ function SectionList({
   onShape: (id: string) => void;
   meets: { a: string; b: string; lengthInches: number }[];
   floating: Set<string>;
+  /** How wide the boards are, for saying what a skewed seam would reach (#354). */
+  boardWidthInches: number;
   inp: string;
 }) {
   // Length commits on blur, for the same reason the old joint fields had to: a
@@ -4305,7 +4308,81 @@ function SectionList({
                   );
                 })}
               </div>
-              {/* What the JOINT with the next board is, once both sides are described. */}
+              {/* ⭐⭐ HOW THIS SEAM IS CUT (#354).
+                  Will: an angled internal joint is a legal thing to build — the
+                  standard's end-interface rules bind the ENDPLATE and exempt
+                  internal boundaries (#96) — *"however I still don't see a good
+                  way to alter and straighten this dashed line."* Both halves of
+                  that: an angle to author, and one click to square it.
+
+                  ⭐ IT LIVES ON THE JOINT, NOT ON EITHER BOARD, because that is
+                  what it is a fact about. Stored on the WEST board's `endB` so a
+                  shared seam has exactly one owner (see `sectionJointSkewDeg`);
+                  shown here so nobody has to know that.
+
+                  ⛔ Only between two boards. The far end of the last board is an
+                  ENDPLATE, and §2.0 is a hard S there: track crosses it
+                  perpendicular, so there is nothing to angle. */}
+              {(() => {
+                const next = sections[i + 1];
+                if (!next) return null;
+                const skew = sec.endB?.skewDeg ?? 0;
+                const half = boardWidthInches / 2;
+                const shift = Math.abs(skew) >= 90 ? Infinity : Math.abs(half * Math.tan((skew * Math.PI) / 180));
+                const room = Math.min(sec.lengthInches ?? 0, next.lengthInches ?? 0);
+                return (
+                  <div className="mt-1 rounded border border-gray-200 p-1.5">
+                    <label className="block text-[11px] font-medium text-gray-500">
+                      Seam with {next.name || `section ${i + 2}`} — angle (°)
+                      <CommitNumberField
+                        step={1}
+                        value={sec.endB?.skewDeg ?? null}
+                        placeholder="0 — square across the board"
+                        onCommit={(v) =>
+                          set(i, {
+                            endB:
+                              v == null
+                                ? sec.endB
+                                  ? { ...sec.endB, skewDeg: null }
+                                  : null
+                                : { ...(sec.endB ?? {}), skewDeg: v },
+                          })
+                        }
+                        inp={`${inp} text-xs`}
+                        title="Degrees away from square. Blank or 0 is a square cut. Positive runs the left-hand side of the board further east."
+                      />
+                    </label>
+                    {skew !== 0 && (
+                      <div className="mt-1 flex items-center gap-2">
+                        <span className="text-[11px] text-gray-500">
+                          {Number.isFinite(shift)
+                            ? `The cut reaches ${Math.round(shift * 10) / 10}″ further along one side than the other.`
+                            : "A cut at 90° lies along the board, not across it."}
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() => set(i, { endB: { ...(sec.endB ?? {}), skewDeg: null } })}
+                          className="ml-auto shrink-0 font-medium text-blue-600 hover:underline"
+                        >
+                          Square it
+                        </button>
+                      </div>
+                    )}
+                    {/* ⚠️ FLAGGED, NOT CLAMPED. The number stays exactly as typed
+                        — an owner may be describing a board that really is cut
+                        that way, and it is not the app's place to decide they
+                        mistyped. It only says what would happen. */}
+                    {skew !== 0 && (!Number.isFinite(shift) || shift > room) && (
+                      <p className="mt-1 text-[11px] text-amber-700">
+                        ⚠ At {skew}° this cut runs{" "}
+                        {Number.isFinite(shift) ? `${Math.round(shift * 10) / 10}″` : "right"} off
+                        the end of a {Math.round(room * 10) / 10}″ board — the two boards would not
+                        meet along a straight cut.
+                      </p>
+                    )}
+                  </div>
+                );
+              })()}
               {(() => {
                 const next = sections[i + 1];
                 if (!next) return null;
@@ -5043,6 +5120,10 @@ function Inspector({
               onShape={onShapeSection}
               meets={sectionMeets}
               floating={floatingSections}
+              boardWidthInches={Math.max(
+                state.endplateWidths.A ?? FREEMO_ENDPLATE_WIDTH_RECOMMENDED_INCHES,
+                state.endplateWidths.B ?? FREEMO_ENDPLATE_WIDTH_RECOMMENDED_INCHES,
+              )}
               inp={inp}
             />
           ) : (
