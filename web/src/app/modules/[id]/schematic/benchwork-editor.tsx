@@ -251,6 +251,7 @@ export function BenchworkEditor({
   endplateTrackOffsets,
   centerline = [],
   sectionBreaks = [],
+  sectionSkews = [],
   mainLane = 0,
   onSectionBreakMove,
   onEndplateEndMove,
@@ -314,6 +315,9 @@ export function BenchworkEditor({
   centerline?: Pt[];
   /** Internal section joints (inches from A) — drawn as dividers on the board. */
   sectionBreaks?: number[];
+  /** How each joint is cut, degrees away from square, parallel to
+   * `sectionBreaks` (#354). Absent or 0 draws the square cut it always was. */
+  sectionSkews?: number[];
   /** Which lane Main 1 draws on — 0 (centre) normally, 1 when the module's
    * mains are swapped so Main 1 is the upper track (#92 / #131). */
   mainLane?: number;
@@ -4364,13 +4368,32 @@ const ENDPLATE_TAB = 5; // ballast-shoulder band width, inches
             const p = sampleAt(centerline, pos);
             const half =
               Math.max(endplateWidths?.["A"] ?? 24, endplateWidths?.["B"] ?? 24) / 2 + 2;
+            /**
+             * ⭐⭐ THE LINE IS THE CUT, so it has to be drawn on the skew too
+             * (#354). A cut at `skew` degrees crossing at lateral offset `u`
+             * meets the spine at `pos + u·tan(skew)` — the same one formula the
+             * package uses for the boards' own shapes, so the dashed line and
+             * the seam between the two bands are the same line.
+             *
+             * ⚠️ At ±90° there is no cut across the board at all (and JS's
+             * tan(90°) is a finite 1.6e16, not Infinity), so it draws square —
+             * matching what the boards do, and what the panel warns about.
+             */
+            const skew = sectionSkews[i] ?? 0;
+            const at = (u: number) => {
+              const t = !skew || Math.abs(skew) >= 90 ? 0 : u * Math.tan((skew * Math.PI) / 180);
+              const q = t ? sampleAt(centerline, pos + t) : p;
+              return { x: q.x + q.nx * u, y: q.y + q.ny * u };
+            };
+            const A = at(half);
+            const B = at(-half);
             return (
               <g key={`sec${i}`}>
                 <line
-                  x1={p.x + p.nx * half}
-                  y1={sy(p.y + p.ny * half)}
-                  x2={p.x - p.nx * half}
-                  y2={sy(p.y - p.ny * half)}
+                  x1={A.x}
+                  y1={sy(A.y)}
+                  x2={B.x}
+                  y2={sy(B.y)}
                   stroke="#64748b"
                   strokeWidth={world(1)}
                   strokeDasharray={`${world(3)} ${world(2)}`}
@@ -4385,8 +4408,8 @@ const ENDPLATE_TAB = 5; // ballast-shoulder band width, inches
                   </title>
                 </line>
                 <text
-                  x={p.x + p.nx * half}
-                  y={sy(p.y + p.ny * half) - world(2)}
+                  x={A.x}
+                  y={sy(A.y) - world(2)}
                   textAnchor="middle"
                   fontSize={world(7)}
                   fill="#64748b"

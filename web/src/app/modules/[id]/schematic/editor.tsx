@@ -206,6 +206,7 @@ import {
   type IndustryLabelMode,
   moduleLengthFromSections,
   sectionBreaksFromSections,
+  sectionJointSkewDeg,
   sectionBand,
   sectionAdjacency,
   sectionSpansOrWhole,
@@ -1908,6 +1909,18 @@ export function SchematicEditor({
     [state.sections, state.sectionBreaks],
   );
 
+  /**
+   * How each joint is CUT, parallel to {@link canvasSectionBreaks} (#354).
+   *
+   * ⭐ Read through `sectionJointSkewDeg` rather than off `endB` directly, so the
+   * canvas and the panel get the answer from the same place — the west board
+   * owns a shared seam, and two readers of that fact would be one too many.
+   */
+  const canvasSectionSkews = useMemo(
+    () => canvasSectionBreaks.map((_, i) => sectionJointSkewDeg(state.sections, i)),
+    [canvasSectionBreaks, state.sections],
+  );
+
   /** Dragging a joint on a sectioned module resizes the two boards it divides,
    * leaving every other board — and the module's overall length — alone. Same
    * feel as dragging a joint always had, just expressed as section lengths. */
@@ -3400,6 +3413,7 @@ export function SchematicEditor({
                 onCanvasContextMenu={setMenuAt}
                 mainLane={doc.tracks.find((t) => t.id === MAIN_TRACK_ID)?.lane ?? 0}
                 sectionBreaks={canvasSectionBreaks}
+                sectionSkews={canvasSectionSkews}
                 onSectionBreakMove={moveSectionJoint}
                 onEndplateEndMove={moveEndplateEnd}
                 onEndplateMove={moveEndplate}
