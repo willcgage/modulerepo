@@ -5,6 +5,13 @@ Headings are `version — date` (YYYY-MM-DD).
 
 ---
 
+## v0.116.0 — 2026-08-26
+
+### Added
+- **A seam between two boards can be cut on the angle, and a crooked one can be squared.** Where two boards meet, the joint now has an angle you can set — blank or 0 is the square cut it has always been. An angled internal seam is a perfectly ordinary thing to build: it can put the cut where the framing allows, keep it clear of a turnout, or let a board come apart along a scenic edge, and the standard's rules about square crossings apply to endplates, not to joints inside a module. There is a **Square it** button beside the angle for putting a seam back, and the panel says how far the cut would reach along one side of the board compared with the other. If the angle is steep enough that the cut would run off the end of a board, it says so and leaves your number alone. The far end of the last board is an endplate, so it has no angle to set — track has to cross an endplate square.
+
+---
+
 ## v0.115.0 — 2026-08-26
 
 ### Changed
