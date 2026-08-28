@@ -5,6 +5,13 @@ Headings are `version — date` (YYYY-MM-DD).
 
 ---
 
+## v0.120.0 — 2026-08-28
+
+### Fixed
+- **An endplate you have placed but not yet run track to is on the operations preview now.** A third endplate only appeared once a route was drawn to it, so a module could declare four endplates and show two — Harrisonville says *Endplates 4* and its preview drew the two on the ends, with C and D nowhere at all. The face is now drawn wherever the module says it is, in amber, with nothing joining it, because nothing does: the gap is the point. The endplate panel says the same thing in words, and tells apart a plate with no track named from one naming a track this module hasn't got. **No track is drawn for you** — where the route should run is yours to decide, and the plate keeps whatever you wrote. Three modules gain a face this way, and a preview that gains one gets a little taller to make room for it; every other module is drawn exactly as before.
+
+---
+
 ## v0.119.0 — 2026-08-28
 
 ### Changed
