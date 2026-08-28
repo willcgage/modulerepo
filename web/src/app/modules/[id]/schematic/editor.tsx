@@ -150,6 +150,7 @@ import {
   MAIN2_TRACK_ID,
   stateToDoc,
   implicitCrossings,
+  moduleFeatures,
   type ImplicitCrossing,
   docToState,
   graphToDoc,
@@ -682,6 +683,15 @@ export function SchematicEditor({
    * geometry isn't modelled yet, so inventing the part would be inventing
    * measurements nobody took. */
   const undeclaredCrossings = useMemo(() => implicitCrossings(doc), [doc]);
+  /** Third endplates the document declares that no route reaches (#367).
+   * ⭐ ONE DEFINITION, TWO SURFACES — the operations preview draws this same set
+   * from this same doc, so the picture and the panel can never disagree about
+   * which plate a train cannot get to. Flagged, never fixed: which track ought
+   * to reach it is the owner's to draw. */
+  const unreachedPlates = useMemo(
+    () => new Map(moduleFeatures(doc).unreachedEndplates.map((u) => [u.id, u])),
+    [doc],
+  );
   const isDouble = state.configA === "double" || state.configB === "double";
   // Derived endplate poses (#175 phase 1b) — the auto-computed geometry the
   // owner can override for shapes the fields can't express (wye/loop/other).
@@ -3528,6 +3538,7 @@ export function SchematicEditor({
             benchworkLen={benchworkLen}
             benchworkAuthored={footprint.benchworkAuthored}
             mainReachesPlate={mainReachesPlate}
+            unreachedPlates={unreachedPlates}
             wantsManualPose={wantsManualPose}
             setEndplateWidth={setEndplateWidth}
             setEndplateEdgeStart={setEndplateEdgeStart}
@@ -4788,6 +4799,7 @@ function Inspector({
   benchworkLen,
   benchworkAuthored,
   mainReachesPlate,
+  unreachedPlates,
   wantsManualPose,
   setEndplateWidth,
   setEndplateEdgeStart,
@@ -4874,6 +4886,10 @@ function Inspector({
    * whether it misses by running PAST the plate rather than stopping short.
    * Absent when there is no drawn main to check. Reported, never corrected. */
   mainReachesPlate: Record<string, { gap: number; past: boolean }>;
+  /** Third endplates no route reaches (#367) — keyed by endplate id. Built
+   * from the SAME doc the operations preview draws, so the panel and the
+   * picture cannot disagree about which plate a train cannot get to. */
+  unreachedPlates: ReadonlyMap<string, { reason: "no-track" | "missing-track" }>;
   wantsManualPose: boolean;
   setEndplateWidth: (id: string, raw: string) => void;
   setEndplateEdgeStart: (id: string, raw: string) => void;
@@ -5625,6 +5641,20 @@ function Inspector({
                 ⚠️ Old docs that stored `kind: "branch"` are READ unchanged —
                 nothing is auto-migrated (standing constraint). They keep their
                 stored value until their owner saves. */}
+            {/* ⛔ Nothing runs to this endplate (#367). Said, not fixed — the
+                same rule as #350 next door: which track ought to reach the
+                plate is the owner's call, and drawing one for them is exactly
+                what this app does not do. */}
+            {unreachedPlates.has(id) && (
+              <p className="rounded-md bg-amber-50 px-2 py-1 text-xs text-amber-800" role="status">
+                ⚠{" "}
+                {unreachedPlates.get(id)!.reason === "missing-track"
+                  ? "This endplate names a track this module doesn't have, so no train can reach it. Draw the track to the plate, or pick the one that does reach it."
+                  : "No track runs to this endplate, so no train can reach it. Draw track from the main out to the plate."}{" "}
+                The face is still drawn on the operations preview — the module
+                declares it, so the picture says so.
+              </p>
+            )}
             <p className="text-[11px] text-gray-400">
               Drag the endplate on the board to place it on a fascia, then draw
               track to it. Track must cross square and run straight for 4″ from

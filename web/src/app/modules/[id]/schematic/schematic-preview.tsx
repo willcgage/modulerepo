@@ -495,6 +495,66 @@ export function SchematicPreview({
           );
         })}
 
+        {/* ⛔ A THIRD ENDPLATE NOTHING RUNS TO (#367). The document declares the
+            face, so the picture shows the face — FMN-0012 used to say ENDPLATES
+            4 beside a drawing of two, and the caption must agree with the
+            drawing (#96).
+
+            NO ROUTE IS DRAWN TO IT, and that is the point, not an omission:
+            which track ought to reach the plate is the owner's to draw, and
+            inventing one is what this app does not do. #170's call that the
+            connector waits for track still stands — what changes is that the
+            PLATE no longer waits with it.
+
+            It sits at its OWN position along the module, on its own lane,
+            facing out. Amber, because this is a flag: a face a train cannot
+            get to is a thing the owner needs to see. */}
+        {f.unreachedEndplates.map((u) => {
+          const x = px(u.posFrac);
+          const y = laneY(u.lane);
+          const out = u.side === "up" ? -1 : 1; // out of the module, in SVG y
+          return (
+            <g key={`unreached-${u.id}`}>
+              <line
+                x1={x - FACE}
+                y1={y}
+                x2={x + FACE}
+                y2={y}
+                stroke="#d97706"
+                strokeWidth={1.8}
+                strokeLinecap="round"
+              />
+              <line
+                x1={x}
+                y1={y + out * 2}
+                x2={x}
+                y2={y + out * GHOST}
+                stroke="#d97706"
+                strokeOpacity={0.55}
+                strokeWidth={1.6}
+                strokeDasharray="2.5 2.5"
+                strokeLinecap="round"
+              />
+              <text
+                x={x + FACE + 2}
+                y={y}
+                fontSize="7"
+                fill="#b45309"
+                dominantBaseline="middle"
+              >
+                {u.id}
+              </text>
+              <title>
+                {`Endplate ${u.id}${u.label && u.label !== u.id ? ` (${u.label})` : ""} — declared here, but ${
+                  u.reason === "missing-track"
+                    ? "the track it names is not in this module"
+                    : "no track runs to it"
+                }, so no train can reach it.`}
+              </title>
+            </g>
+          );
+        })}
+
         {/* Signals — drawn parallel to the track, pointing in the facing
             direction, so two at the same spot (opposite ways) don't stack. */}
         {f.signals.map((s) => {
