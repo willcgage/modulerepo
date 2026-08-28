@@ -5,6 +5,13 @@ Headings are `version — date` (YYYY-MM-DD).
 
 ---
 
+## v0.119.0 — 2026-08-28
+
+### Changed
+- **An endplate is drawn as somewhere a module joins on, not as the end of the track.** In the operations preview, a branch endplate ended in a short tick across the rail — which is the ordinary drafting mark for *the rail stops here* — and endplates A and B ended in nothing at all but a letter. So the one place another module can be coupled on looked exactly like the one place it cannot, and it read worst on a branch plate, which hangs off the middle of the module with nothing beyond it to hint otherwise. Every endplate now carries the same mark whatever letter it is: the face of the plate, and a faint dashed continuation running past it, for the railroad that carries on into whatever is attached there. A module that genuinely ends — an end of the line, or a pocket — gets a solid stop instead, so the two can be told apart at a glance. Which railroad actually lies beyond a plate is still not said here: that depends on what is physically coupled to the module, and Free-Dispatcher names the neighbour once a layout is put together.
+
+---
+
 ## v0.118.0 — 2026-08-27
 
 ### Fixed
