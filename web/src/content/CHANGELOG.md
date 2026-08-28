@@ -5,6 +5,13 @@ Headings are `version — date` (YYYY-MM-DD).
 
 ---
 
+## v0.121.0 — 2026-08-28
+
+### Changed
+- **A placed endplate with no track to it no longer pushes the operations preview so tall.** The face was being given the same clear empty lane a *route* to an endplate gets — and that gap is there for a reason, since a route runs the full width of the picture and would otherwise read as one more main alongside. A plate with nothing running to it is a short mark in one spot and can't be mistaken for a main, so it now sits on the first free lane instead of one beyond it. Harrisonville's preview comes down from 112 to 88 without saying anything less; three modules are affected and every other one is drawn exactly as before.
+
+---
+
 ## v0.120.0 — 2026-08-28
 
 ### Fixed
