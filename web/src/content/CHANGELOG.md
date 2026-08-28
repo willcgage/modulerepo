@@ -5,6 +5,13 @@ Headings are `version — date` (YYYY-MM-DD).
 
 ---
 
+## v0.118.0 — 2026-08-27
+
+### Fixed
+- **The west endplate is drawn square on a module that starts straight and then bends.** Working out which way a board faces means reading the curve, and at the very start of a module there is only one step of it to read — so on a module whose first board is straight and whose second curves, the west endplate came out about 1⅞° off square. Track has to cross an endplate at a right angle, so a plate drawn on the skew is the one thing that must not happen. Two modules were affected. Nothing else moves: a module that is straight throughout, or curved throughout, was already right.
+
+---
+
 ## v0.117.0 — 2026-08-26
 
 ### Fixed
