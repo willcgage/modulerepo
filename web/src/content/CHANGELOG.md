@@ -5,6 +5,13 @@ Headings are `version — date` (YYYY-MM-DD).
 
 ---
 
+## v0.127.0 — 2026-08-29
+
+### Added
+- **A siding whose two turnouts put it on opposite sides of the main now says so.** A passing siding sits on one side of the main, so its two ends take *opposite* hands — a left at one end and a right at the other. A same-handed pair describes a siding that leaves below the main and rejoins above it, which cannot be built. The drawing only ever read the turnout at the throat, so not only was the contradiction invisible, but correcting the other end changed nothing on screen. The siding's panel now names both turnouts, says which side each one implies, and leaves both alone — which end is wrong is yours to decide. A wye is never flagged, since it throws both ways and can meet a siding on either side.
+
+---
+
 ## v0.126.1 — 2026-08-29
 
 ### Changed

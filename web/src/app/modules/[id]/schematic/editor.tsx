@@ -223,6 +223,7 @@ import {
 import { snapPoseToOutline, sampleAt, laneOffset } from "@/lib/physical-track";
 import { partLibraryWith } from "./part-library";
 import { tracksAdriftFromTurnouts } from "@/lib/track-adrift";
+import { sidingHandConflicts } from "@/lib/siding-hands";
 import { endplateTrackPoints, startJointsFor } from "./piece-layer";
 import type { StoredTrackPart } from "@willcgage/module-schematic";
 import {
@@ -7716,6 +7717,30 @@ function Inspector({
             they do not meet. Set the end below to about{" "}
             <strong>{Math.round(adrift.turnoutPos * 10) / 10}&Prime;</strong> — or move the
             turnout to the track. Nothing has been changed for you.
+          </p>
+        );
+      })()}
+      {/* ⛔ ITS TWO TURNOUTS PUT IT ON OPPOSITE SIDES OF THE MAIN (#371). Will,
+          on FMN-0085: "sw2 should be the opposing to build a siding,
+          technically." A siding sits on ONE side, so its two ends are reached
+          by OPPOSITE hands — and the drawing reads only the throat turnout, so
+          this contradiction was invisible AND correcting it changed nothing on
+          screen. It says so here and rewrites neither hand: which end is wrong
+          is the owner's call. */}
+      {(() => {
+        const clash = sidingHandConflicts(state).get(t.id);
+        if (!clash) return null;
+        const where = (side: number) => (side > 0 ? "above" : "below");
+        return (
+          <p className="rounded-md bg-amber-50 px-2 py-1 text-xs text-amber-800" role="status">
+            ⚠ This track&rsquo;s two turnouts disagree about which side of the main
+            it is on. <strong>{clash.a.id}</strong> ({clash.a.kind}-hand, at{" "}
+            {Math.round(clash.a.pos * 10) / 10}&Prime;) puts it{" "}
+            <strong>{where(clash.a.side)}</strong>, but <strong>{clash.b.id}</strong>{" "}
+            ({clash.b.kind}-hand, at {Math.round(clash.b.pos * 10) / 10}&Prime;) puts it{" "}
+            <strong>{where(clash.b.side)}</strong> — a siding cannot leave one side
+            and rejoin on the other. The two ends of a siding take opposite hands.
+            Change whichever end is wrong; nothing has been changed for you.
           </p>
         );
       })()}
