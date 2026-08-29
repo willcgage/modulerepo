@@ -8,7 +8,7 @@ import {
 } from "@/lib/module-schematic";
 import { fetchIndustryTypes, fetchCarTypes } from "@/lib/edge";
 import { loadStoredTrackParts } from "@/lib/track-parts";
-import { SchematicEditor } from "./editor";
+import { SchematicEditorClient } from "./editor-client";
 
 export default async function ModuleSchematicPage({
   params,
@@ -220,7 +220,7 @@ export default async function ModuleSchematicPage({
   // the canvas gets the room, and each panel scrolls itself.
   return (
     <div className="h-dvh overflow-hidden">
-      <SchematicEditor
+      <SchematicEditorClient
         moduleId={moduleId}
         recordNumber={module.record_number}
         moduleName={module.module_name}
