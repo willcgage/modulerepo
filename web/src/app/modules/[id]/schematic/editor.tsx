@@ -221,6 +221,7 @@ import {
 } from "@/lib/module-schematic";
 import { snapPoseToOutline, sampleAt, laneOffset } from "@/lib/physical-track";
 import { partLibraryWith } from "./part-library";
+import { tracksAdriftFromTurnouts } from "@/lib/track-adrift";
 import { endplateTrackPoints, startJointsFor } from "./piece-layer";
 import type { StoredTrackPart } from "@willcgage/module-schematic";
 import {
@@ -7629,6 +7630,27 @@ function Inspector({
           turnout&rsquo;s diverging rail.
         </p>
       )}
+      {/* ⛔ THIS TRACK NO LONGER REACHES ITS OWN TURNOUT (#372). Moving a turnout
+          deliberately does not drag the track — "sidings/spurs are the owner's
+          to place" — so this SAYS SO and changes nothing. On FMN-0085 the two
+          turnouts moved to 20″ and 160″ while the siding stayed at 84″–126.7″,
+          and every view drew something different without one of them explaining
+          why. The numbers below are the fix, which is why the warning sits
+          directly above them. */}
+      {(() => {
+        const adrift = tracksAdriftFromTurnouts(state, partLibrary).get(t.id);
+        if (!adrift) return null;
+        return (
+          <p className="rounded-md bg-amber-50 px-2 py-1 text-xs text-amber-800" role="status">
+            ⚠ This track stops{" "}
+            <strong>{Math.round(adrift.gapInches * 10) / 10}&Prime;</strong> short of the
+            turnout at {Math.round(adrift.turnoutPos * 10) / 10}&Prime; that opens it, so
+            they do not meet. Set the end below to about{" "}
+            <strong>{Math.round(adrift.turnoutPos * 10) / 10}&Prime;</strong> — or move the
+            turnout to the track. Nothing has been changed for you.
+          </p>
+        );
+      })()}
       <div className="grid grid-cols-2 gap-2">
         <label className="block text-xs font-medium text-gray-600">
           Starts (in from A)

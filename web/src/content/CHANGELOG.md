@@ -5,6 +5,13 @@ Headings are `version — date` (YYYY-MM-DD).
 
 ---
 
+## v0.124.0 — 2026-08-29
+
+### Added
+- **The builder now tells you when a siding or spur no longer reaches the turnout that opens it.** Move a turnout and the track it opens does not move with it — that is deliberate, because where your track runs is yours to say and the app will not redraw it behind your back. What was missing was anybody mentioning that the two had drifted apart. Now the track's panel says how far short it stops and which turnout it has lost touch with, right above the two fields that set its ends, and it says the exact number to type. **Nothing is changed for you** — the warning appears, your track stays exactly as you left it, and it disappears when the two ends meet again. A spur's far end is still yours to put wherever you like; only the end that should meet a turnout is judged.
+
+---
+
 ## v0.123.0 — 2026-08-29
 
 ### Fixed
