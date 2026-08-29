@@ -5,6 +5,13 @@ Headings are `version — date` (YYYY-MM-DD).
 
 ---
 
+## v0.121.1 — 2026-08-29
+
+### Changed
+- **Groundwork for a fix: the builder page now says what it is doing while it loads.** Opening the builder for one module has been timing out, and the failure leaves nothing behind to explain itself — the page simply stops. It now records each step as it completes, so the next time it stalls the record shows exactly which step it stalled on. Nothing about the page changes for you; this only adds notes to the server log.
+
+---
+
 ## v0.121.0 — 2026-08-28
 
 ### Changed
