@@ -5,6 +5,13 @@ Headings are `version — date` (YYYY-MM-DD).
 
 ---
 
+## v0.126.1 — 2026-08-29
+
+### Fixed
+- **Dropping a turnout from the palette no longer brings a long stub with it either.** The last release stopped one route inventing 20-odd inches of diverging track, but a turnout dropped straight onto the track came through a different route that was still doing it. Both now use the one rule — the turnout's own measured diverging rail and nothing beyond.
+
+---
+
 ## v0.126.0 — 2026-08-29
 
 ### Fixed

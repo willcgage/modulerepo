@@ -2064,13 +2064,27 @@ export function SchematicEditor({
     setTool("track");
   }
   /**
-   * ⭐ THE DEFAULT LENGTH OF A NEW SPUR STUB — ONE DEFINITION, TWO CALLERS
-   * (`onDropTurnout` from the parts palette, and `addTurnout` below). A short
-   * length the owner then pulls out: ~12% of the board, at least 6″, and never
-   * past the far endplate.
+   * ⭐ THE DEFAULT LENGTH OF A NEW SPUR STUB — ONE DEFINITION, NOW THREE CALLERS
+   * (`onDropTurnout` from the parts palette, `addTurnout`, and
+   * `newDivergeTrack` from a turnout's "Diverges to").
+   *
+   * ⛔ It used to be `max(6, min(remaining, lengthInches * 0.12))` — 21.6″ of
+   * flex on a 180″ module, a number from nowhere. Will: "I don't know why there
+   * is such a long diverging route track attached to a turnout once it is
+   * placed. We know the measurements of the actual diverging route track on the
+   * turnout, so do not add extra."
+   *
+   * ⭐ So it is the PART'S OWN diverging rail and not one inch beyond: `pos` is
+   * the frog, and the moulding runs on for `pastFrogInchesForSize` before the
+   * owner's flex would begin. The new track therefore adds nothing of its own —
+   * the owner drags its end out to whatever they are really building.
+   *
+   * ⚠️ I fixed `newDivergeTrack`'s inline copy first and left this one, which is
+   * why a dropped turnout still arrived with 21.6″ attached. The rule lives
+   * HERE; nobody re-derives it.
    */
-  const defaultStubInches = (lengthInches: number, pos: number) =>
-    Math.round(Math.max(6, Math.min(lengthInches - pos, lengthInches * 0.12)) * 10) / 10;
+  const defaultStubInches = (size?: number | null) =>
+    Math.round(pastFrogInchesForSize(size ?? 6, partLibrary) * 10) / 10;
 
 
   const nextLane = (s: EditorState) => {
@@ -2149,8 +2163,7 @@ export function SchematicEditor({
     // `pastFrogInchesForSize` before the owner's flex would begin. The track
     // therefore starts and ends inside the turnout, adding nothing — the owner
     // drags its end out to whatever they are really building.
-    const stub =
-      Math.round(pastFrogInchesForSize(tn.size ?? 6, partLibrary) * 10) / 10;
+    const stub = defaultStubInches(tn.size);
     patch((s) => {
       s.extraTracks.push({
         id,
@@ -2317,7 +2330,7 @@ export function SchematicEditor({
           role: "spur",
           lane: nextLane(s),
           fromPos: pos,
-          toPos: Math.min(s.lengthInches, pos + defaultStubInches(s.lengthInches, pos)),
+          toPos: Math.min(s.lengthInches, pos + defaultStubInches(null)),
           moduleTrackId: null,
           trackName: "",
         });
@@ -2360,7 +2373,7 @@ export function SchematicEditor({
     const p = Math.round(pos * 10) / 10;
     // A short default the owner extends — ~12% of the board, at least 6″, and
     // never past the far endplate.
-    const stub = defaultStubInches(state.lengthInches, p);
+    const stub = defaultStubInches(spec.size);
     patch((s) => {
       s.extraTracks.push({
         id: spId,
