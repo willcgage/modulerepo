@@ -5,6 +5,13 @@ Headings are `version — date` (YYYY-MM-DD).
 
 ---
 
+## v0.123.0 — 2026-08-29
+
+### Fixed
+- **On a module's own page, a siding or spur now meets the turnout that opens it.** The drawing there showed those tracks floating free, unattached to anything, while the builder — looking at the very same module — drew them properly joined. Neither picture was of a different module and nothing was wrong with your track: the module page simply never drew the short piece of rail that leaves the turnout and runs into the siding. It draws it now, from the same measurements the builder uses, so the two pictures agree. Every module with a siding or a spur is affected, and each one gains a connection it should always have shown.
+
+---
+
 ## v0.122.0 — 2026-08-29
 
 ### Fixed
