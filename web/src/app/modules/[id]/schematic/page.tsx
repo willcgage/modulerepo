@@ -17,6 +17,21 @@ export default async function ModuleSchematicPage({
   params: Promise<{ id: string }>;
   searchParams: Promise<{ new?: string }>;
 }) {
+  // ⏱ TEMPORARY INSTRUMENTATION (#373) — /modules/[id]/schematic times out at
+  // Vercel's 300s ceiling with memory climbing 218→340MB, and it does NOT
+  // reproduce locally in dev or a production build over the same document,
+  // parts library and rows. So make production say which phase burns the time.
+  //
+  // ⚠️ No timestamps here on purpose: `Date.now()` in a component is an IMPURE
+  // CALL DURING RENDER and this repo's lint rejects it — the same rule that was
+  // right about a write-capable function in render (#284). Vercel stamps every
+  // log line, so the deltas come from the log viewer for free.
+  //
+  // Read it like this: the LAST phase logged is the one that never finished.
+  // If "handing off to render" appears and the request still times out, the
+  // hang is in SSR of SchematicEditor itself, not in this page's own work.
+  const lap = (phase: string) => console.log(`[schematic-page] ${phase}`);
+
   const { id } = await params;
   const { new: isNew } = await searchParams;
   const moduleId = Number(id);
@@ -36,6 +51,7 @@ export default async function ModuleSchematicPage({
     .eq("id", moduleId)
     .maybeSingle();
 
+  lap("loaded module");
   if (!module) notFound();
   // An ADMIN may open anyone's builder to diagnose a report, but READ-ONLY: the
   // canvas and inspector are the only place a lot of this is visible, and
@@ -56,6 +72,7 @@ export default async function ModuleSchematicPage({
     readOnly = true;
   }
 
+  lap("auth+owner check");
   const { data: moduleTracks } = await supabase
     .from("module_tracks")
     .select("id, track_name, capacity_scale_feet")
@@ -76,6 +93,7 @@ export default async function ModuleSchematicPage({
     loadStoredTrackParts(),
   ]);
 
+  lap("parallel lookups");
   // Car types spotted at each industry (join → rail_car_types.value).
   const carTypesByIndustry = new Map<number, string[]>();
   const industryIds = (industryRows ?? []).map((r) => r.id);
@@ -96,6 +114,7 @@ export default async function ModuleSchematicPage({
 
   // Geometry choices — the builder's first stage edits these, since they size
   // the board everything else is drawn on.
+  lap("car types");
   const { data: geometries } = await supabase
     .from("module_geometries")
     .select("value, display_label, requires_degrees, requires_offset_inches")
@@ -112,6 +131,7 @@ export default async function ModuleSchematicPage({
   // opens with the right configs. Without it a single↔double module (FMN-0038)
   // opened as single/single and the transition prompt never fired. The label is
   // seeded the same way, for the same reason, just below.
+  lap("geometries");
   const { data: endplateRows } = await supabase
     .from("freemon_endplates")
     .select("endplate_number, track_config, label")
@@ -148,6 +168,7 @@ export default async function ModuleSchematicPage({
       : raw;
   };
 
+  lap("endplate rows");
   const fallbackLength =
     Number(module.mainline_length_inches ?? module.length_total_inches) || 24;
   const initial = docToState(module.schematic, fallbackLength, moduleTracks ?? []);
@@ -194,6 +215,7 @@ export default async function ModuleSchematicPage({
     }
   }
 
+  lap("state built — handing off to render");
   // An editor is not an article: full-bleed, viewport-height, no page scroll —
   // the canvas gets the room, and each panel scrolls itself.
   return (
