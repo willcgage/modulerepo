@@ -489,7 +489,10 @@ export function physicalSchematic(
     const to = dt.toPos ?? 0;
     const far = Math.abs(to - t.pos) >= Math.abs(from - t.pos) ? to : from;
     if (far === t.pos) continue;
-    const toward = turnoutFacing({ pos: t.pos, divergeFarPos: far, flipped: t.flipped ?? false });
+    // ⚠️ NOT `?? false` (#379): absent means "never stated, derive", while
+    // `false` now means "the owner says forward" and is PINNED. Coercing the
+    // two together is what made a placed turnout re-orient itself on a drag.
+    const toward = turnoutFacing({ pos: t.pos, divergeFarPos: far, flipped: t.flipped });
     const side = divergeSideForHand(t.kind, far >= t.pos ? 1 : -1);
     const leg = turnoutDivergingLeg({
       sampleAt: (rel) => sampleAt(hostLine, rel),
