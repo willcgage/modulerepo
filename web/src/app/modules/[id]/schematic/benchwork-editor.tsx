@@ -828,8 +828,18 @@ export function BenchworkEditor({
     // and it was right. So pass the raw geometric direction here, and let the
     // one application inside do the work. `toward` keeps the flip for walking
     // the leg, which is correct there.
-    const stubDir = Math.sign((far.x - m.x) * tx + (far.y - m.y) * ty) || 1;
-    const handSide = divergeSideForHand(t.kind, stubDir, t.flipped);
+    // ⛔ `flipped` MUST BE APPLIED EXACTLY ONCE, and `toward` is where it lives.
+    //
+    // It was applied TWICE (into `toward` AND again here), so the 180° box did
+    // nothing at all. #378 fixed that by passing the RAW geometric direction
+    // plus the flag instead — which was the wrong half of the choice: it made
+    // the drawn side follow the geometry again, so dragging a turnout past its
+    // track's far end still swung the leg across, with the facing pinned. That
+    // is the very thing #379 is about.
+    //
+    // ⭐ The side is a function of HAND and FACING, and facing is the pinned
+    // fact. So: pass `toward`, and do NOT pass the flag again.
+    const handSide = divergeSideForHand(t.kind, toward);
     const geoSide = Math.sign((far.x - m.x) * m.nx + (far.y - m.y) * m.ny) || 1;
     // ⚠️ A CROSSOVER LEG HAS NO FREE CHOICE OF SIDE, so hand does not get a vote
     // (#196). Every other turnout throws to its hand — a right-hand turnout

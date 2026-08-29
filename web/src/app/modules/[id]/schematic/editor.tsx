@@ -151,6 +151,7 @@ import {
   stateToDoc,
   implicitCrossings,
   moduleFeatures,
+  pastFrogInchesForSize,
   type ImplicitCrossing,
   docToState,
   graphToDoc,
@@ -2136,8 +2137,20 @@ export function SchematicEditor({
     if (!tn) return;
     const id = nextId(role === "spur" ? "spur" : "sid", state.extraTracks.map((t) => t.id));
     const p = Math.round(tn.pos * 10) / 10;
+    // ⛔ NO INVENTED TRACK (#379). This used to mint
+    //     max(6, min(remaining, lengthInches * 0.12))
+    // — about 21.6″ of flex on a 180″ module, a number from nowhere. Will:
+    // "I don't know why there is such a long diverging route track attached to
+    // a turnout once it is placed. We know the measurements of the actual
+    // diverging route track on the turnout, so do not add extra."
+    //
+    // ⭐ So the new track is exactly the PART'S OWN diverging rail and not one
+    // inch beyond: `pos` is the frog, and the moulding runs on for
+    // `pastFrogInchesForSize` before the owner's flex would begin. The track
+    // therefore starts and ends inside the turnout, adding nothing — the owner
+    // drags its end out to whatever they are really building.
     const stub =
-      Math.round(Math.max(6, Math.min(state.lengthInches - p, state.lengthInches * 0.12)) * 10) / 10;
+      Math.round(pastFrogInchesForSize(tn.size ?? 6, partLibrary) * 10) / 10;
     patch((s) => {
       s.extraTracks.push({
         id,
@@ -2318,6 +2331,11 @@ export function SchematicEditor({
         onTrack: MAIN_TRACK_ID,
         divergeTrack: diverge,
         kind: "right",
+        // ⭐ ORIENTATION IS STATED AT PLACEMENT (#379). A turnout is born
+        // facing forward and STAYS that way until the owner unticks or ticks
+        // the box. Leaving it absent would hand the drawing back to geometry,
+        // which re-derives on every move — the defect Will hit on sw3.
+        flipped: false,
         // ⛔ NO `size` (#248). This gesture named no part, so the document says
         // nothing — and the inspector shows "Not recorded", which is the truth.
       });
@@ -2360,6 +2378,11 @@ export function SchematicEditor({
         onTrack,
         divergeTrack: spId,
         kind: spec.kind,
+        // ⭐ ORIENTATION IS STATED AT PLACEMENT (#379). A turnout is born
+        // facing forward and STAYS that way until the owner unticks or ticks
+        // the box. Leaving it absent would hand the drawing back to geometry,
+        // which re-derives on every move — the defect Will hit on sw3.
+        flipped: false,
         // ⭐ THE PALETTE ENTRY ANSWERS BOTH QUESTIONS (#198 step 5). "Atlas #7
         // LH" has already said #7, so there is no second control to disagree
         // with it — and naming the part here is exactly what the turnout
@@ -2444,7 +2467,7 @@ export function SchematicEditor({
           ...(p.partId ? { crossoverPartId: p.partId } : {}),
         });
       const swp = (id: string, pos: number, onTrack: string, diverge: string, kind: TurnoutKind) =>
-        s.turnouts.push({ id, name: "Crossover", pos, onTrack, divergeTrack: diverge, kind, size: p.size });
+        s.turnouts.push({ id, name: "Crossover", pos, onTrack, divergeTrack: diverge, kind, size: p.size, flipped: false });
       if (p.double) {
         conn(xoA, true);
         conn(xoB, false);
@@ -2564,6 +2587,11 @@ export function SchematicEditor({
           // Main 2 extends toward the double end (touchesA = double at A/west).
           kind:
             (touchesA ? -1 : 1) === (s.mainsSwapped ? -1 : 1) ? "left" : "right",
+          // ⭐ ORIENTATION IS STATED AT PLACEMENT (#379). A turnout is born
+          // facing forward and STAYS that way until the owner unticks or ticks
+          // the box. Leaving it absent would hand the drawing back to geometry,
+          // which re-derives on every move — the defect Will hit on sw3.
+          flipped: false,
           // ⛔ NO `size` (#248) — and this is THE site the issue is about: the
           // comment above says "matches buildTransition", which writes no size
           // at all. Now it really does match.
@@ -4964,7 +4992,7 @@ function Inspector({
       });
       // The wye at the throat, diverging to the loop track.
       const swId = nextId("sw", s.turnouts.map((t) => t.id));
-      s.turnouts.push({ id: swId, pos: L, onTrack: MAIN_TRACK_ID, divergeTrack: loopId, kind: "wye", name: "Wye" });
+      s.turnouts.push({ id: swId, pos: L, onTrack: MAIN_TRACK_ID, divergeTrack: loopId, kind: "wye", name: "Wye", flipped: false });
     });
   const head = (title: string, sub?: string) => (
     <div className="mb-3 border-b border-gray-100 pb-2">
@@ -6398,7 +6426,10 @@ function Inspector({
             type="checkbox"
             checked={!!t.flipped}
             onChange={(e) =>
-              patch((s) => (s.turnouts[i].flipped = e.target.checked || undefined))
+              // ⭐ An EXPLICIT boolean, never `|| undefined` (#379). Unticking
+              // the box is the owner saying "forward", which is a statement the
+              // drawing must keep — not an absence for geometry to fill in.
+              patch((s) => (s.turnouts[i].flipped = e.target.checked))
             }
           />
           Rotated 180° — the points face the other way

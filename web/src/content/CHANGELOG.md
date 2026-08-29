@@ -5,6 +5,14 @@ Headings are `version — date` (YYYY-MM-DD).
 
 ---
 
+## v0.126.0 — 2026-08-29
+
+### Fixed
+- **A turnout you have placed keeps the hand, curve and rotation you gave it, wherever you slide it.** Moving a turnout along the track could swing its diverging leg to the other side of the main — no setting had changed, only its position. The drawing worked out which way the turnout faced from where its diverging track happened to end, and re-worked it every time you moved. Now the answer is settled the moment the turnout is placed and only your own change to the form alters it. Turnouts already on your modules are untouched: a turnout that has never been given an answer still works one out, exactly as before.
+- **Placing a turnout no longer invents a long piece of diverging track.** It used to add a stub of its own choosing — over 20″ on a large module — for no reason anyone could point at. A turnout's own diverging rail is a measured length, so that is all you get now; drag its end out to whatever you are really building.
+
+---
+
 ## v0.125.0 — 2026-08-29
 
 ### Fixed
