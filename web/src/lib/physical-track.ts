@@ -17,6 +17,9 @@ import {
   measuredAlongPath,
   moduleFeatures,
   samplePath,
+  turnoutDivergingLeg,
+  turnoutFacing,
+  divergeSideForHand,
   type ModuleSchematicDoc,
 } from "@/lib/module-schematic";
 
@@ -452,6 +455,60 @@ export function physicalSchematic(
     const p = P(t.posFrac, t.onLane);
     return { id: t.id, x: p.x, y: p.y };
   });
+
+  // --- The rail that actually JOINS a siding or spur to its turnout (#376). ---
+  //
+  // ⛔ THIS VIEW DREW TRACKS FLOATING FREE OF THE TURNOUTS THAT OPEN THEM. The
+  // builder's canvas has drawn the diverging leg since #349; this renderer never
+  // did, so the same module read as "connected" in the builder and "unattached"
+  // on its own page. Not a data problem — FMN-0083 and FMN-0086 are perfectly
+  // consistent and showed it too.
+  //
+  // ⭐ ONE DEFINITION, TWO CALLERS. `turnoutDivergingLeg` exists precisely for
+  // this: its own contract says the HOST stays with the caller because the two
+  // renderers build it differently, and what belongs in the package is the
+  // turnout geometry "both of them were otherwise obliged to reimplement". This
+  // is the second caller finally arriving.
+  //
+  // The leg is pushed as a track of the DIVERGING track's own role, so it is
+  // styled as that track's own rail and the view needs no change.
+  const legs: PhysTrack[] = [];
+  for (const ft of f.turnouts) {
+    const t = (doc.turnouts ?? []).find((x) => x.id === ft.id);
+    if (!t?.divergeTrack) continue;
+    const dt = (doc.tracks ?? []).find((x) => x.id === t.divergeTrack);
+    if (!dt) continue;
+    // The turnout's host line, at the lane it sits on — the same polyline the
+    // marker above is placed on, so the leg starts exactly at the marker.
+    const hostLine = body(0, 1, ft.onLane, 96);
+    const hostLen = centerlineLength(hostLine) || 1;
+    // Which way the diverging route runs from here decides both the facing and
+    // the side; a track whose ends are equal is drawn along its own path and has
+    // no meaningful far end on this axis.
+    const from = dt.fromPos ?? 0;
+    const to = dt.toPos ?? 0;
+    const far = Math.abs(to - t.pos) >= Math.abs(from - t.pos) ? to : from;
+    if (far === t.pos) continue;
+    const toward = turnoutFacing({ pos: t.pos, divergeFarPos: far, flipped: t.flipped ?? false });
+    const side = divergeSideForHand(t.kind, far >= t.pos ? 1 : -1);
+    const leg = turnoutDivergingLeg({
+      sampleAt: (rel) => sampleAt(hostLine, rel),
+      relFrogInches: c01(ft.posFrac) * hostLen,
+      toward,
+      side: side as 1 | -1,
+      size: t.size ?? 6,
+      wye: t.kind === "wye",
+      steps: 16,
+    });
+    if (leg.points.length >= 2) {
+      legs.push({
+        id: `${t.divergeTrack}-leg-${t.id}`,
+        pts: leg.points,
+        role: (dt.role as PhysTrack["role"]) ?? "siding",
+      });
+    }
+  }
+  tracks.push(...legs);
 
   // --- Routes drawn across the board — an authored 2-D path that leaves the
   //     main, so it's read straight off the doc, not the (frac,lane) model that
