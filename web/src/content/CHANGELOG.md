@@ -7,8 +7,9 @@ Headings are `version — date` (YYYY-MM-DD).
 
 ## v0.126.1 — 2026-08-29
 
-### Fixed
-- **Dropping a turnout from the palette no longer brings a long stub with it either.** The last release stopped one route inventing 20-odd inches of diverging track, but a turnout dropped straight onto the track came through a different route that was still doing it. Both now use the one rule — the turnout's own measured diverging rail and nothing beyond.
+### Changed
+- **A turnout you place now arrives on its own, with no diverging track attached.** Placing a turnout used to create a piece of track for it to open onto, whether or not you wanted one there — so every turnout had to be tidied up after. The turnout is now just the turnout. When you are ready, pick the track it opens from **Diverges to** in its panel, or use **＋ New spur…** / **＋ New siding…** there to make one; a track made that way is the turnout's own measured diverging rail, which you then drag out to the length you are really building.
+- **Adding a turnout is never blocked.** The **+ Turnout** button used to need somewhere for the turnout to go before it would do anything, which on a module with no trackwork yet left nothing you could do first. A turnout no longer needs a track to exist, so you can always start with one.
 
 ---
 
