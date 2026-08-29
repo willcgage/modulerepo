@@ -135,6 +135,46 @@ function unreachableTracks(s: {
   );
 }
 
+/**
+ * ⭐⭐ CONNECT A TURNOUT TO ITS DIVERGING TRACK, AND PIN THE FACING THAT
+ * CONNECTION IMPLIES — ONE DEFINITION, EVERY CALLER (#382).
+ *
+ * ⛔⛔ THE REGRESSION THIS FIXES. #379 made `flipped` an ABSOLUTE facing so a
+ * placed turnout stops drifting when the owner slides it along the main. But
+ * the editor writes `flipped: false` at PLACEMENT, when there is no diverging
+ * track and so nothing to face — and `false` now means "faces east". Draw a
+ * passing siding between two such turnouts and the EAST one stays pinned east
+ * when it must face west: measured on a 10″–34″ siding, its diverging leg ran
+ * 30.7″→35.5″ instead of 37.3″→32.5″, so the turnout body was mirrored about
+ * its own position and the joint where the siding meets it landed 6.6″ out.
+ * Will: *"passing siding parts are not showing up in the correct places, such
+ * as joints."*
+ *
+ * ⭐ THE MOMENT A TURNOUT IS GIVEN A TRACK IS THE MOMENT THE APP LEARNS WHICH
+ * WAY IT MUST FACE. Before that there is genuinely nothing to derive from and
+ * a default is honest; after it, geometry has the answer exactly once. So the
+ * facing is DERIVED HERE AND THEN STORED — pinned, not left to be re-derived
+ * on every move, which is the drift #379 removed.
+ *
+ * ⚠️ `flipped` is deliberately left ABSENT in the call to `turnoutFacing` so
+ * it answers from geometry alone. Passing the turnout's current value would
+ * feed its own stale default back in and pin the wrong way round again.
+ *
+ * ⚠️ A track with no extent (a branch route, `fromPos === toPos`) carries no
+ * direction, so the facing is left exactly as it was rather than guessed.
+ */
+function connectDiverge(
+  sw: { pos: number; divergeTrack: string; flipped?: boolean },
+  trackId: string,
+  track?: { fromPos?: number | null; toPos?: number | null },
+) {
+  sw.divergeTrack = trackId;
+  const from = track?.fromPos;
+  const to = track?.toPos;
+  if (typeof from !== "number" || typeof to !== "number" || from === to) return;
+  const far = Math.abs(from - sw.pos) >= Math.abs(to - sw.pos) ? from : to;
+  sw.flipped = turnoutFacing({ pos: sw.pos, divergeFarPos: far }) === -1;
+}
 /** See {@link addTurnout} — a turnout needs a track to lead onto (#325). */
 function canAddTurnoutIn(s: {
   extraTracks: { id: string }[];
@@ -2117,7 +2157,7 @@ export function SchematicEditor({
       });
       // Link the throat turnout to the new spur so it reads (and snaps) as one.
       const tn = s.turnouts.find((t) => t.id === throatTurnoutId);
-      if (tn) tn.divergeTrack = id;
+      if (tn) connectDiverge(tn, id, { fromPos, toPos });
     });
     // Select it so the Track tool edits the new spur (not the mainline) next.
     setSelection({ kind: "track", id });
@@ -2140,9 +2180,12 @@ export function SchematicEditor({
         moduleTrackId: null,
         trackName: "Passing siding",
       });
-      // Both turnouts now diverge to this siding.
+      // Both turnouts now diverge to this siding. ⭐ Each is pinned to the
+      // facing ITS OWN end implies — the west turnout faces east and the east
+      // one faces west, which is exactly why this cannot be one shared default.
       for (const t of s.turnouts)
-        if (t.id === fromTurnoutId || t.id === toTurnoutId) t.divergeTrack = id;
+        if (t.id === fromTurnoutId || t.id === toTurnoutId)
+          connectDiverge(t, id, { fromPos, toPos });
     });
     setSelection({ kind: "track", id });
   }
@@ -2179,7 +2222,7 @@ export function SchematicEditor({
         trackName: role === "spur" ? "New spur" : "New siding",
       });
       const t = s.turnouts.find((x) => x.id === turnoutId);
-      if (t) t.divergeTrack = id;
+      if (t) connectDiverge(t, id, { fromPos: p, toPos: Math.min(s.lengthInches, p + stub) });
     });
     // Select the new track so its name / kind / extent are right there to edit.
     setSelection({ kind: "track", id });
@@ -2234,8 +2277,10 @@ export function SchematicEditor({
         moduleTrackId: null,
         trackName: `To endplate ${endplateId}`,
       });
+      // ⚠️ A branch route has no extent (`fromPos === toPos`), so this connects
+      // it and deliberately leaves the facing alone — see `connectDiverge`.
       const t = s.turnouts.find((x) => x.id === turnoutId);
-      if (t) t.divergeTrack = id;
+      if (t) connectDiverge(t, id, { fromPos: tn.pos, toPos: tn.pos });
       const bi = endplateId.charCodeAt(0) - 67;
       if (bi >= 0 && s.branches[bi]) s.branches[bi].trackId = id;
     });
@@ -6383,7 +6428,16 @@ function Inspector({
                 else if (v === "__new_siding__") onNewDivergeTrack(t.id, "siding");
                 else if (v.startsWith("__to_ep__"))
                   onDivergeToEndplate(t.id, v.slice("__to_ep__".length));
-                else patch((s) => (s.turnouts[i].divergeTrack = v));
+                // ⭐ Picking an existing track is a connection too, so it pins
+                // the facing the same way every other route does (#382).
+                else
+                  patch((s) =>
+                    connectDiverge(
+                      s.turnouts[i],
+                      v,
+                      s.extraTracks.find((x) => x.id === v),
+                    ),
+                  );
               }}
               className={`mt-0.5 ${inp}`}
             >

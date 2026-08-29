@@ -5,6 +5,13 @@ Headings are `version — date` (YYYY-MM-DD).
 
 ---
 
+## v0.127.1 — 2026-08-29
+
+### Fixed
+- **A passing siding's far turnout is drawn the right way round again.** Since earlier today a turnout remembered which way it faced from the moment you placed it — but a turnout placed on its own has no diverging track yet, so it defaulted to facing one way, and drawing a siding between two of them left the far one still facing that way when it needs to face back. Its body came out mirrored and the joint where the siding meets it sat about 6½″ off. Connecting a turnout to a track now settles which way it faces at that moment, and it stays settled: sliding it along the main still will not change it. Nothing you have saved is affected.
+
+---
+
 ## v0.127.0 — 2026-08-29
 
 ### Added
