@@ -5,6 +5,13 @@ Headings are `version — date` (YYYY-MM-DD).
 
 ---
 
+## v0.122.0 — 2026-08-29
+
+### Fixed
+- **The builder opens again on a module where it had started timing out.** Opening the builder — and saving from it, which reloads the page behind the scenes — could hang until the server gave up, on one module, for about half an hour. The cause was that the whole builder was being drawn once on the server before it was drawn again in your browser, and on that module the server drawing never finished. The server no longer draws it at all: the builder is yours to use, not something a search engine reads, and every pixel the server made was thrown away the instant the page came alive. You get the same builder, reached through a brief *Loading the builder…* while it starts. **Nothing about your module changed**, and saving works the way it always did.
+
+---
+
 ## v0.121.1 — 2026-08-29
 
 ### Changed
