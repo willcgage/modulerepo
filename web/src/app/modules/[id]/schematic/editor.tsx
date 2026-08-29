@@ -2064,13 +2064,30 @@ export function SchematicEditor({
     setTool("track");
   }
   /**
-   * ⭐ THE DEFAULT LENGTH OF A NEW SPUR STUB — ONE DEFINITION, TWO CALLERS
-   * (`onDropTurnout` from the parts palette, and `addTurnout` below). A short
-   * length the owner then pulls out: ~12% of the board, at least 6″, and never
-   * past the far endplate.
+   * ⭐ THE DEFAULT LENGTH OF A NEW SPUR STUB. It had three callers; it now has
+   * ONE — `newDivergeTrack`, from a turnout's "＋ New spur…/New siding…". The
+   * other two were `onDropTurnout` and `addTurnout`, which no longer create a
+   * track at all: **placing a turnout is not asking for a spur** (Will,
+   * 2026-08-29). This length applies only where the owner has explicitly asked
+   * for a new track, which is the only place a default was ever wanted.
+   *
+   * ⛔ It used to be `max(6, min(remaining, lengthInches * 0.12))` — 21.6″ of
+   * flex on a 180″ module, a number from nowhere. Will: "I don't know why there
+   * is such a long diverging route track attached to a turnout once it is
+   * placed. We know the measurements of the actual diverging route track on the
+   * turnout, so do not add extra."
+   *
+   * ⭐ So it is the PART'S OWN diverging rail and not one inch beyond: `pos` is
+   * the frog, and the moulding runs on for `pastFrogInchesForSize` before the
+   * owner's flex would begin. The new track therefore adds nothing of its own —
+   * the owner drags its end out to whatever they are really building.
+   *
+   * ⚠️ I fixed `newDivergeTrack`'s inline copy first and left this one, which is
+   * why a dropped turnout still arrived with 21.6″ attached. The rule lives
+   * HERE; nobody re-derives it.
    */
-  const defaultStubInches = (lengthInches: number, pos: number) =>
-    Math.round(Math.max(6, Math.min(lengthInches - pos, lengthInches * 0.12)) * 10) / 10;
+  const defaultStubInches = (size?: number | null) =>
+    Math.round(pastFrogInchesForSize(size ?? 6, partLibrary) * 10) / 10;
 
 
   const nextLane = (s: EditorState) => {
@@ -2149,8 +2166,7 @@ export function SchematicEditor({
     // `pastFrogInchesForSize` before the owner's flex would begin. The track
     // therefore starts and ends inside the turnout, adding nothing — the owner
     // drags its end out to whatever they are really building.
-    const stub =
-      Math.round(pastFrogInchesForSize(tn.size ?? 6, partLibrary) * 10) / 10;
+    const stub = defaultStubInches(tn.size);
     patch((s) => {
       s.extraTracks.push({
         id,
@@ -2306,30 +2322,20 @@ export function SchematicEditor({
     let created: string | null = null;
     patch((s) => {
       const pos = defaultPosOn(s, turnoutAndCrossingPositions(s, MAIN_TRACK_ID), 0.5);
-      // Prefer an existing home: a drawn track, or Main 2 on a double module.
-      let diverge = canAddTurnoutIn(s) ? turnoutDivergeCandidate(s) : null;
-      if (!diverge) {
-        // Nothing to diverge onto — so give it a spur of its own rather than
-        // refusing. Same pairing, same default length as the palette drop.
-        const spId = nextId("spur", s.extraTracks.map((t) => t.id));
-        s.extraTracks.push({
-          id: spId,
-          role: "spur",
-          lane: nextLane(s),
-          fromPos: pos,
-          toPos: Math.min(s.lengthInches, pos + defaultStubInches(s.lengthInches, pos)),
-          moduleTrackId: null,
-          trackName: "",
-        });
-        diverge = spId;
-        created = spId;
-      }
+      // ⭐⭐ NO TRACK IS INVENTED (Will, 2026-08-29). #334 broke its deadlock by
+      // minting a spur; the deadlock is now gone for a better reason — a
+      // turnout no longer NEEDS a diverging track to exist, so there is
+      // nothing to be blocked on. An existing home is still adopted when there
+      // plainly is one (a drawn track, or Main 2 on a double module), because
+      // that is a real answer rather than an invented one.
+      const diverge = canAddTurnoutIn(s) ? turnoutDivergeCandidate(s) : null;
+      created = nextId("sw", s.turnouts.map((t) => t.id));
       s.turnouts.push({
-        id: nextId("sw", s.turnouts.map((t) => t.id)),
+        id: created,
         name: "",
         pos,
         onTrack: MAIN_TRACK_ID,
-        divergeTrack: diverge,
+        divergeTrack: diverge ?? "",
         kind: "right",
         // ⭐ ORIENTATION IS STATED AT PLACEMENT (#379). A turnout is born
         // facing forward and STAYS that way until the owner unticks or ticks
@@ -2340,43 +2346,40 @@ export function SchematicEditor({
         // nothing — and the inspector shows "Not recorded", which is the truth.
       });
     });
-    // Select the new stub so its end ○ is right there to pull out to length —
-    // the same follow-through as the palette drop.
-    if (created) setSelection({ kind: "track", id: created });
+    // Select the turnout — the same follow-through as the palette drop.
+    if (created) setSelection({ kind: "turnout", id: created });
   }
-  /** Turnout (W) tool: drop a turnout of a chosen hand at `pos` on a track, and
-   * give it a short diverging spur stub straight away (#turnout-palette). The
-   * turnout is a point placement — no drag-length — and the stub is positioned by
-   * its `toPos`, so dragging its ○ end to size it can't shift what you dropped
-   * (the old draw-to-create re-projected the drawn end and changed the length).
-   * The stub is selected so its end handle is right there to pull out. */
+  /** Turnout (W) tool: drop a turnout of a chosen hand at `pos` on a track
+   * (#turnout-palette). The turnout is a point placement — no drag-length.
+   *
+   * ⭐⭐ IT ARRIVES ALONE. A DROPPED TURNOUT GETS NO TRACK (Will, 2026-08-29):
+   * *"a placed turnout shouldn't get a track at all until the track is added."*
+   * This used to mint a spur stub in the same patch, so every drop invented a
+   * piece of railroad the owner had not asked for and then had to delete or
+   * drag back. The turnout is the thing being placed; the track it opens is a
+   * separate decision, made with "Diverges to" or by drawing one.
+   *
+   * ⚠️ This does NOT reopen #325. That bug was a turnout pointed at the track
+   * it already SITS ON, which made the package's heal conjure a Main 2. An
+   * empty `divergeTrack` points at nothing, and `healSelfDivergingTurnouts`
+   * only fires on `onTrack === divergeTrack` — so it stays a no-op here. */
   const onDropTurnout = (
     spec: { kind: TurnoutKind; curved?: boolean; size: number; partId?: string },
     onTrack: string,
     pos: number,
   ) => {
     const swId = nextId("sw", state.turnouts.map((t) => t.id));
-    const spId = nextId("spur", state.extraTracks.map((t) => t.id));
     const p = Math.round(pos * 10) / 10;
-    // A short default the owner extends — ~12% of the board, at least 6″, and
-    // never past the far endplate.
-    const stub = defaultStubInches(state.lengthInches, p);
     patch((s) => {
-      s.extraTracks.push({
-        id: spId,
-        role: "spur",
-        lane: nextLane(s),
-        fromPos: p,
-        toPos: Math.min(s.lengthInches, p + stub),
-        moduleTrackId: null,
-        trackName: "",
-      });
       s.turnouts.push({
         id: swId,
         name: "",
         pos: p,
         onTrack,
-        divergeTrack: spId,
+        // ⭐ NOTHING YET. `""` is already this document's word for "no
+        // diverging track" — it is what deleting a track writes back into the
+        // turnouts that fed it. Not a new sentinel.
+        divergeTrack: "",
         kind: spec.kind,
         // ⭐ ORIENTATION IS STATED AT PLACEMENT (#379). A turnout is born
         // facing forward and STAYS that way until the owner unticks or ticks
@@ -2392,8 +2395,9 @@ export function SchematicEditor({
         ...(spec.curved ? { curved: true } : {}),
       });
     });
-    // Select the stub — its end ○ is now the thing to drag to length.
-    setSelection({ kind: "track", id: spId });
+    // Select the turnout — it is what was placed, and its inspector carries the
+    // "Diverges to" picker for the owner's next decision.
+    setSelection({ kind: "turnout", id: swId });
   };
   /** Crossover drop (#turnout-palette): a self-contained element between the
    * main and a parallel lane — a turnout on each end + the diagonal connector(s)
@@ -6382,6 +6386,14 @@ function Inspector({
               }}
               className={`mt-0.5 ${inp}`}
             >
+              {/* ⭐ "Nothing yet" IS A REAL STATE and must be selectable, not
+                  just reachable. A turnout is placed before the track it opens
+                  exists (Will, 2026-08-29), and deleting a track writes `""`
+                  back into whatever fed it. Without this option the select
+                  falls back to its FIRST entry, so an unconnected turnout would
+                  read as diverging onto a track it has no relationship with —
+                  the control lying about the document. */}
+              <option value="">— no diverging track yet —</option>
               {/* A turnout can't diverge into the track it sits on — there'd be
                   no second route, so nothing renders and the turnout silently
                   does nothing. The list used to offer it. */}
@@ -8370,14 +8382,14 @@ function ObjectsList({
         title="Turnouts"
         count={state.turnouts.length}
         actions={
-          /* ⭐ NO LONGER DISABLED (#334). It used to be, because #325 found that a
+          /* ⭐ NO LONGER DISABLED (#334), and no longer bringing a spur with it
+             (Will, 2026-08-29). It used to be disabled because #325 found that a
              turnout with nowhere to diverge got pointed at Main 1 itself and the
-             package's heal then conjured a Main 2. But Siding and Spur are
-             disabled until a turnout exists, so on a single-track module the two
-             messages pointed at each other and trackwork could not be started at
-             all. `addTurnout` now brings a spur stub with it when there is no
-             other home — #325's rule holds (the diverge target is a real track,
-             created in the same patch), and the deadlock is gone. */
+             package's heal then conjured a Main 2. #334 unblocked it by minting
+             a stub. The turnout now simply arrives unconnected, which dissolves
+             the deadlock outright: nothing has to exist first, and nothing is
+             invented. #325's rule is untouched — it forbids diverging into the
+             HOST track, and `""` is not the host. */
           <button
             type="button"
             onClick={add.turnout}
@@ -8385,7 +8397,7 @@ function ObjectsList({
             title={
               canAddTurnoutIn(state)
                 ? undefined
-                : "Adds a turnout with a short spur for it to diverge onto — drag the spur's end to length."
+                : "Adds a turnout on its own — pick or draw the track it opens afterwards."
             }
           >
             + Turnout
