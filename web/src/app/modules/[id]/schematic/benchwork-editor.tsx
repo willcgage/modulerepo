@@ -817,7 +817,19 @@ export function BenchworkEditor({
     // assigned — deriving the side from the track's position made hand a no-op
     // on the board (it already drives the dispatcher view). Geometry is only
     // the fallback for a wye or an unset hand, which have no side to state.
-    const handSide = divergeSideForHand(t.kind, toward, t.flipped);
+    // ⛔⛔ `flipped` WAS APPLIED TWICE HERE, so the 180° checkbox did NOTHING
+    // (#378). `toward` above already came out of `turnoutFacing`, which applies
+    // it; `divergeSideForHand` applies it again with its own
+    // `* (flipped ? -1 : 1)`, and the two negations cancel — measured across
+    // every hand and direction, ticking the box changed not one drawn side.
+    //
+    // ⭐ The package's contract is a RAW direction plus the flag: that is how
+    // `moduleFeatures` calls it (`divergeSideForHand(kind, far - pos, flipped)`),
+    // and it was right. So pass the raw geometric direction here, and let the
+    // one application inside do the work. `toward` keeps the flip for walking
+    // the leg, which is correct there.
+    const stubDir = Math.sign((far.x - m.x) * tx + (far.y - m.y) * ty) || 1;
+    const handSide = divergeSideForHand(t.kind, stubDir, t.flipped);
     const geoSide = Math.sign((far.x - m.x) * m.nx + (far.y - m.y) * m.ny) || 1;
     // ⚠️ A CROSSOVER LEG HAS NO FREE CHOICE OF SIDE, so hand does not get a vote
     // (#196). Every other turnout throws to its hand — a right-hand turnout

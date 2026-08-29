@@ -5305,20 +5305,45 @@ function Inspector({
                 type="checkbox"
                 className="mt-0.5"
                 checked={state.mainsSwapped ?? false}
-                onChange={(e) =>
+                onChange={(e) => {
+                  const swapped = e.target.checked;
+                  // The transition turnout's leg has to land on Main 2's side,
+                  // so swapping the mains puts its HAND in question (#149).
+                  const aDouble = state.configA === "double";
+                  const wanted =
+                    (aDouble ? -1 : 1) === (swapped ? -1 : 1) ? "left" : "right";
+                  const clashing = state.turnouts.filter(
+                    (t) => isTransitionTurnout(t) && t.kind !== wanted,
+                  );
+                  // ⭐⭐ ASK, DON'T REWRITE (#378, Will: "if there is going to be
+                  // a mismatch, then ask the owner if they would like to stop or
+                  // swap"). Hand is the owner's, and swapping the mains is not
+                  // them changing it — so the app may not change it silently, and
+                  // it may not quietly leave a leg pointing where Main 2 no
+                  // longer is either. It asks, and does exactly what it is told.
+                  let alsoTurnHands = false;
+                  if (clashing.length > 0) {
+                    const n = clashing.length;
+                    alsoTurnHands = window.confirm(
+                      `Swapping the mains puts Main 2 on the other side, so ${
+                        n === 1 ? "this turnout's hand" : `${n} turnouts' hands`
+                      } no longer land${n === 1 ? "s" : ""} on it: ` +
+                        `${clashing.map((t) => t.name || t.id).join(", ")}.
+
+` +
+                        `OK — swap the mains AND turn ${n === 1 ? "it" : "them"} to ${wanted}-hand.
+` +
+                        `Cancel — stop, and change nothing.`,
+                    );
+                    if (!alsoTurnHands) return; // stop: the swap does not happen either
+                  }
                   patch((s) => {
-                    s.mainsSwapped = e.target.checked;
-                    // The transition turnout's hand is coupled to which side
-                    // Main 2 is on, so re-derive it when the swap flips —
-                    // otherwise its leg keeps pointing at where Main 2 used to
-                    // be and stops connecting (#149). Same formula as
-                    // buildTransition: the leg lands on Main 2's side.
-                    const aDouble = s.configA === "double";
-                    const kind =
-                      (aDouble ? -1 : 1) === (s.mainsSwapped ? -1 : 1) ? "left" : "right";
-                    for (const t of s.turnouts) if (isTransitionTurnout(t)) t.kind = kind;
-                  })
-                }
+                    s.mainsSwapped = swapped;
+                    if (alsoTurnHands)
+                      for (const t of s.turnouts)
+                        if (isTransitionTurnout(t) && t.kind !== wanted) t.kind = wanted;
+                  });
+                }}
               />
               <span>
                 <span className="font-medium">Draw Main 2 below Main 1</span> — put

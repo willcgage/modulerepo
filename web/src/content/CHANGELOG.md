@@ -5,6 +5,14 @@ Headings are `version — date` (YYYY-MM-DD).
 
 ---
 
+## v0.125.0 — 2026-08-29
+
+### Fixed
+- **The *Rotated 180°* tick box now does something, and a turnout you have rotated stays that way when you move it.** Two faults, both making a turnout drift away from what you told it. The tick box was being applied twice on the board, once forward and once back, so it cancelled itself out and did nothing at all. And a turnout's facing was worked out from where its diverging track happens to end — so sliding the turnout past that end quietly turned the part around, which is why moving one along the track could change its hand and leave you with track that cannot be built. Your rotation is now a fact the drawing keeps, wherever you put the turnout. A turnout you have never rotated is unchanged: it still faces the way its route leaves.
+- **Swapping the mains asks before touching a turnout's hand.** Putting Main 2 on the other side can leave a transition turnout's leg pointing where Main 2 no longer is. The app used to silently re-hand those turnouts. It now tells you which ones clash and offers the choice: swap the mains and turn them with it, or stop and change nothing. Your hand setting is yours.
+
+---
+
 ## v0.124.0 — 2026-08-29
 
 ### Added
