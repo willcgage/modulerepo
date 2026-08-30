@@ -5,6 +5,13 @@ Headings are `version — date` (YYYY-MM-DD).
 
 ---
 
+## v0.130.1 — 2026-08-30
+
+### Fixed
+- **A siding no longer steps sideways where it meets its turnout.** In the module drawing the rail jumped across to the siding's own row at a single point — a right-angle kink at each end, because the turnout's rail stopped short of the row and the siding simply began on it. The rail now eases out onto its row the way flex actually bends, exactly as the builder has always drawn it. Measured across every module with curves, the worst such step goes from 1.6″ to none at all.
+
+---
+
 ## v0.130.0 — 2026-08-30
 
 ### Fixed

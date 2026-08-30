@@ -18,6 +18,7 @@ import {
   moduleFeatures,
   samplePath,
   turnoutDivergingLeg,
+  turnoutClosure,
   turnoutFacing,
   divergeSideForHand,
   type ModuleSchematicDoc,
@@ -495,9 +496,66 @@ export function physicalSchematic(
       steps: 16,
     });
     if (leg.points.length >= 2) {
+      /**
+       * ⭐⭐ EASE THE ROUTE ONTO ITS LANE — "REACHING IS NOT ARRIVING" (#400).
+       *
+       * ⛔ Without this the body began at its lane while the leg stopped short
+       * of it, so the rail STEPPED SIDEWAYS AT ONE POSITION. Measured on
+       * FMN-0085: at pos 16.61 the drawn siding went from 1.73″ off the main to
+       * 4.28″ off it **without advancing along the module at all** — a
+       * right-angle kink at both ends of the siding.
+       *
+       * ⭐ The package names this defect and hands over the fix.
+       * `turnoutClosure`: *"Reaching is not arriving: it gets there still
+       * climbing at 1/N while the track it joins runs parallel, so the two meet
+       * with an instantaneous change of direction. That KINK is what reads as
+       * 'the rails don't line up'."* And `closureLeadInches` exists precisely
+       * so a caller easing past the part builds its longer closure from the
+       * SAME number — *"or the two profiles disagree where they meet"*, which
+       * is exactly the 3.3″ by which this view and the builder disagreed.
+       *
+       * ⚠️ NOT a straight continuation at the frog angle. That reaches the lane
+       * but arrives still climbing, so it swaps one kink for another — the
+       * package's warning above, learned the hard way.
+       *
+       * This mirrors the builder's `arrivalTo`, calling the same package
+       * function with the same lead, so the two views ease identically.
+       */
+      const pts = [...leg.points];
+      /**
+       * ⚠️ THE TARGET IS RELATIVE TO THE HOST, NOT TO MAIN 1. The closure eases
+       * away from the track the turnout STANDS ON, so a siding at lane 4 opened
+       * from Main 2 (lane 1) has 3.375″ to climb, not 4.5″. Measured with the
+       * absolute offset the legs arrived 5.62″ out — one whole lane past their
+       * own siding — which just moves the kink instead of removing it.
+       *
+       * ⛔⛔ AND IT MUST BE THE **RESOLVED** LANE, NOT THE STORED ONE. Reaching
+       * for `dt.lane` mixed a stored lane with a resolved one: FMN-0086's spur2
+       * is stored at 2 and resolves to −2, so the target came out 3.375″ instead
+       * of 1.125″ and its leg arrived 4.50″ out where the spur sits at 2.25″ —
+       * a 2.25″ kink where there had been 1.64″. Caught by sweeping the corpus
+       * before shipping. `bodyLane` is the resolved number, and it is the same
+       * one this leg's SIDE is taken from, so the two cannot disagree.
+       */
+      const target = Math.abs(laneOffset(bodyLane ?? dt.lane ?? 0) - laneOffset(ft.onLane ?? 0));
+      const effN = (t.kind === "wye" ? 2 : 1) * (t.size && t.size > 0 ? t.size : 6);
+      const ecl = turnoutClosure(effN, {
+        leadInches: leg.closureLeadInches,
+        arriveAtInches: target,
+      });
+      if (Number.isFinite(ecl.span) && ecl.span > leg.spanInches) {
+        const relThroat = projectToCenterline(hostLine, leg.points[0]).pos;
+        const n = 24;
+        for (let i = 1; i <= n; i++) {
+          const sp = leg.spanInches + ((ecl.span - leg.spanInches) * i) / n;
+          const q = sampleAt(hostLine, Math.max(0, relThroat + toward * sp));
+          const off = side * ecl.offsetAt(sp);
+          pts.push({ x: q.x + off * q.nx, y: q.y + off * q.ny });
+        }
+      }
       legs.push({
         id: `${t.divergeTrack}-leg-${t.id}`,
-        pts: leg.points,
+        pts,
         role: (dt.role as PhysTrack["role"]) ?? "siding",
       });
     }
