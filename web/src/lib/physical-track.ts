@@ -457,7 +457,34 @@ export function physicalSchematic(
     // `false` now means "the owner says forward" and is PINNED. Coercing the
     // two together is what made a placed turnout re-orient itself on a drag.
     const toward = turnoutFacing({ pos: t.pos, divergeFarPos: far, flipped: t.flipped });
-    const side = divergeSideForHand(t.kind, far >= t.pos ? 1 : -1);
+    /**
+     * ⛔⛔ THE LEG MUST ARRIVE ON THE SIDE THE BODY IS DRAWN (#394).
+     *
+     * This re-derived the side from the turnout's own hand:
+     *
+     *     divergeSideForHand(t.kind, far >= t.pos ? 1 : -1)
+     *
+     * — a SECOND answer to a question the package already settles, and it
+     * disagreed in two ways at once. `resolveLane` signs a track's lane from
+     * the FIRST turnout feeding it and passes `flipped`; this used EACH
+     * turnout's own hand and passed no flip. On FMN-0085 the body took its sign
+     * from `sw1` (left, flipped) and came out at lane +4, while `sw3`'s leg
+     * asked its own hand, got the opposite side, and left the main the other
+     * way. The siding then had to cut back across BOTH mains to reach its own
+     * body — measured on the live page, crossing `main` at two points and
+     * `main2` at two more. Will: *"the 2D has the siding crossing over the two
+     * mainlines."*
+     *
+     * ⭐ So take the side from the RESOLVED LANE — the very number the body is
+     * drawn at. Mirroring the drawing instead of re-deriving it is the rule
+     * from #353, and it makes the two agree by construction rather than by two
+     * functions staying in step.
+     */
+    const bodyLane = f.extraTracks.find((x) => x.id === t.divergeTrack)?.lane;
+    const side =
+      typeof bodyLane === "number" && bodyLane !== 0
+        ? ((Math.sign(bodyLane) || 1) as 1 | -1)
+        : divergeSideForHand(t.kind, far >= t.pos ? 1 : -1);
     const leg = turnoutDivergingLeg({
       sampleAt: (rel) => sampleAt(hostLine, rel),
       relFrogInches: c01(ft.posFrac) * hostLen,
