@@ -1473,13 +1473,28 @@ export function BenchworkEditor({
     // on top of the mainline (#189).
     const side = Math.sign(at[0].off) || 1;
     const off = side * (Math.abs(laneOffset(t.lane)) || LANE_SPACING_INCHES);
-    const steps = 24;
     const body: Pt[] = [];
     // ⚠️ Runs between the track's OWN extent, not frog to frog — a passing siding
     // is as long as its owner said (#189). What changed in #349 is only that the
     // flex from each turnout is now DRAWN, easing off the rail end out to the
     // lane, instead of being left as a hole the owner could not close.
     const { from, to, head, tail } = withArrivals(t, t.fromPos, t.toPos);
+    /**
+     * ⭐⭐ SAMPLED BY LENGTH, the same rule as `lanePath` (#406/#408).
+     *
+     * ⛔ A flat 24 gave a 107″ siding 4.5″ segments while its own arrivals are
+     * sampled at 1.26″, so the two met at a visible angle — a 123° notch over
+     * 1.23″ where the body joins the tail, left standing after #406 fixed the
+     * mains because THIS FUNCTION NEVER CALLED `lanePath`. It is a third
+     * implementation of "sample a lane-offset track", and it kept its own
+     * constant.
+     *
+     * ⚠️ Not simply delegated to `lanePath`: this one deliberately uses a FIXED
+     * offset taken from the leg's own side (see above), where `lanePath` re-reads
+     * `laneOffsetAt` per step. Matching the RULE is the safe half of the merge;
+     * unifying the two is a bigger change than a notch is worth tonight.
+     */
+    const steps = Math.max(24, Math.ceil(Math.abs(to - from)));
     for (let i = 0; i <= steps; i++) {
       const pos = from + ((to - from) * i) / steps;
       const c = sampleAt(centerline, pos);

@@ -5,6 +5,13 @@ Headings are `version — date` (YYYY-MM-DD).
 
 ---
 
+## v0.130.5 — 2026-08-30
+
+### Fixed
+- **A passing siding is drawn as smoothly as the mains.** The last release fixed the faceting on the mainlines, but a passing siding is drawn by different code that kept its own coarse setting — so it stayed angular, and where it met the rail from its turnout there was a visible notch. It now follows the same rule.
+
+---
+
 ## v0.130.4 — 2026-08-30
 
 ### Fixed
