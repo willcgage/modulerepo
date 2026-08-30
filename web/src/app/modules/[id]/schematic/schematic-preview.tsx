@@ -353,9 +353,28 @@ export function SchematicPreview({
             (doc.turnouts ?? []).some((sw) => sw.onTrack === t.id);
           const tx = px(isSpur ? t.throatFrac : t.fromFrac);
           const ex = px(isSpur ? t.stubFrac : t.toFrac);
-          const throat = (doc.turnouts ?? []).find((sw) => sw.divergeTrack === t.id);
-          // A flipped turnout faces its points the other way, so its throat
-          // taper leaves in the opposite direction (#turnout-flip).
+          // ⛔⛔ A SIDING'S DIRECTION IS ITS OWN, NOT ONE TURNOUT'S (#384).
+          //
+          // This used to read `(ex >= tx ? 1 : -1) * (throat?.flipped ? -1 : 1)`
+          // for EVERY track, where `throat` is the FIRST turnout found feeding
+          // it. A spur has one turnout, so that is meaningful. A siding has TWO,
+          // facing OPPOSITE ways by construction — so it took whichever happened
+          // to come first in the array and mirrored the whole track by it.
+          //
+          // Invisible until #379/#382 started storing `flipped` at all: on
+          // FMN-0085 the east turnout is correctly pinned `true`, `dir` went -1,
+          // and the siding drew INSIDE OUT — points at x -4.9 and 303.3 in a
+          // 0..300 viewBox, i.e. off both ends of the module. Will: "the siding
+          // and artifacts are not drawn correctly."
+          //
+          // ⭐ A siding needs no such adjustment. Each end dips toward the main
+          // AT THAT END, and which end is which is settled by `ex >= tx` alone.
+          // A turnout's facing cannot mirror a track that is pinned at both
+          // ends — same family as #382: `flipped` belongs in exactly one place,
+          // and this is not one of them.
+          const throat = isSpur
+            ? (doc.turnouts ?? []).find((sw) => sw.divergeTrack === t.id)
+            : undefined;
           const dir = (ex >= tx ? 1 : -1) * (throat?.flipped ? -1 : 1);
           // Diverge at 45° — run out equals the drop between lanes (Steve, #173).
           // A dispatcher panel draws every diverging route at one fixed angle;

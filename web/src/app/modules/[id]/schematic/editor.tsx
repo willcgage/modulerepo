@@ -2131,10 +2131,29 @@ export function SchematicEditor({
     Math.round(pastFrogInchesForSize(size ?? 6, partLibrary) * 10) / 10;
 
 
+  /**
+   * The stacking slot a new track takes. Lane 1 is Main 2 on a double module,
+   * so the first slot available to anything else is above it.
+   *
+   * ⛔ IT SAID "first free lane" AND TOOK ONE PAST THE HIGHEST (#384). With
+   * `Math.max(base, ...lanes + 1)` a deleted track's slot was never reused, so
+   * on a module that had been edited for a while a new siding landed at lane 4
+   * with lanes 2 and 3 empty — drawn four slots off the main, with throat
+   * diagonals long enough to run past the ends of the board. FMN-0085 is
+   * exactly that. *A comment describing the intent is not the code doing it.*
+   *
+   * ⚠️ Slots are compared by MAGNITUDE. The sign is not ours to choose here —
+   * `moduleFeatures` reconciles it from the turnout's hand, and at the moment a
+   * track is created it may not have a turnout yet. Treating +2 and -2 as one
+   * slot can skip a usable one; it can never collide, which is the right way to
+   * be wrong.
+   */
   const nextLane = (s: EditorState) => {
-    // Lane 1 is Main 2 on a double module; first free lane is above it.
     const base = s.configA === "double" || s.configB === "double" ? 2 : 1;
-    return Math.max(base, ...s.extraTracks.map((t) => t.lane + 1));
+    const taken = new Set(s.extraTracks.map((t) => Math.abs(t.lane)));
+    let lane = base;
+    while (taken.has(lane)) lane++;
+    return lane;
   };
   /** A spur / yard lead diverging from `throatTurnoutId`, drawn out to a stub. */
   function placeSpur(

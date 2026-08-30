@@ -5,6 +5,14 @@ Headings are `version — date` (YYYY-MM-DD).
 
 ---
 
+## v0.127.2 — 2026-08-29
+
+### Fixed
+- **A passing siding is drawn the right way round in the operations preview again.** A siding drew inside out — its two throats crossing over and running off both ends of the module instead of dipping in to meet the main. The preview worked out which way to draw a track from the first turnout it found feeding it, which is fine for a spur but wrong for a siding, because a siding's two turnouts face opposite ways by design. It now takes its direction from the siding's own two ends. Only sidings whose turnout had a stored rotation were affected, which is why this appeared today.
+- **A new siding or spur takes the first free stacking slot, instead of stepping further out each time.** Deleting a track used to retire its slot for good, so on a module that had been edited for a while a new siding could land four rows off the main — far enough that the diagonals joining it ran past the ends of the board. Tracks already on your modules keep the row they are on.
+
+---
+
 ## v0.127.1 — 2026-08-29
 
 ### Fixed
