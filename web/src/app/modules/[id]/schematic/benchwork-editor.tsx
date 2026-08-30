@@ -1427,10 +1427,21 @@ export function BenchworkEditor({
    * definition, and both bodies below use it rather than repeating the splice.
    */
   const spliceArrivals = (head: Pt[] | null, body: Pt[], tail: Pt[] | null): Pt[] => {
-    const mid = [...body];
-    if (head?.length && mid.length) mid[0] = head[head.length - 1];
     const back = tail ? [...tail].reverse() : [];
-    if (back.length && mid.length) mid[mid.length - 1] = back[0];
+    /**
+     * ⚠️ DROP the body's own end point rather than OVERWRITING it (#410). #404
+     * set it equal to the arrival's end, which meets exactly but leaves the
+     * same point in the list TWICE — a zero-length segment. Harmless on screen,
+     * but `atan2(0, 0)` is 0, so every heading-based measurement reads a phantom
+     * ~123° turn there. **It fooled my own kink metric twice**, and I reported a
+     * visible notch that was not in the drawing: the real turn across that join
+     * is 1.1° (−124.1° → −123.0°).
+     *
+     * The arrival owns the endpoint, so the body simply starts one sample later.
+     */
+    const mid = [...body];
+    if (head?.length && mid.length > 1) mid.shift();
+    if (back.length && mid.length > 1) mid.pop();
     return [...(head ?? []), ...mid, ...back];
   };
   /** A passing siding's BODY — the parallel run between its two turnouts,

@@ -5,6 +5,13 @@ Headings are `version — date` (YYYY-MM-DD).
 
 ---
 
+## v0.130.6 — 2026-08-30
+
+### Fixed
+- **A stray duplicate point where a siding meets its turnout is gone.** Nothing looked different because of it — the rail was already smooth there — but the repeated point made the track's own geometry untidy and caused measurements of it to report a corner that was not on screen.
+
+---
+
 ## v0.130.5 — 2026-08-30
 
 ### Fixed
