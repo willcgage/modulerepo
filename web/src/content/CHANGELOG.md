@@ -5,6 +5,13 @@ Headings are `version — date` (YYYY-MM-DD).
 
 ---
 
+## v0.129.1 — 2026-08-30
+
+### Fixed
+- **A siding and the rail joining it to its turnout are on the same side of the main again.** In the module drawing they could end up on opposite sides — the siding on one side, the short rail from its turnout leaving the other way — so the track had to cut back across the mainline to reach itself. The rail from a turnout now goes to whichever side its siding is actually drawn on.
+
+---
+
 ## v0.129.0 — 2026-08-30
 
 ### Changed
