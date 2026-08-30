@@ -5,6 +5,13 @@ Headings are `version — date` (YYYY-MM-DD).
 
 ---
 
+## v0.130.3 — 2026-08-30
+
+### Fixed
+- **The last small hook where a siding meets its turnout is gone.** The rail leaving the turnout and the siding itself worked out their meeting point two different ways, so they missed each other by a fraction of an inch and the line doubled back on itself. They now meet exactly.
+
+---
+
 ## v0.130.2 — 2026-08-30
 
 ### Fixed

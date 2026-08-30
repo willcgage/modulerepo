@@ -1412,6 +1412,27 @@ export function BenchworkEditor({
     return { from, to, head, tail };
   };
 
+  /**
+   * ⭐⭐ JOIN A RUN'S ARRIVALS TO ITS BODY SO THEY MEET EXACTLY (#404).
+   *
+   * ⛔ `withArrivals` finds the handover by PROJECTING the arrival's end onto
+   * the centre-line, and `lanePath` then regenerates a point at that position.
+   * That is the handover derived TWICE: the projection drops the perpendicular
+   * residual, so the body begins a fraction off where the arrival really
+   * finished and the line doubles back — a small hook, measured at 0.16″–0.31″
+   * on FMN-0085 and reading as a kink in the rail.
+   *
+   * ⭐ The arrival's endpoint is the one that came from the turnout's own
+   * geometry, so it wins: the body is snapped to it at both ends. ONE
+   * definition, and both bodies below use it rather than repeating the splice.
+   */
+  const spliceArrivals = (head: Pt[] | null, body: Pt[], tail: Pt[] | null): Pt[] => {
+    const mid = [...body];
+    if (head?.length && mid.length) mid[0] = head[head.length - 1];
+    const back = tail ? [...tail].reverse() : [];
+    if (back.length && mid.length) mid[mid.length - 1] = back[0];
+    return [...(head ?? []), ...mid, ...back];
+  };
   /** A passing siding's BODY — the parallel run between its two turnouts,
    * clipped to their FROGS so it meets each diverging leg end-to-end. Without
    * this the body drew the full fromPos→toPos on the lane while the legs ended
@@ -1467,7 +1488,7 @@ export function BenchworkEditor({
     if (body.length < 2) return null;
     // `body` runs west→east, so the west leg's ease goes in front and the east
     // leg's on the end, reversed to keep the run in one direction.
-    return [...(head ?? []), ...body, ...(tail ? [...tail].reverse() : [])];
+    return spliceArrivals(head, body, tail);
   };
 
   /** A plain lane-parallel body, CLIPPED to any turnout leg reaching it — so the
@@ -1514,7 +1535,7 @@ export function BenchworkEditor({
     // and the east leg's on the end, reversed to keep the run in one direction.
     const body = lanePath(centerline, from, to, t.lane, 24, pinches);
     if (!body.length) return body;
-    return [...(head ?? []), ...body, ...(tail ? [...tail].reverse() : [])];
+    return spliceArrivals(head, body, tail);
   };
 
   /** A wye's mirrored second route — the leg forced to the opposite side, then
