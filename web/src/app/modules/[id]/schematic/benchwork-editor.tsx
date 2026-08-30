@@ -695,16 +695,24 @@ export function BenchworkEditor({
    * main. The old version assumed the host ran the same direction as the main
    * and just did `dir*(abs-start)`, which flipped a spur that ran east→west so
    * a value read from the wrong end (#132). */
-  const toHostRel = (onTrack: string | undefined | null, abs: number): number => {
-    if (!onTrack || onTrack === MAIN_TRACK_ID) return abs;
-    const host = hostPointsOf(onTrack);
-    if (host.length < 2) return abs;
+  /**
+   * Absolute inches from A → arc length along a GIVEN polyline (#388).
+   *
+   * ⭐ THE POLYLINE IS A PARAMETER, and that is the whole point. The conversion
+   * walks the curve you hand it, so the answer is only meaningful on THAT
+   * curve — an arc length from one polyline sampled on another lands somewhere
+   * else entirely, and silently. Callers therefore pass the very points they
+   * are about to sample, rather than naming a track and hoping two functions
+   * agree about what its geometry is.
+   */
+  const relAlongPoints = (pts: Pt[], abs: number): number => {
+    if (pts.length < 2) return abs;
     let acc = 0;
-    let prevLong = projectToCenterline(centerline, host[0]).pos;
+    let prevLong = projectToCenterline(centerline, pts[0]).pos;
     if (abs <= prevLong) return 0;
-    for (let i = 1; i < host.length; i++) {
-      const seg = Math.hypot(host[i].x - host[i - 1].x, host[i].y - host[i - 1].y);
-      const long = projectToCenterline(centerline, host[i]).pos;
+    for (let i = 1; i < pts.length; i++) {
+      const seg = Math.hypot(pts[i].x - pts[i - 1].x, pts[i].y - pts[i - 1].y);
+      const long = projectToCenterline(centerline, pts[i]).pos;
       const lo = Math.min(prevLong, long);
       const hi = Math.max(prevLong, long);
       if (abs >= lo && abs <= hi) {
@@ -715,6 +723,12 @@ export function BenchworkEditor({
       prevLong = long;
     }
     return acc;
+  };
+  const toHostRel = (onTrack: string | undefined | null, abs: number): number => {
+    if (!onTrack || onTrack === MAIN_TRACK_ID) return abs;
+    const host = hostPointsOf(onTrack);
+    if (host.length < 2) return abs;
+    return relAlongPoints(host, abs);
   };
   /** Arc length along the host → absolute inches from A (its main-projection). */
   const toHostAbs = (onTrack: string | undefined | null, rel: number): number => {
@@ -2531,7 +2545,42 @@ export function BenchworkEditor({
   const flexJoints = useMemo(() => {
     const out: Joint[] = [];
     for (const [trackId, f] of Object.entries(flexCutsByTrack ?? {})) {
-      const host = hostPointsOf(trackId);
+      /**
+       * ⛔⛔ SAMPLE THE LINE THAT IS ACTUALLY DRAWN (#388).
+       *
+       * This used `hostPointsOf`, which is a SIMPLIFIED re-derivation of a
+       * track's geometry — `lanePath` over the stored `fromPos`/`toPos`. What
+       * the canvas draws is `crossoverBody ?? authoredTrackPath ??
+       * divergingStubPath ?? passingSidingBody ?? laneBody`, and the last two
+       * both run `withArrivals` (which pulls each end back to where its
+       * turnout's leg hands over) and then splice those legs on. So the two
+       * curves have different ends AND different lengths, and an arc length
+       * measured on one lands somewhere else on the other.
+       *
+       * On a STRAIGHT module they very nearly coincide, which is why this
+       * survived: FMN-0068's joints measured 0.034″ off the rail and
+       * FMN-0082's 0.011″. On FMN-0085 — a U with two 90° bends and a siding
+       * at lane 4 — four of thirteen joints sat 3.2–3.4″ off every track, and
+       * 5.8–9.0″ from the siding they belong to. Will: *"joints are not a part
+       * of the track as they should be."*
+       *
+       * ⭐ So take the polyline the renderer already built. `trackPaths` is the
+       * single answer to "where is this track" ([[endplate-is-a-connector-353]]
+       * — mirror the lines the renderer draws, never re-derive them), and a
+       * joint sampled on it is ON it by construction.
+       */
+      const drawn = trackPaths.find((p) => p.id === trackId)?.pts;
+      /**
+       * ⚠️ AN `alongPath` RUN KEEPS `hostPointsOf`, DELIBERATELY. There `abs`
+       * is already an arc length along the track's OWN authored path, which is
+       * the frame `hostPointsOf` reproduces (`samplePath(host.path)`); the
+       * drawn line can carry extra geometry in front of it and would shift the
+       * origin that number is measured from. Measured before touching it:
+       * FMN-0068's branch joint sits 0.000″ off its rail on the old path, so
+       * this case was never broken and is left exactly as it was.
+       */
+      const host =
+        !f.alongPath && drawn && drawn.length >= 2 ? drawn : hostPointsOf(trackId);
       if (host.length < 2) continue;
       for (const abs of f.cuts) {
         /**
@@ -2541,14 +2590,15 @@ export function BenchworkEditor({
          * to zero, stacking every joint on the throat. The frame comes with the
          * number precisely so this cannot be got wrong by omission.
          */
-        const p = sampleAt(host, f.alongPath ? abs : toHostRel(trackId, abs));
+        // The arc length must be measured along the SAME curve it is sampled on.
+        const p = sampleAt(host, f.alongPath ? abs : relAlongPoints(host, abs));
         if (Number.isFinite(p.x) && Number.isFinite(p.y))
           out.push({ x: p.x, y: p.y, nx: p.nx, ny: p.ny });
       }
     }
     return out;
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [flexCutsByTrack, centerline, tracks]);
+  }, [flexCutsByTrack, centerline, tracks, trackPaths]);
 
   /** Where the spur body starts — the turnout's JOIN (the ramp's end, so the
    * spur is continuous with the turnout), falling back to the on-main turnout

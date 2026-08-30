@@ -5,6 +5,13 @@ Headings are `version — date` (YYYY-MM-DD).
 
 ---
 
+## v0.128.1 — 2026-08-30
+
+### Fixed
+- **Rail joints sit on the track again on a curved module.** On a module with bends, the joints along a siding could be drawn several inches away from the rail they belong to — floating beside it rather than marking it. The joints were being placed along a simplified idea of where the track runs instead of the line actually drawn; on a straight module the two agree to within a hundredth of an inch, which is why this only showed up on a curve. They are now placed on the drawn track itself, so a joint cannot be anywhere else.
+
+---
+
 ## v0.128.0 — 2026-08-30
 
 ### Fixed
