@@ -5,6 +5,14 @@ Headings are `version — date` (YYYY-MM-DD).
 
 ---
 
+## v0.129.2 — 2026-08-30
+
+### Fixed
+- **A new siding on a double-track module no longer lands on top of the second main.** A change earlier today meant to keep new tracks clear of Main 2 and did the opposite: it moved them into Main 2's own row. New tracks start clear of it again.
+- **The warning about a track stranded beyond Main 2 no longer suggests a remedy that does not work.** It said redrawing the track would move it. It will not: which side a track sits on follows the hand of the turnout that opens it, not any number the app picks. The warning now names the two things that do work — give the turnouts the opposite hand, or have them diverge from Main 2, the main the track lies alongside.
+
+---
+
 ## v0.129.1 — 2026-08-30
 
 ### Fixed

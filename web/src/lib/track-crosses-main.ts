@@ -24,11 +24,14 @@ export type StrandedTrack = {
  * right, and it was not a drawing fault — `moduleFeatures` really did resolve
  * `sid1` to lane 4 with `divergesFromLane: 0`, Main 2 at lane 1 between them.
  *
- * ⭐ WHY IT IS FLAGGED RATHER THAN MOVED. A lane is not exposed anywhere in the
- * UI, so an owner cannot correct one — but it is also the only record of where
- * they put the track, and silently restacking it could move a siding they have
- * already dimensioned and filled with industries. So this SAYS SO, names the
- * remedy, and changes nothing ([[flagged-never-corrected]]).
+ * ⭐ WHY IT IS FLAGGED RATHER THAN MOVED, AND WHY NO LANE FIXES IT. The package's
+ * `resolveLane` keeps only a stored lane's MAGNITUDE and re-derives the SIGN
+ * from the feeding turnout's hand — so which side a track lands on is not a
+ * number anyone can set here. Measured on FMN-0085: a stored -1 comes back as
+ * +1, and every positive magnitude still crosses Main 2 (lane 1 overlaps it
+ * outright, 18 crossings). The remedies are the opposite hand, or — usually the
+ * real answer — feeding the track from Main 2, the main it lies alongside. So
+ * this SAYS SO and changes nothing ([[flagged-never-corrected]]).
  *
  * ⚠️ Only a track diverging from the OPPOSITE side of Main 2 is stranded. One
  * that hangs off Main 2 itself is reached without crossing anything and is

@@ -2160,24 +2160,40 @@ export function SchematicEditor({
    * be wrong.
    */
   const nextLane = (s: EditorState) => {
+    /**
+     * ⛔⛔ THE SIDE IS NOT OURS TO CHOOSE, AND #386 WRONGLY ASSUMED IT WAS.
+     *
+     * #386 returned a NEGATIVE lane on a double module, meaning to stack away
+     * from Main 2. Measured afterwards, that was inert: the package's
+     * `resolveLane` keeps only a stored lane's MAGNITUDE and re-derives the
+     * sign from the feeding turnout's hand (and flip). A stored -1 comes back
+     * as +1 whenever the hand says so.
+     *
+     * ⛔⛔ Worse, it also dropped the magnitude from 2 to 1, so in exactly the
+     * case it meant to fix — hands pointing toward Main 2 — a new siding landed
+     * ON TOP of Main 2 instead of merely beyond it. Measured on a straight
+     * double module: old |lane| 2 crossed Main 2 twice, new |lane| 1 OVERLAPPED
+     * it. That is a regression, and this restores the floor.
+     *
+     * ⭐ So: the magnitude is ours, the sign is the hand's. Lane ±1 is Main 2 on
+     * a double module, so anything else must start at 2 or it collides. The
+     * first FREE slot at or above that is taken, which is the one part of #386
+     * that was right — a deleted track's slot used to be retired for good, and a
+     * module edited for a while pushed new sidings further and further out.
+     *
+     * ⚠️ A siding whose hands put it on Main 2's side still has to CROSS Main 2
+     * to be reached from Main 1, and no lane can fix that — the real answer is
+     * that such a siding is fed FROM Main 2. `tracksStrandedAcrossMain2` says so
+     * and leaves the document alone.
+     */
     const isDouble = s.configA === "double" || s.configB === "double";
-    // Main 2 sits at lane +1, or -1 when the mains are swapped — the package's
-    // `main2Track` is the authority and this mirrors it rather than guessing.
-    const main2Lane = isDouble ? (s.mainsSwapped ? -1 : 1) : 0;
-    // ⛔⛔ STACK AWAY FROM MAIN 2, NEVER BEYOND IT (#386). This used to start at
-    // lane 2 on a double module, meaning EVERY siding and spur was placed on
-    // the FAR SIDE of Main 2 — and since they diverge from Main 1 on the centre
-    // line, their throats had to cross Main 2 to get there. Will, on FMN-0085:
-    // "the 2D has the siding crossing over the two mainlines. That is
-    // incorrect." It was not a drawing fault: the resolver really did put
-    // `sid1` at lane 4 with `divergesFromLane: 0` and Main 2 at lane 1 between
-    // them. Avoiding Main 2's own lane was the intent; landing past it is worse
-    // than landing on it.
-    const dir = main2Lane > 0 ? -1 : 1;
-    const taken = new Set(s.extraTracks.map((t) => t.lane));
-    let n = 1;
-    while (taken.has(dir * n)) n++;
-    return dir * n;
+    const base = isDouble ? 2 : 1;
+    // Compared by MAGNITUDE, because the sign is reconciled from the hand later
+    // and a slot is occupied whichever side it ends up on.
+    const taken = new Set(s.extraTracks.map((t) => Math.abs(t.lane)));
+    let lane = base;
+    while (taken.has(lane)) lane++;
+    return lane;
   };
   /** A spur / yard lead diverging from `throatTurnoutId`, drawn out to a stub. */
   function placeSpur(
@@ -7834,10 +7850,12 @@ function Inspector({
           <p className="rounded-md bg-amber-50 px-2 py-1 text-xs text-amber-800" role="status">
             ⚠ This track sits beyond Main 2, so the rail joining it to{" "}
             {stranded.turnoutIds.join(" and ")} has to cross the second main —
-            which no crossing here describes, and no railroad would build. Newly
-            drawn tracks now go on the other side of the mains; this one was
-            placed before that, and a track&rsquo;s side cannot be edited, so
-            delete and redraw it to move it. Nothing has been changed for you.
+            which no crossing here describes, and no railroad would build. Which
+            side a track lands on follows the hand of the turnout that opens it,
+            so redrawing it will not move it. Either give this track&rsquo;s
+            turnouts the opposite hand, or — usually the real answer — set them
+            to diverge from <strong>Main 2</strong>, which is the main it lies
+            alongside. Nothing has been changed for you.
           </p>
         );
       })()}
