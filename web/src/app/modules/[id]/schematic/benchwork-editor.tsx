@@ -876,8 +876,30 @@ export function BenchworkEditor({
     // determined has nothing for hand to state. The hand is still right and
     // still drives the dispatcher view; it just isn't what decides this.
     const crossoverLeg = dt.role === "crossover";
+    /**
+     * ⛔⛔ THE LEG FOLLOWS THE TRACK'S LANE, NOT ITS OWN HAND (#398).
+     *
+     * This read `handSide` for every non-crossover turnout — a SECOND answer to
+     * a question `moduleFeatures.resolveLane` has already settled. That function
+     * signs a track's lane from the hand (and flip) of the FIRST turnout feeding
+     * it; taking each leg's side from its own hand instead means the legs and
+     * the body can disagree, and on FMN-0085 they did: measured across the
+     * siding, the ENDS sat on side +1 and the MIDDLE on −1, so the track wove
+     * across the main twice and came out **153.3″** where the module page drew
+     * the same siding at **122.4″**. Same document, 31″ apart, while both views
+     * agreed on the mains to the inch. Will: *"there are still issues."*
+     *
+     * ⭐ THE HAND STILL DECIDES THE SIDE — through `resolveLane`, once, for the
+     * whole track. `geoSide` is that decision read back off the lane, so this
+     * honours the hand instead of re-deriving it, and the two renderers now
+     * derive the drawn side from the same fact. Same fix as #394 in
+     * `physical-track.ts`; this is the other half of it.
+     *
+     * ⚠️ `handSide` is kept for the case `geoSide` cannot answer: a track with
+     * no lane and no path has no side of its own to read.
+     */
     const side =
-      forceSide ?? (crossoverLeg ? geoSide : ((handSide || undefined) ?? geoSide));
+      forceSide ?? (crossoverLeg ? geoSide : (geoSide || (handSide || undefined) || 1));
     const size = t.size && t.size > 0 ? t.size : 6;
     const effN = t.kind === "wye" ? size * 2 : size;
     /**

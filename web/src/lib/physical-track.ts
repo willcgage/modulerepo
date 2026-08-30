@@ -547,7 +547,9 @@ export function physicalSchematic(
     // end-to-end; fall back to the old dip to the main where no leg is drawn
     // (a crossover leg, or a turnout whose far end gives no direction).
     const hands = legHandover.get(t.id) ?? [];
-    const joinAt = (frac: number) => {
+    /** The leg handing over at this end, if one is drawn there. */
+    const handAt = (frac: number): Pt | null => {
+      if (!hands.length) return null;
       const at = P(frac, t.divergesFromLane);
       let best: Pt | null = null;
       let bd = Infinity;
@@ -558,17 +560,37 @@ export function physicalSchematic(
           best = h;
         }
       }
-      return best ?? at;
+      return best;
     };
+    const joinAt = (frac: number) => handAt(frac) ?? P(frac, t.divergesFromLane);
+    /**
+     * ⛔⛔ WHERE THE BODY STARTS — AND WHY IT IS NOT A PERCENTAGE (#398).
+     *
+     * This ran the body between `tx + thr` and `ex - thr`, where `thr` is
+     * **12% of the track's own span**. That number describes nothing: it is not
+     * the turnout, not the part, not the lane. On FMN-0085's 140″ siding it ate
+     * **~17″ at EACH end**, so the module page drew the siding **122.4″** long
+     * where the builder — which clips to the real leg handover via
+     * `withArrivals` — drew the same track at **153.3″**. Same document, same
+     * track, **31″ apart**, while both views agreed on the mains to the inch.
+     * Will: *"there are still issues with the 2d."*
+     *
+     * ⭐ The turnout already says where its flex begins: the leg's own end.
+     * Project it back onto the centre-line and start the body THERE, so the two
+     * renderers derive the same track from the same fact instead of one of them
+     * guessing. Falls back to the old taper only where no leg is drawn.
+     */
+    const handFrac = (frac: number): number | null => {
+      const h = handAt(frac);
+      return h ? c01(projectToCenterline(center, h).pos / len) : null;
+    };
+    const f0 = handFrac(tx) ?? tx + dir * thr;
+    const f1 = handFrac(ex) ?? ex - dir * thr;
     const pts = flat
       ? body(tx, ex, t.lane)
       : isSpur
-        ? [joinAt(tx), ...body(tx + dir * thr, ex, t.lane)]
-        : [
-            joinAt(tx),
-            ...body(tx + dir * thr, ex - dir * thr, t.lane),
-            joinAt(ex),
-          ];
+        ? [joinAt(tx), ...body(f0, ex, t.lane)]
+        : [joinAt(tx), ...body(f0, f1, t.lane), joinAt(ex)];
     tracks.push({ id: t.id, pts, role: isSpur ? "spur" : "siding" });
   }
   tracks.push(...legs);

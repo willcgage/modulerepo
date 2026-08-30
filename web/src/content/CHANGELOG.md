@@ -5,6 +5,14 @@ Headings are `version — date` (YYYY-MM-DD).
 
 ---
 
+## v0.130.0 — 2026-08-30
+
+### Fixed
+- **A siding no longer weaves across the mainline in the builder.** Where a siding met its turnouts, the short rail from each turnout was worked out separately from the siding itself, so the two ends could sit on the opposite side of the main from the middle — the track crossed the mainline twice and came out about 30″ longer than it is. Both ends now follow the side the siding is actually on. The builder and the module page had been drawing the same siding 31″ apart; they now agree.
+- **The module drawing no longer trims a siding by a percentage.** It used to shorten each end by 12% of the siding's own length to make room for the turnout — a number that describes nothing about the turnout or the track. It now starts where the turnout's own rail ends.
+
+---
+
 ## v0.129.2 — 2026-08-30
 
 ### Fixed
