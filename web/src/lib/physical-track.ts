@@ -265,7 +265,25 @@ export function lanePath(
   // derived lane geometry goes through, so the bands, the hosts a turnout sits
   // on, and the crossover connector's own endpoints all follow the same curve
   // instead of having to agree with each other separately.
-  const steps_ = pinches?.length ? Math.max(steps, 96) : steps;
+  /**
+   * ⭐⭐ SAMPLE BY LENGTH, NOT BY A FIXED COUNT (#406).
+   *
+   * ⛔ A flat 24 steps re-sampled a 180″ module at 25 points — **7.5″ apart,
+   * COARSER THAN THE CENTRE-LINE IT READS FROM**, which carries a vertex every
+   * ~3″ and turns at most 7.50° between them. So this threw away the good
+   * geometry and handed back a polygon: measured on FMN-0085 the drawn mains
+   * bent **19.6°** between vertices where their own centre-line bends 7.50°,
+   * and every lane-offset track inherited that and amplified it — the faceting
+   * Will reported as kinks.
+   *
+   * ⭐ One sample per inch of run tracks the source instead of undercutting it.
+   * The floor keeps short runs exactly as they were, and the existing pinch
+   * bump still wins when it is larger — that clause was already an admission
+   * that 24 is too few.
+   */
+  const spanInches = b - a;
+  const byLength = Math.ceil(spanInches);
+  const steps_ = Math.max(steps, byLength, pinches?.length ? 96 : 0);
   const out: Pt[] = [];
   for (let s = 0; s <= steps_; s++) {
     const pos = a + ((b - a) * s) / steps_;

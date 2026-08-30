@@ -5,6 +5,13 @@ Headings are `version — date` (YYYY-MM-DD).
 
 ---
 
+## v0.130.4 — 2026-08-30
+
+### Fixed
+- **Curves are drawn as curves, not as a chain of straight facets.** On a module with bends, every track was redrawn at 25 evenly spaced points however long the module was — on a 15-foot U that is a corner every 7½ inches, coarser than the shape the drawing was reading from. Tracks are now sampled along their length, so they follow the module's real curvature. Short runs are unchanged.
+
+---
+
 ## v0.130.3 — 2026-08-30
 
 ### Fixed
