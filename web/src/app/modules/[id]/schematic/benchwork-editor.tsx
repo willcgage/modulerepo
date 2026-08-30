@@ -29,6 +29,7 @@ import {
   insertIntoRun,
   maxFlexPieceInches,
   snapPiece,
+  sliceCenterline,
 } from "@willcgage/module-schematic";
 import { drawablePartFor, PART_LIBRARY } from "./part-library";
 import {
@@ -279,7 +280,7 @@ export function BenchworkEditor({
   onDropSignal,
   onTrackEndDrop,
   onTurnoutDrop,
-  flexCutsByTrack,
+  flexPiecesByTrack,
   selection = null,
   onSelect,
   outlineSection = null,
@@ -438,7 +439,15 @@ export function BenchworkEditor({
    * module, by track id (#193). The editor works these out (it owns the pieces
    * and the parts they're cut from); the canvas only has to place them, which
    * it does exactly as it places a turnout on its host. */
-  flexCutsByTrack?: Record<string, { cuts: number[]; alongPath: boolean }>;
+  /** ⭐ The PIECES, not a list of joint positions (#392). A joint is the end
+   * of a piece, so the canvas slices the line it draws and reads the joints off
+   * the slices — see `piecePaths`. Each entry carries the frame its spans are
+   * in: `alongPath` spans are arc length on the track's own path, the rest are
+   * inches along the module. */
+  flexPiecesByTrack?: Record<
+    string,
+    { pieces: { index: number; fromPos: number; toPos: number; lengthInches: number; overlong: boolean; fromEnd: string; toEnd: string }[]; alongPath: boolean }
+  >;
   /** Selection is owned by the editor, which renders the inspector for it. */
   selection?: CanvasSelection | null;
   onSelect?: (s: CanvasSelection | null) => void;
@@ -2530,6 +2539,81 @@ export function BenchworkEditor({
   }, [legsByTrack, danglingRailEnds, crossoverAssemblyJoints]);
 
   /**
+   * ⭐⭐ EVERY FLEX PIECE, AS ITS OWN STRETCH OF THE DRAWN TRACK (#392 phase 1).
+   *
+   * Will: *"The track joints are not something that should be added after the
+   * track, they are a part of each end of a piece of track."*
+   *
+   * ⛔ THE OLD SHAPE DISAGREED. The editor sent a bare `cuts: number[]` and this
+   * placed a tick at each — a track was one line, and joints were marks put on
+   * it afterwards. Because the position was worked out separately from the line,
+   * the two could disagree, and on FMN-0085 four of thirteen joints landed 3.4″
+   * off the rail (#388).
+   *
+   * ⭐ Now the run is CUT INTO PIECES on the line the canvas already draws, and
+   * a joint is simply where two of them meet. There is no position to compute
+   * and nothing to keep in step: a joint is an END OF A PIECE, so it is on the
+   * track by construction — exactly as `pieceRoutePaths` puts it in the package,
+   * *"each polyline ends exactly on its joints"*.
+   *
+   * `sliceCenterline` does the cutting because it already promises the ends are
+   * interpolated to land exactly on the cut, which is the whole property needed.
+   */
+  const piecePaths = useMemo(() => {
+    const out: {
+      trackId: string;
+      index: number;
+      pts: Pt[];
+      lengthInches: number;
+      overlong: boolean;
+      fromEnd: string;
+      toEnd: string;
+    }[] = [];
+    for (const [trackId, f] of Object.entries(flexPiecesByTrack ?? {})) {
+      /**
+       * ⭐ THE LINE THAT IS ACTUALLY DRAWN (#388). `hostPointsOf` is a
+       * SIMPLIFIED re-derivation — `lanePath` over the stored extent — while the
+       * canvas draws `crossoverBody ?? authoredTrackPath ?? divergingStubPath ??
+       * passingSidingBody ?? laneBody`, the last two of which pull each end back
+       * to where the turnout's leg hands over and splice the leg on. Different
+       * ends, different length; slicing one and drawing the other would put the
+       * pieces somewhere the track isn't.
+       *
+       * ⚠️ An `alongPath` run keeps `hostPointsOf` deliberately: there the spans
+       * are already arc length along the track's OWN authored path, which is the
+       * frame `hostPointsOf` reproduces. Measured before touching it —
+       * FMN-0068's branch joint sits 0.000″ off its rail — so that case was
+       * never broken.
+       */
+      const drawn = trackPaths.find((tp) => tp.id === trackId)?.pts;
+      const host =
+        !f.alongPath && drawn && drawn.length >= 2 ? drawn : hostPointsOf(trackId);
+      if (host.length < 2) continue;
+      // Spans are positions along the module (or the path); the line is measured
+      // in arc length. Convert ONCE per end, on the very curve being cut.
+      const rel = (abs: number) => (f.alongPath ? abs : relAlongPoints(host, abs));
+      for (const pc of f.pieces) {
+        const from = rel(pc.fromPos);
+        const to = rel(pc.toPos);
+        if (!Number.isFinite(from) || !Number.isFinite(to) || to <= from) continue;
+        const pts = sliceCenterline(host, from, to) as Pt[];
+        if (pts.length < 2) continue;
+        out.push({
+          trackId,
+          index: pc.index,
+          pts,
+          lengthInches: pc.lengthInches,
+          overlong: pc.overlong,
+          fromEnd: pc.fromEnd,
+          toEnd: pc.toEnd,
+        });
+      }
+    }
+    return out;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [flexPiecesByTrack, centerline, tracks, trackPaths]);
+
+  /**
    * Where one length of FLEX meets the next (#193) — kept apart from the joints
    * above because they answer to a different level of detail.
    *
@@ -2539,66 +2623,27 @@ export function BenchworkEditor({
    * the model exists. Gating them behind `railsVisible` meant a 96″ module
    * showed none of them at the zoom it opens at.
    *
-   * Placed the way a turnout on a host is placed, so a jointed spur, a curved
-   * main and a drawn path all get theirs in the right spot.
+   * ⭐⭐ READ OFF THE PIECES, NOT PLACED. A joint is the end of a piece: it is
+   * the last point of a slice that meets another piece, so it cannot be
+   * anywhere the track isn't. Nothing here computes a position.
    */
   const flexJoints = useMemo(() => {
     const out: Joint[] = [];
-    for (const [trackId, f] of Object.entries(flexCutsByTrack ?? {})) {
-      /**
-       * ⛔⛔ SAMPLE THE LINE THAT IS ACTUALLY DRAWN (#388).
-       *
-       * This used `hostPointsOf`, which is a SIMPLIFIED re-derivation of a
-       * track's geometry — `lanePath` over the stored `fromPos`/`toPos`. What
-       * the canvas draws is `crossoverBody ?? authoredTrackPath ??
-       * divergingStubPath ?? passingSidingBody ?? laneBody`, and the last two
-       * both run `withArrivals` (which pulls each end back to where its
-       * turnout's leg hands over) and then splice those legs on. So the two
-       * curves have different ends AND different lengths, and an arc length
-       * measured on one lands somewhere else on the other.
-       *
-       * On a STRAIGHT module they very nearly coincide, which is why this
-       * survived: FMN-0068's joints measured 0.034″ off the rail and
-       * FMN-0082's 0.011″. On FMN-0085 — a U with two 90° bends and a siding
-       * at lane 4 — four of thirteen joints sat 3.2–3.4″ off every track, and
-       * 5.8–9.0″ from the siding they belong to. Will: *"joints are not a part
-       * of the track as they should be."*
-       *
-       * ⭐ So take the polyline the renderer already built. `trackPaths` is the
-       * single answer to "where is this track" ([[endplate-is-a-connector-353]]
-       * — mirror the lines the renderer draws, never re-derive them), and a
-       * joint sampled on it is ON it by construction.
-       */
-      const drawn = trackPaths.find((p) => p.id === trackId)?.pts;
-      /**
-       * ⚠️ AN `alongPath` RUN KEEPS `hostPointsOf`, DELIBERATELY. There `abs`
-       * is already an arc length along the track's OWN authored path, which is
-       * the frame `hostPointsOf` reproduces (`samplePath(host.path)`); the
-       * drawn line can carry extra geometry in front of it and would shift the
-       * origin that number is measured from. Measured before touching it:
-       * FMN-0068's branch joint sits 0.000″ off its rail on the old path, so
-       * this case was never broken and is left exactly as it was.
-       */
-      const host =
-        !f.alongPath && drawn && drawn.length >= 2 ? drawn : hostPointsOf(trackId);
-      if (host.length < 2) continue;
-      for (const abs of f.cuts) {
-        /**
-         * ⭐ A ROUTE-LOCAL CUT IS ALREADY AN ARC LENGTH ON THIS POLYLINE (#226),
-         * so it is sampled straight. Running it through `toHostRel` would project
-         * it back onto the main — which for a route that leaves at 90° collapses
-         * to zero, stacking every joint on the throat. The frame comes with the
-         * number precisely so this cannot be got wrong by omission.
-         */
-        // The arc length must be measured along the SAME curve it is sampled on.
-        const p = sampleAt(host, f.alongPath ? abs : relAlongPoints(host, abs));
-        if (Number.isFinite(p.x) && Number.isFinite(p.y))
-          out.push({ x: p.x, y: p.y, nx: p.nx, ny: p.ny });
-      }
+    for (const pc of piecePaths) {
+      // Only where one piece meets the NEXT. Against a part the turnout draws
+      // its own joint (#189), and at the end of a run there is an endplate or a
+      // stop, which is not a joint at all.
+      if (pc.toEnd !== "piece") continue;
+      const end = pc.pts[pc.pts.length - 1];
+      const prev = pc.pts[pc.pts.length - 2];
+      const dx = end.x - prev.x;
+      const dy = end.y - prev.y;
+      const len = Math.hypot(dx, dy) || 1;
+      // The tick draws ACROSS the rails, so the normal is the tangent turned 90°.
+      out.push({ x: end.x, y: end.y, nx: -dy / len, ny: dx / len });
     }
     return out;
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [flexCutsByTrack, centerline, tracks, trackPaths]);
+  }, [piecePaths]);
 
   /** Where the spur body starts — the turnout's JOIN (the ramp's end, so the
    * spur is continuous with the turnout), falling back to the on-main turnout

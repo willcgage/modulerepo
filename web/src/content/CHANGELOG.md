@@ -5,6 +5,13 @@ Headings are `version — date` (YYYY-MM-DD).
 
 ---
 
+## v0.129.0 — 2026-08-30
+
+### Changed
+- **Track joints are now part of the track, not marks added to it.** The builder used to work out where each joint went and then draw a tick there, which is why joints could end up beside the rail instead of on it. A run is now cut into its actual pieces along the line the canvas draws, and a joint is simply where one piece ends and the next begins — so it cannot be anywhere the track isn't. Nothing looks different; joints land exactly where they did after the last fix, and this is the groundwork for being able to pick up an individual piece of flex.
+
+---
+
 ## v0.128.2 — 2026-08-30
 
 ### Fixed
