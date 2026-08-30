@@ -1120,8 +1120,31 @@ export function BenchworkEditor({
       return out;
     };
     const divergeLane = tracks.find((x) => x.id === t.divergeTrack)?.lane;
+    /**
+     * ⛔⛔ THE ARRIVAL CLIMBS FROM THE HOST, NOT FROM MAIN 1 (#402).
+     *
+     * This passed the diverging track's ABSOLUTE lane offset, which is only the
+     * distance to climb when the turnout stands on the centre line. Put the
+     * turnout on Main 2 and the ease overshoots by a whole lane: the arrival
+     * runs past the siding, the body then starts back at the true lane, and the
+     * two meet in a CUSP. Measured on FMN-0085 — bends of 70.8° and 83.1° where
+     * the head joins the body, 97.4° and 96.6° at the tail, with the head
+     * curling harder and harder (9° → 24° → 48° → 70°) as it overshot. Will:
+     * *"the siding has kinks in the track."*
+     *
+     * ⚠️ IT WAS LATENT UNTIL A TURNOUT MOVED OFF MAIN 1. Absolute and
+     * host-relative are the same number on the centre line, which is why every
+     * earlier module drew cleanly — and why repairing FMN-0085 to feed its
+     * siding from Main 2 is what exposed it.
+     *
+     * ⭐ Exactly the same correction as #400 in `physical-track.ts`, which had
+     * this bug too and where it was found first. Two renderers, one mistake.
+     */
+    const hostLane = tracks.find((x) => x.id === t.onTrack)?.lane ?? 0;
     const arrival =
-      divergeLane == null ? null : arrivalTo(Math.abs(laneOffset(divergeLane)));
+      divergeLane == null
+        ? null
+        : arrivalTo(Math.abs(laneOffset(divergeLane) - laneOffset(hostLane)));
 
     return {
       leg,

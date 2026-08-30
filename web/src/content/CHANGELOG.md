@@ -5,6 +5,13 @@ Headings are `version — date` (YYYY-MM-DD).
 
 ---
 
+## v0.130.2 — 2026-08-30
+
+### Fixed
+- **A siding opened from the second main no longer has kinks in it.** Where the rail eased out of the turnout onto the siding, it was aiming for a distance measured from the first main rather than from the track the turnout actually stands on — so on a siding fed from Main 2 it ran a whole track-width too far, then doubled back to meet the siding, leaving sharp corners at both ends. It now eases out from the track it starts on.
+
+---
+
 ## v0.130.1 — 2026-08-30
 
 ### Fixed
