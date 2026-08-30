@@ -264,6 +264,7 @@ import { snapPoseToOutline, sampleAt, laneOffset } from "@/lib/physical-track";
 import { partLibraryWith } from "./part-library";
 import { tracksAdriftFromTurnouts } from "@/lib/track-adrift";
 import { sidingHandConflicts } from "@/lib/siding-hands";
+import { tracksStrandedAcrossMain2 } from "@/lib/track-crosses-main";
 import { endplateTrackPoints, startJointsFor } from "./piece-layer";
 import type { StoredTrackPart } from "@willcgage/module-schematic";
 import {
@@ -2149,11 +2150,24 @@ export function SchematicEditor({
    * be wrong.
    */
   const nextLane = (s: EditorState) => {
-    const base = s.configA === "double" || s.configB === "double" ? 2 : 1;
-    const taken = new Set(s.extraTracks.map((t) => Math.abs(t.lane)));
-    let lane = base;
-    while (taken.has(lane)) lane++;
-    return lane;
+    const isDouble = s.configA === "double" || s.configB === "double";
+    // Main 2 sits at lane +1, or -1 when the mains are swapped — the package's
+    // `main2Track` is the authority and this mirrors it rather than guessing.
+    const main2Lane = isDouble ? (s.mainsSwapped ? -1 : 1) : 0;
+    // ⛔⛔ STACK AWAY FROM MAIN 2, NEVER BEYOND IT (#386). This used to start at
+    // lane 2 on a double module, meaning EVERY siding and spur was placed on
+    // the FAR SIDE of Main 2 — and since they diverge from Main 1 on the centre
+    // line, their throats had to cross Main 2 to get there. Will, on FMN-0085:
+    // "the 2D has the siding crossing over the two mainlines. That is
+    // incorrect." It was not a drawing fault: the resolver really did put
+    // `sid1` at lane 4 with `divergesFromLane: 0` and Main 2 at lane 1 between
+    // them. Avoiding Main 2's own lane was the intent; landing past it is worse
+    // than landing on it.
+    const dir = main2Lane > 0 ? -1 : 1;
+    const taken = new Set(s.extraTracks.map((t) => t.lane));
+    let n = 1;
+    while (taken.has(dir * n)) n++;
+    return dir * n;
   };
   /** A spur / yard lead diverging from `throatTurnoutId`, drawn out to a stub. */
   function placeSpur(
@@ -7800,6 +7814,23 @@ function Inspector({
           this contradiction was invisible AND correcting it changed nothing on
           screen. It says so here and rewrites neither hand: which end is wrong
           is the owner's call. */}
+      {/* ⛔ THIS TRACK IS BEYOND MAIN 2, SO ITS THROAT CROSSES IT (#386). The
+          app put it there — `nextLane` used to start at lane 2 on a double
+          module — and a lane is not editable, so the remedy has to be named. */}
+      {(() => {
+        const stranded = tracksStrandedAcrossMain2(state).get(t.id);
+        if (!stranded) return null;
+        return (
+          <p className="rounded-md bg-amber-50 px-2 py-1 text-xs text-amber-800" role="status">
+            ⚠ This track sits beyond Main 2, so the rail joining it to{" "}
+            {stranded.turnoutIds.join(" and ")} has to cross the second main —
+            which no crossing here describes, and no railroad would build. Newly
+            drawn tracks now go on the other side of the mains; this one was
+            placed before that, and a track&rsquo;s side cannot be edited, so
+            delete and redraw it to move it. Nothing has been changed for you.
+          </p>
+        );
+      })()}
       {(() => {
         const clash = sidingHandConflicts(state).get(t.id);
         if (!clash) return null;

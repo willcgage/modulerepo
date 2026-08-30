@@ -5,6 +5,16 @@ Headings are `version — date` (YYYY-MM-DD).
 
 ---
 
+## v0.128.0 — 2026-08-30
+
+### Fixed
+- **A new siding or spur on a double-track module no longer lands on the far side of Main 2.** Sidings were stacked outward starting past the second main, while still branching off the first one — so the track joining them had to cross Main 2, which no railroad would build and no crossing in your document described. New tracks now stack on the other side of the mains, where nothing has to be crossed.
+
+### Added
+- **A track already stranded beyond Main 2 now says so.** Because a track's side is not something you can edit, modules built before the fix would have stayed silently wrong. The track's panel now explains that its throat crosses the second main and that deleting and redrawing it is the way to move it. Nothing is changed for you.
+
+---
+
 ## v0.127.2 — 2026-08-29
 
 ### Fixed
