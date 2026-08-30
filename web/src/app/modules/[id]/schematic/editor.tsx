@@ -1345,23 +1345,33 @@ export function SchematicEditor({
   ]);
 
   /**
-   * Just the joint positions, for the canvas to draw a tick at each.
+   * ⭐⭐ THE PIECES THEMSELVES, NOT A LIST OF JOINT POSITIONS (#392 phase 1).
    *
-   * ⚠️ EACH ENTRY CARRIES THE FRAME ITS POSITIONS ARE IN. A bare `number[]` was
-   * fine while every run was measured from endplate A; a route-local cut is arc
-   * length along the track's own path, and the two are not interchangeable —
-   * feeding one to the other's sampler is silently wrong rather than obviously
-   * wrong. Shipping the number without the frame is how a new field reaches the
-   * model but not the code that draws it.
+   * Will: *"The track joints are not something that should be added after the
+   * track, they are a part of each end of a piece of track."* He is right, and
+   * this used to disagree with him:
+   *
+   *     const cuts = f.pieces.filter((p) => p.toEnd === "piece").map((p) => p.toPos);
+   *
+   * `flexPieces` returns real pieces — each with its span, its length, and
+   * `fromEnd`/`toEnd` saying whether that end meets another piece, a PART, or
+   * the end of the run. That line threw all of it away and kept bare numbers,
+   * which the canvas then RE-PLACED onto a curve. **That re-placement was a
+   * second derivation of where the track is**, and it is what put four of
+   * FMN-0085's thirteen joints 3.4″ off the rail (#388).
+   *
+   * Handing over the pieces lets the canvas slice the line it already draws and
+   * take each joint from a piece's own end, where it cannot be anywhere else.
+   *
+   * ⚠️ EACH ENTRY STILL CARRIES THE FRAME ITS POSITIONS ARE IN. A route-local
+   * span is arc length along the track's own path; a lane-parallel one is
+   * inches along the module. The two are not interchangeable, and feeding one
+   * to the other's sampler is silently wrong rather than obviously wrong.
    */
-  const flexCutsByTrack = useMemo(() => {
-    const out: Record<string, { cuts: number[]; alongPath: boolean }> = {};
+  const flexPiecesByTrack = useMemo(() => {
+    const out: Record<string, { pieces: FlexPiece[]; alongPath: boolean }> = {};
     for (const [id, f] of Object.entries(flexByTrack)) {
-      // Only the joints BETWEEN two pieces of flex — where a piece meets a
-      // turnout or a crossing the part already draws its own (#189), and where
-      // it meets the end of the run there's an endplate, not a joint.
-      const cuts = f.pieces.filter((p) => p.toEnd === "piece").map((p) => p.toPos);
-      if (cuts.length) out[id] = { cuts, alongPath: f.alongPath };
+      if (f.pieces.length) out[id] = { pieces: f.pieces, alongPath: f.alongPath };
     }
     return out;
   }, [flexByTrack]);
@@ -3580,7 +3590,7 @@ export function SchematicEditor({
                 onDropTurnout={onDropTurnout}
                 onDropCrossover={onDropCrossover}
                 onDropSignal={onDropSignal}
-                flexCutsByTrack={flexCutsByTrack}
+                flexPiecesByTrack={flexPiecesByTrack}
                 onTrackEndDrop={mergeAbutting}
                 onTurnoutDrop={onTurnoutDrop}
                 onTrackPathChange={(id, path) =>
