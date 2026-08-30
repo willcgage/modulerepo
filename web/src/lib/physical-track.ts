@@ -417,44 +417,8 @@ export function physicalSchematic(
     }
   }
 
-  // --- Sidings & spurs — a body on their lane, dipping to the main they
-  //     diverge from at each turnout end (a spur dips once, a siding twice). ---
-  const divergesTo = (id: string) => (doc.turnouts ?? []).some((sw) => sw.divergeTrack === id);
-  const onTrackHas = (id: string) => (doc.turnouts ?? []).some((sw) => sw.onTrack === id);
-  for (const t of f.extraTracks) {
-    const isSpur = t.role === "spur";
-    // A track that turnouts sit ON but nothing DIVERGES INTO (a crossover leg)
-    // stays flat — its connection is the crossover diagonal, not an end dip.
-    const flat = !isSpur && !divergesTo(t.id) && onTrackHas(t.id);
-    const tx = isSpur ? t.throatFrac : t.fromFrac;
-    const ex = isSpur ? t.stubFrac : t.toFrac;
-    const spanFrac = Math.abs(ex - tx);
-    const thr = Math.min(spanFrac * 0.12 + gapFrac, isSpur ? spanFrac : spanFrac / 2);
-    const dir = ex >= tx ? 1 : -1;
-    const pts = flat
-      ? body(tx, ex, t.lane)
-      : isSpur
-        ? [P(tx, t.divergesFromLane), ...body(tx + dir * thr, ex, t.lane)]
-        : [
-            P(tx, t.divergesFromLane),
-            ...body(tx + dir * thr, ex - dir * thr, t.lane),
-            P(ex, t.divergesFromLane),
-          ];
-    tracks.push({ id: t.id, pts, role: isSpur ? "spur" : "siding" });
-  }
-
-  // --- Crossovers — a straight diagonal joining the two mains. --------------
-  for (const x of f.crossovers)
-    tracks.push({
-      id: x.id,
-      pts: [P(x.fromPosFrac, x.fromLane), P(x.toPosFrac, x.toLane)],
-      role: "crossover",
-    });
-
-  const turnouts: PhysTurnout[] = f.turnouts.map((t) => {
-    const p = P(t.posFrac, t.onLane);
-    return { id: t.id, x: p.x, y: p.y };
-  });
+  // ⭐⭐ THE LEGS ARE BUILT FIRST, so the bodies below can START WHERE A LEG
+  // ENDS instead of drawing a second throat of their own (#390).
 
   // --- The rail that actually JOINS a siding or spur to its turnout (#376). ---
   //
@@ -511,7 +475,90 @@ export function physicalSchematic(
       });
     }
   }
+
+  // --- Sidings & spurs — a body on their lane, joined to the main at each
+  //     turnout end (a spur once, a siding twice). ---
+  /**
+   * ⭐⭐ WHERE EACH TRACK'S LEG HANDS OVER TO ITS OWN BODY (#390).
+   *
+   * ⛔ THE THROAT WAS BEING DRAWN TWICE. A siding's body already ran from the
+   * MAIN, out to its lane, and back — see the shape below — and #376 then added
+   * a turnout leg doing the same job. The two did not coincide, because the
+   * body dips at the track's STORED EXTENT while the leg starts at the TURNOUT:
+   * on FMN-0085 the siding is recorded from 21.3" but its turnout sits at 14.5".
+   * Measured on the live page, the legs ended 0.6" and 1.97" from the siding —
+   * so each end of the U showed a short rail stopping in mid-air beside the
+   * real one. Will: "the 2D is still not rendering correctly."
+   *
+   * ⭐ The builder solved this long ago and this mirrors it rather than
+   * inventing a second answer: `withArrivals` pulls the body back to where the
+   * leg hands over and splices the leg on, so there is ONE throat made of leg +
+   * body. #376's mistake was adding the leg WITHOUT taking the dip away.
+   */
+  const legHandover = new Map<string, Pt[]>();
+  for (const l of legs) {
+    const cut = l.id.indexOf("-leg-");
+    if (cut < 0) continue;
+    const end = l.pts[l.pts.length - 1];
+    const arr = legHandover.get(l.id.slice(0, cut)) ?? [];
+    arr.push(end);
+    legHandover.set(l.id.slice(0, cut), arr);
+  }
+  const divergesTo = (id: string) => (doc.turnouts ?? []).some((sw) => sw.divergeTrack === id);
+  const onTrackHas = (id: string) => (doc.turnouts ?? []).some((sw) => sw.onTrack === id);
+  for (const t of f.extraTracks) {
+    const isSpur = t.role === "spur";
+    // A track that turnouts sit ON but nothing DIVERGES INTO (a crossover leg)
+    // stays flat — its connection is the crossover diagonal, not an end dip.
+    const flat = !isSpur && !divergesTo(t.id) && onTrackHas(t.id);
+    const tx = isSpur ? t.throatFrac : t.fromFrac;
+    const ex = isSpur ? t.stubFrac : t.toFrac;
+    const spanFrac = Math.abs(ex - tx);
+    const thr = Math.min(spanFrac * 0.12 + gapFrac, isSpur ? spanFrac : spanFrac / 2);
+    const dir = ex >= tx ? 1 : -1;
+    // ⭐ Start at the leg's handover if there is one, so leg and body meet
+    // end-to-end; fall back to the old dip to the main where no leg is drawn
+    // (a crossover leg, or a turnout whose far end gives no direction).
+    const hands = legHandover.get(t.id) ?? [];
+    const joinAt = (frac: number) => {
+      const at = P(frac, t.divergesFromLane);
+      let best: Pt | null = null;
+      let bd = Infinity;
+      for (const h of hands) {
+        const d = Math.hypot(h.x - at.x, h.y - at.y);
+        if (d < bd) {
+          bd = d;
+          best = h;
+        }
+      }
+      return best ?? at;
+    };
+    const pts = flat
+      ? body(tx, ex, t.lane)
+      : isSpur
+        ? [joinAt(tx), ...body(tx + dir * thr, ex, t.lane)]
+        : [
+            joinAt(tx),
+            ...body(tx + dir * thr, ex - dir * thr, t.lane),
+            joinAt(ex),
+          ];
+    tracks.push({ id: t.id, pts, role: isSpur ? "spur" : "siding" });
+  }
   tracks.push(...legs);
+
+  // --- Crossovers — a straight diagonal joining the two mains. --------------
+  for (const x of f.crossovers)
+    tracks.push({
+      id: x.id,
+      pts: [P(x.fromPosFrac, x.fromLane), P(x.toPosFrac, x.toLane)],
+      role: "crossover",
+    });
+
+  const turnouts: PhysTurnout[] = f.turnouts.map((t) => {
+    const p = P(t.posFrac, t.onLane);
+    return { id: t.id, x: p.x, y: p.y };
+  });
+
 
   // --- Routes drawn across the board — an authored 2-D path that leaves the
   //     main, so it's read straight off the doc, not the (frac,lane) model that

@@ -5,6 +5,13 @@ Headings are `version — date` (YYYY-MM-DD).
 
 ---
 
+## v0.128.2 — 2026-08-30
+
+### Fixed
+- **A siding meets its turnout with one rail, not two, in the module drawing.** The drawing joined a siding to the main twice over — once by the siding itself running back to the main, and once by the short rail from the turnout added in the last release — and the two did not land in the same place, so each end showed a stub stopping in mid-air alongside the real one. The siding now begins exactly where the rail from its turnout ends.
+
+---
+
 ## v0.128.1 — 2026-08-30
 
 ### Fixed
