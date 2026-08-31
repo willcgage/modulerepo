@@ -5,6 +5,13 @@ Headings are `version — date` (YYYY-MM-DD).
 
 ---
 
+## v0.131.0 — 2026-08-30
+
+### Fixed
+- **A track no turnout leads onto is no longer drawn as though it joined the main.** An industrial spur with nothing connecting it was still drawn curving down to the mainline, at a spot where there is no turnout at all — so both the module drawing and the dispatcher panel showed a spur a train could reach. It is now drawn as it really is: a length of track lying beside the main with nothing joining it. The gap is the point. The builder already tells you in words that nothing leads onto it; the picture now agrees.
+
+---
+
 ## v0.130.6 — 2026-08-30
 
 ### Fixed
