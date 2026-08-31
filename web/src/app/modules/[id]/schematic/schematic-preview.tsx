@@ -347,10 +347,26 @@ export function SchematicPreview({
           // nothing diverges into it (no turnout diverges to it) while turnouts
           // sit ON it: then its connection is elsewhere (a crossover's diagonal),
           // so it draws flat with square ends instead of spurious end-dips.
-          const flat =
-            !isSpur &&
-            !(doc.turnouts ?? []).some((sw) => sw.divergeTrack === t.id) &&
-            (doc.turnouts ?? []).some((sw) => sw.onTrack === t.id);
+          /**
+           * ⭐⭐ NOTHING DIVERGES INTO IT ⇒ IT HAS NO THROAT TO DRAW (#412).
+           *
+           * ⛔ This used to also require `!isSpur && onTrackHas`, written for a
+           * crossover leg — "its connection is the crossover diagonal, not an
+           * end dip". True, but far too narrow: a track that NO turnout leads
+           * onto has no throat either, and both views drew one anyway. On
+           * FMN-0083 the industrial spur is fed by nothing — `moduleFeatures`
+           * still hands over `throatFrac 0.362`, so the drawing dipped it to the
+           * main at 17.4″ where there is no turnout at all, and the dispatcher
+           * panel showed a spur joined to the main that a train cannot reach.
+           * Will: *"an industrial spur without having the track connected to a
+           * turnout … also makes the dispatcher panel wrong."*
+           *
+           * ⭐ Drawn flat, the GAP IS THE FINDING — the same call as #367's
+           * unreached endplate. No connection is invented, and the builder
+           * already says so in words (`unreachableTracks`, #350), so picture and
+           * panel now agree.
+           */
+          const flat = !(doc.turnouts ?? []).some((sw) => sw.divergeTrack === t.id);
           const tx = px(isSpur ? t.throatFrac : t.fromFrac);
           const ex = px(isSpur ? t.stubFrac : t.toFrac);
           // ⛔⛔ A SIDING'S DIRECTION IS ITS OWN, NOT ONE TURNOUT'S (#384).

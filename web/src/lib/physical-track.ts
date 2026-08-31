@@ -608,12 +608,22 @@ export function physicalSchematic(
     legHandover.set(l.id.slice(0, cut), arr);
   }
   const divergesTo = (id: string) => (doc.turnouts ?? []).some((sw) => sw.divergeTrack === id);
-  const onTrackHas = (id: string) => (doc.turnouts ?? []).some((sw) => sw.onTrack === id);
   for (const t of f.extraTracks) {
     const isSpur = t.role === "spur";
     // A track that turnouts sit ON but nothing DIVERGES INTO (a crossover leg)
     // stays flat — its connection is the crossover diagonal, not an end dip.
-    const flat = !isSpur && !divergesTo(t.id) && onTrackHas(t.id);
+    /**
+     * ⭐⭐ NOTHING DIVERGES INTO IT ⇒ IT HAS NO THROAT TO DRAW (#412).
+     *
+     * ⛔ This also required `!isSpur && onTrackHas`, written for a crossover leg.
+     * Far too narrow: a track NO turnout leads onto has no throat either, and
+     * this drew one anyway — FMN-0083's industrial spur is fed by nothing, yet
+     * was dipped to the main at 17.4″ where no turnout exists.
+     *
+     * ⭐ Drawn flat, the GAP IS THE FINDING (#367). Nothing is invented, and
+     * `unreachableTracks` (#350) already says it in words.
+     */
+    const flat = !divergesTo(t.id);
     const tx = isSpur ? t.throatFrac : t.fromFrac;
     const ex = isSpur ? t.stubFrac : t.toFrac;
     const spanFrac = Math.abs(ex - tx);
