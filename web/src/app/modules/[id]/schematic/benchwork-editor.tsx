@@ -1798,8 +1798,28 @@ export function BenchworkEditor({
   const industryShapes = useMemo(() => {
     if (centerline.length < 2) return [];
     return industries.map((ind) => {
-      const host = hostPointsOf(ind.track);
-      const rel = (abs: number) => toHostRel(ind.track, abs);
+      /**
+       * ⭐⭐ THE BAND FOLLOWS THE LINE THAT IS DRAWN (#412).
+       *
+       * ⛔ This read `hostPointsOf`, the simplified re-derivation — `lanePath`
+       * over the stored extent — so the band was always a plain lane-parallel
+       * strip. The canvas draws the track as leg + eased arrival + body, so
+       * wherever a track leaves its turnout at an angle the band stayed
+       * straight and drifted off it. Will, on FMN-0083's spur: *"the industry
+       * spur is at an angle, but the industry highlight is not."*
+       *
+       * ⭐ Exactly #388 again, in a third consumer — the joints had it, the
+       * pieces had it, and the industry band had it too. `trackPaths` is the one
+       * answer to "where is this track"; sampling it means the band cannot be
+       * anywhere the rail isn't.
+       *
+       * ⚠️ An industry on the MAIN finds no entry (only `main` is excluded from
+       * `trackPaths`) and correctly falls back to the centre-line.
+       */
+      const drawnHost = trackPaths.find((tp) => tp.id === ind.track)?.pts;
+      const host =
+        drawnHost && drawnHost.length >= 2 ? drawnHost : hostPointsOf(ind.track);
+      const rel = (abs: number) => relAlongPoints(host, abs);
       const sign = ind.side === "above" ? 1 : -1;
       const midPos = (ind.fromPos + ind.toPos) / 2;
       // `sampleAt` hands back the LEFT normal of whatever it walked, so a track
@@ -1839,7 +1859,7 @@ export function BenchworkEditor({
       };
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [centerline, industries, tracks]);
+  }, [centerline, industries, tracks, trackPaths]);
 
   /** Content bounds in world (module-local) inches — what "Fit" frames to. */
   const bounds = useMemo<ViewBox>(() => {

@@ -5,6 +5,13 @@ Headings are `version — date` (YYYY-MM-DD).
 
 ---
 
+## v0.131.1 — 2026-09-02
+
+### Fixed
+- **An industry's car-spot band follows the track it is on, including where that track leaves its turnout at an angle.** The band was drawn as a straight strip alongside where the track would run if it were simply parallel to the mainline — so on a spur that angles up out of its turnout, the highlight stayed straight and drifted off the rail. It now traces the track as drawn.
+
+---
+
 ## v0.131.0 — 2026-08-30
 
 ### Fixed
