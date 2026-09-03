@@ -5,6 +5,13 @@ Headings are `version — date` (YYYY-MM-DD).
 
 ---
 
+## v0.132.0 — 2026-09-02
+
+### Added
+- **The badge in the header now counts what is actually wrong, not just what is unbuilt.** It used to count build stages only, so a module could say "Complete" while carrying real warnings — a track no train can reach, an industry spotting cars off the end of its rail, a siding whose two turnouts contradict each other, flex cut longer than it comes. Every one of those was only visible if you happened to select the object carrying it. They are now listed together at the top of the badge, each with a **Show** button that selects the object so the fields that fix it are in front of you. The badge cannot read "Complete" over a module that is showing a warning.
+
+---
+
 ## v0.131.1 — 2026-09-02
 
 ### Fixed

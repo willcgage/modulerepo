@@ -324,6 +324,15 @@ type Selection =
   // it, because that IS what a piece is: the stretch between two joints.
   | { kind: "flex"; id: string; index: number };
 
+/** A live warning the module is showing — the thing a badge should count.
+ * See the `problems` memo: the inspector renders these, the header counts them,
+ * and both read the same predicates so they cannot disagree (#414). */
+type Problem = { key: string; what: string; message: string; go?: Selection };
+
+/** Below this, a car-spot overhang is rounding rather than a finding. Shared so
+ * the inspector's message and the header's count fire on the same threshold. */
+const SPAN_OVERHANG_MIN_INCHES = 0.05;
+
 /** The four build-order layers (#47, #270). Benchwork → Trackwork → Control
  * points → Industries, and a layer may read the layers below it, never above. */
 const LAYER_NAMES = ["Benchwork", "Trackwork", "Control points", "Industries"] as const;
@@ -1375,6 +1384,82 @@ export function SchematicEditor({
     }
     return out;
   }, [flexByTrack]);
+
+  /**
+   * ⭐⭐ THE WARNINGS THE MODULE IS ACTUALLY SHOWING, AS DATA (#414).
+   *
+   * ⛔ Every one of these already existed and could only be SEEN BY SELECTING
+   * THE RIGHT OBJECT. A module could carry three live findings — a track no
+   * train can reach, an industry spotting cars off the end of its rail, a
+   * siding whose two turnouts contradict each other — and the header still
+   * read "Complete". The badge counted BUILD STAGES, which is a different
+   * question: *have you drawn one yet* is not *is what you drew right*.
+   *
+   * ⭐ ONE DEFINITION, TWO CALLERS, deliberately: the inspector renders the
+   * full message for the selected object and this counts the same findings for
+   * the header, both from the same predicates. A badge that re-derived them
+   * would be free to disagree with the panel it is summarising — which is the
+   * fault this whole file has been full of.
+   */
+  const spanCtx = { mains: mainRows, extraTracks: state.extraTracks, centerline };
+  const problems = useMemo<Problem[]>(() => {
+    const out: Problem[] = [];
+    const r1 = (v: number) => Math.round(v * 10) / 10;
+    const nameOf = (id: string) =>
+      state.extraTracks.find((t) => t.id === id)?.trackName ||
+      mainRows.find((m) => m.id === id)?.label ||
+      id;
+    for (const id of unreachableTracks(state))
+      out.push({ key: `unreachable:${id}`, what: nameOf(id),
+        message: "Nothing leads onto it, so no train can reach it.",
+        go: { kind: "track", id } });
+    for (const [id, a] of tracksAdriftFromTurnouts(state, partLibrary))
+      out.push({ key: `adrift:${id}`, what: nameOf(id),
+        message: `Stops ${r1(a.gapInches)}″ short of the turnout at ${r1(a.turnoutPos)}″ that opens it.`,
+        go: { kind: "track", id } });
+    for (const [id, st] of tracksStrandedAcrossMain2(state))
+      out.push({ key: `stranded:${id}`, what: nameOf(id),
+        message: `Sits beyond Main 2, so the rail joining it to ${st.turnoutIds.join(" and ")} has to cross the second main.`,
+        go: { kind: "track", id } });
+    for (const [id] of sidingHandConflicts(state))
+      out.push({ key: `hands:${id}`, what: nameOf(id),
+        message: "Its two turnouts disagree about which side of the main it is on.",
+        go: { kind: "track", id } });
+    for (const ind of state.industries) {
+      const spans = [
+        { track: ind.track, fromPos: ind.fromPos, toPos: ind.toPos, cars: ind.cars, what: "span" },
+        ...ind.spots.map((sp, i) => ({
+          track: sp.track, fromPos: sp.fromPos, toPos: sp.toPos, cars: sp.cars,
+          what: `spot ${i + 1}`,
+        })),
+      ];
+      for (const sp of spans) {
+        const o = spanOverhangOf(spanCtx, sp.track, sp.fromPos, sp.toPos);
+        if (o)
+          out.push({ key: `span:${ind.id}:${sp.what}`, what: ind.name || "Industry",
+            message: `Its ${sp.what} runs ${r1(o.overhangInches)}″ off ${nameOf(sp.track)} — only ${r1(o.onTrackInches)}″ has rail under it.`,
+            go: { kind: "industry", id: ind.id } });
+        const c = carsOverflowOf(spanCtx, sp.track, sp.fromPos, sp.toPos, sp.cars);
+        if (c)
+          out.push({ key: `cars:${ind.id}:${sp.what}`, what: ind.name || "Industry",
+            message: `${c.cars} cars is more than its ${sp.what} holds on ${nameOf(sp.track)} — room for ${c.fits}.`,
+            go: { kind: "industry", id: ind.id } });
+      }
+    }
+    for (const [id, f] of Object.entries(flexByTrack)) {
+      const n = f.pieces.filter((pc) => pc.overlong).length;
+      if (n)
+        out.push({ key: `overlong:${id}`, what: nameOf(id),
+          message: `${n} flex piece${n === 1 ? " is" : "s are"} longer than one length of the product.`,
+          go: { kind: "track", id } });
+    }
+    for (const [id] of unreachedPlates)
+      out.push({ key: `plate:${id}`, what: `Endplate ${id}`,
+        message: "Declared here, but no track runs to it, so no train can reach it.",
+        go: { kind: "endplate", id } });
+    return out;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [state, partLibrary, mainRows, flexByTrack, unreachedPlates, centerline]);
 
   const canvasTurnouts = useMemo(
     () =>
@@ -3446,7 +3531,13 @@ export function SchematicEditor({
           <div className="truncate text-sm font-semibold text-gray-900">{moduleName}</div>
           <div className="truncate text-xs text-gray-500">{recordNumber}</div>
         </div>
-        <Readiness state={state} floating={floatingSections} onGo={setTool} />
+        <Readiness
+            state={state}
+            floating={floatingSections}
+            problems={problems}
+            onGo={setTool}
+            onShow={setSelection}
+          />
         {readOnly && (
           <span
             className="shrink-0 rounded-md border border-amber-300 bg-amber-50 px-2 py-1 text-xs font-medium text-amber-900"
@@ -4825,22 +4916,74 @@ const STAGES: {
 function Readiness({
   state,
   floating,
+  problems,
   onGo,
+  onShow,
 }: {
   state: EditorState;
   /** Boards not connected to the piece endplate A is on (#346). */
   floating: ReadonlySet<string>;
+  /** Live findings — see the `problems` memo (#414). */
+  problems: Problem[];
   onGo: (t: CanvasTool) => void;
+  onShow: (sel: Selection) => void;
 }) {
   const ctx = { floating };
-  const left = STAGES.filter((s) => !s.done(state, ctx)).length;
+  const stagesLeft = STAGES.filter((s) => !s.done(state, ctx)).length;
+  /**
+   * ⭐⭐ A PROBLEM IS NOT A TO-DO, AND THE BADGE NOW SAYS SO.
+   *
+   * It used to count build STAGES only, so a module could carry three live
+   * findings — a track no train can reach, an industry spotting cars off the
+   * end of its rail, a siding whose turnouts contradict each other — and still
+   * read "Complete". Each was visible only if you happened to select the object
+   * carrying it. *Have you drawn one yet* is a different question from *is what
+   * you drew right*, and the second one is the one that matters.
+   *
+   * Problems lead, because an unfinished stage is a plan and a problem is a
+   * mistake. The count is both, so the badge can never say "Complete" over a
+   * module that is showing a warning.
+   */
+  const left = stagesLeft + problems.length;
   return (
     <details className="relative shrink-0">
       <summary className="flex cursor-pointer select-none list-none items-center gap-1.5 rounded-md border border-gray-300 px-2 py-1 text-xs font-medium text-gray-700 hover:bg-gray-50">
-        <span className={left ? "text-amber-500" : "text-green-600"}>{left ? "⚠" : "✓"}</span>
-        {left ? `${left} to do` : "Complete"}
+        <span className={problems.length ? "text-rose-600" : left ? "text-amber-500" : "text-green-600"}>
+          {left ? "⚠" : "✓"}
+        </span>
+        {problems.length
+          ? `${problems.length} to fix${stagesLeft ? ` · ${stagesLeft} to do` : ""}`
+          : left
+            ? `${left} to do`
+            : "Complete"}
       </summary>
-      <div className="absolute left-0 top-full z-20 mt-1 w-72 rounded-lg border border-gray-200 bg-white p-2 shadow-lg">
+      <div className="absolute left-0 top-full z-20 mt-1 w-80 rounded-lg border border-gray-200 bg-white p-2 shadow-lg">
+        {problems.length > 0 && (
+          <>
+            <p className="px-1 pb-1 text-xs font-medium text-rose-700">
+              Needs fixing — the module says these about itself
+            </p>
+            {problems.map((pr) => (
+              <div key={pr.key} className="flex items-start gap-2 rounded px-1 py-1 text-xs">
+                <span className="text-rose-600">⚠</span>
+                <span className="min-w-0">
+                  <span className="font-medium text-gray-800">{pr.what}</span>{" "}
+                  <span className="text-gray-600">{pr.message}</span>
+                </span>
+                {pr.go && (
+                  <button
+                    type="button"
+                    onClick={() => onShow(pr.go!)}
+                    className="ml-auto shrink-0 font-medium text-blue-600 hover:underline"
+                  >
+                    Show
+                  </button>
+                )}
+              </div>
+            ))}
+            <div className="my-1 border-t border-gray-100" />
+          </>
+        )}
         <p className="px-1 pb-1 text-xs text-gray-400">
           Built in order: the dimensions size the board, the board carries the
           track, the track carries the signals.
@@ -4914,6 +5057,63 @@ function boardOfferFor(
       else s.outline = poly;
     });
   return { can, build };
+}
+
+/**
+ * The extent and lane of any named track — the mains carry theirs, everything
+ * else is an `extraTracks` entry. ONE definition, because the inspector renders
+ * the finding and the header counts it (#414).
+ */
+function trackExtentOf(
+  trackId: string,
+  mains: { id: string; fromPos: number; toPos: number; lane: number }[],
+  extraTracks: { id: string; fromPos: number; toPos: number; lane: number }[],
+) {
+  const m = mains.find((x) => x.id === trackId);
+  if (m) return { from: m.fromPos, to: m.toPos, lane: m.lane };
+  const et = extraTracks.find((x) => x.id === trackId);
+  return et ? { from: et.fromPos, to: et.toPos, lane: et.lane } : null;
+}
+
+/** How far a car-spot span hangs off its own track, or null if it fits (#194). */
+function spanOverhangOf(
+  ctx: { mains: Parameters<typeof trackExtentOf>[1]; extraTracks: Parameters<typeof trackExtentOf>[2] },
+  track: string,
+  fromPos: number,
+  toPos: number,
+) {
+  const ext = trackExtentOf(track, ctx.mains, ctx.extraTracks);
+  if (!ext) return null;
+  const o = spanOverhang({ fromPos, toPos, trackFromPos: ext.from, trackToPos: ext.to });
+  return o.overhangInches < SPAN_OVERHANG_MIN_INCHES ? null : o;
+}
+
+/** The owner's car figure against the rail actually under the span (#310). */
+function carsOverflowOf(
+  ctx: {
+    mains: Parameters<typeof trackExtentOf>[1];
+    extraTracks: Parameters<typeof trackExtentOf>[2];
+    centerline: BenchworkPoint[];
+  },
+  track: string,
+  fromPos: number,
+  toPos: number,
+  cars: number | null | undefined,
+) {
+  if (cars == null || cars <= 0) return null; // not recorded ⇒ nothing to check
+  const ext = trackExtentOf(track, ctx.mains, ctx.extraTracks);
+  if (!ext) return null;
+  const lo = Math.max(Math.min(fromPos, toPos), Math.min(ext.from, ext.to));
+  const hi = Math.min(Math.max(fromPos, toPos), Math.max(ext.from, ext.to));
+  if (hi - lo < 0.05) return null;
+  const et = ctx.extraTracks.find((x) => x.id === track);
+  // ⭐ EMPTY in graph-authoring mode, where positions come from the pieces —
+  // `railLengthBetween` returns null for an empty centre-line, so the flag
+  // simply does not fire there. Fails closed.
+  const rail = railLengthBetween(et ?? { lane: ext.lane ?? 0 }, lo, hi, ctx.centerline);
+  if (rail == null) return null; // no frame to measure in ⇒ say nothing
+  const fits = carCapacity(0, rail);
+  return cars <= fits ? null : { cars, fits, rail };
 }
 
 function Inspector({
@@ -7043,66 +7243,28 @@ function Inspector({
       toPos: number,
       cars: number | null | undefined,
     ) => {
-      if (cars == null || cars <= 0) return null; // not recorded ⇒ nothing to check
-      const m = mains.find((x) => x.id === track);
-      const et = state.extraTracks.find((x) => x.id === track);
-      const ext = m
-        ? { from: m.fromPos, to: m.toPos }
-        : et
-          ? { from: et.fromPos, to: et.toPos }
-          : null;
-      if (!ext) return null;
-      const lo = Math.max(Math.min(fromPos, toPos), Math.min(ext.from, ext.to));
-      const hi = Math.min(Math.max(fromPos, toPos), Math.max(ext.from, ext.to));
-      if (hi - lo < 0.05) return null;
-      const rail = railLengthBetween(
-        et ?? { lane: m?.lane ?? 0 },
-        lo,
-        hi,
-        // ⭐ EMPTY in graph-authoring mode, where positions come from the pieces
-        // instead — and railLengthBetween returns null for an empty centre-line,
-        // so the flag simply does not fire there. Fails closed.
-        centerline,
-      );
-      if (rail == null) return null; // no frame to measure in ⇒ say nothing
-      const fits = carCapacity(0, rail);
-      if (cars <= fits) return null;
+      const c = carsOverflowOf({ mains, extraTracks: state.extraTracks, centerline }, track, fromPos, toPos, cars);
+      if (!c) return null;
       const name = trackOptions.find((x) => x.value === track)?.label ?? track;
       const r1 = (v: number) => Math.round(v * 10) / 10;
       return (
         <p className="rounded-md bg-amber-50 px-2 py-1 text-xs text-amber-800" role="status">
-          ⚠ {cars} cars is more than this span holds on{" "}
-          <span className="font-medium">{name}</span> — {r1(rail)}″ of rail, room
-          for {fits}. Your figure is kept as you entered it; lengthen the span,
+          ⚠ {c.cars} cars is more than this span holds on{" "}
+          <span className="font-medium">{name}</span> — {r1(c.rail)}″ of rail, room
+          for {c.fits}. Your figure is kept as you entered it; lengthen the span,
           or lower the number if it was a slip.
         </p>
       );
     };
 
     const spanWarning = (track: string, fromPos: number, toPos: number) => {
-      // The mains carry their extents already (#192); everything else is an
-      // extraTrack. A spot on a track that no longer exists warns about nothing.
-      const m = mains.find((x) => x.id === track);
-      const et = state.extraTracks.find((x) => x.id === track);
-      const ext = m
-        ? { from: m.fromPos, to: m.toPos }
-        : et
-          ? { from: et.fromPos, to: et.toPos }
-          : null;
-      if (!ext) return null;
-      const o = spanOverhang({
-        fromPos,
-        toPos,
-        trackFromPos: ext.from,
-        trackToPos: ext.to,
-      });
-      if (o.overhangInches < 0.05) return null;
-      const name =
-        trackOptions.find((x) => x.value === track)?.label ?? track;
+      const o = spanOverhangOf({ mains, extraTracks: state.extraTracks }, track, fromPos, toPos);
+      if (!o) return null;
+      const name = trackOptions.find((x) => x.value === track)?.label ?? track;
       const r1 = (v: number) => Math.round(v * 10) / 10;
       const ends = [
-        o.beforeInches >= 0.05 ? `${r1(o.beforeInches)}″ before its start` : null,
-        o.afterInches >= 0.05 ? `${r1(o.afterInches)}″ past its end` : null,
+        o.beforeInches >= SPAN_OVERHANG_MIN_INCHES ? `${r1(o.beforeInches)}″ before its start` : null,
+        o.afterInches >= SPAN_OVERHANG_MIN_INCHES ? `${r1(o.afterInches)}″ past its end` : null,
       ].filter(Boolean);
       return (
         <p className="rounded-md bg-amber-50 px-2 py-1 text-xs text-amber-800" role="status">
