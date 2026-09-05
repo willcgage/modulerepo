@@ -5157,7 +5157,7 @@ const ENDPLATE_TAB = 5; // ballast-shoulder band width, inches
                 const b = ind.path[ind.path.length - 1];
                 if (!a || !b) return null;
                 const span = Math.hypot(b.x - a.x, b.y - a.y);
-                const fontSize = world(7);
+                const fontSize = world(6);
                 const text = ind.name || "Industry";
                 const widest = Math.max(text.length, ind.sub ? ind.sub.length : 0);
                 if (widest * fontSize * 0.55 > span) return null;
@@ -5170,7 +5170,7 @@ const ENDPLATE_TAB = 5; // ballast-shoulder band width, inches
                     fontSize={fontSize}
                     fill="#7c2d12"
                     stroke="#ffffff"
-                    strokeWidth={world(2.2)}
+                    strokeWidth={world(1.9)}
                     strokeLinejoin="round"
                     paintOrder="stroke"
                     fontWeight={700}
@@ -5178,7 +5178,7 @@ const ENDPLATE_TAB = 5; // ballast-shoulder band width, inches
                   >
                     {text}
                     {ind.sub && (
-                      <tspan x={ind.label.x} dy={world(8)} fontWeight={400} fill="#a16207">
+                      <tspan x={ind.label.x} dy={world(7)} fontWeight={400} fill="#a16207">
                         {ind.sub}
                       </tspan>
                     )}

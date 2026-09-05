@@ -5,6 +5,13 @@ Headings are `version — date` (YYYY-MM-DD).
 
 ---
 
+## v0.137.2 — 2026-09-05
+
+### Changed
+- The industry name on the canvas is a little smaller again, so it sits more lightly on the track it marks. Because the "does it fit?" test measures the text at whatever size it is drawn, a smaller name also means fewer are dropped for want of room.
+
+---
+
 ## v0.137.1 — 2026-09-05
 
 ### Fixed
