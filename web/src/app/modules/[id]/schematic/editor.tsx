@@ -268,6 +268,7 @@ import { tracksAdriftFromTurnouts } from "@/lib/track-adrift";
 import { sidingHandConflicts } from "@/lib/siding-hands";
 import { tracksStrandedAcrossMain2 } from "@/lib/track-crosses-main";
 import { defaultSpotTrack } from "@/lib/industry-spot-defaults";
+import { bendsWiderAsArc } from "@/lib/curve-radius";
 import { endplateTrackPoints, startJointsFor } from "./piece-layer";
 import type { StoredTrackPart } from "@willcgage/module-schematic";
 import {
@@ -1492,10 +1493,35 @@ export function SchematicEditor({
         track?.role === "main" ||
         state.branches.some((b) => b.trackId === id);
       if (!isMain) continue;
+      /* ⭐⭐ SAY WHEN THE DRAWING, NOT THE GEOMETRY, IS THE LIMIT (#435).
+      
+         A bend is a TRUE CIRCULAR ARC until the far handle is touched, and a
+         cubic afterwards — and the far handle starts exactly where the near one
+         sits, so touching it changes nothing on screen while quietly capping the
+         radius. Measured on an 83° turn authored at 22″: 22.00″ as an arc,
+         19.27″ as the cubic, same authored bow. #435 was filed saying the model
+         tops out near 19.5″; that is true of the cubic branch alone, and an
+         owner told they are under 22″ could otherwise redraw for ever without
+         reaching it.
+      
+         ⭐ Will, asked directly: *"flag it, don't collapse."* The shape is the
+         owner's; this only tells them a wider one is available. */
+      const authored =
+        id === MAIN_TRACK_ID
+          ? state.mainPath
+          : id === MAIN2_TRACK_ID
+            ? state.main2Path
+            : state.extraTracks.find((t) => t.id === id)?.path;
+      const wider = bendsWiderAsArc(authored ?? [])
+        .sort((a, b) => b.asArcInches - a.asArcInches)[0];
       out.push({
         key: `radius:${id}`,
         what: nameOf(id),
-        message: `Its tightest curve is ${minRadius.toFixed(1)}″ — Free-moN's minimum main-line radius is ${FREEMO_MAIN_MIN_RADIUS_INCHES}″.`,
+        message:
+          `Its tightest curve is ${minRadius.toFixed(1)}″ — Free-moN's minimum main-line radius is ${FREEMO_MAIN_MIN_RADIUS_INCHES}″.` +
+          (wider
+            ? ` One of its bends uses both handles; the same bow drawn as a single bend would hold ${wider.asArcInches.toFixed(1)}″.`
+            : ""),
         go: { kind: "track", id },
       });
     }
