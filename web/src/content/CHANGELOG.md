@@ -5,6 +5,13 @@ Headings are `version — date` (YYYY-MM-DD).
 
 ---
 
+## v0.136.1 — 2026-09-05
+
+### Changed
+- **The industry name now sits on the highlight rather than off to one side**, with a soft outline behind the letters so it stays readable over the marker, the rail and the ties alike. Putting the name beside the track competed for the same space the old marker did, which is the thing this change set out to stop.
+
+---
+
 ## v0.136.0 — 2026-09-05
 
 ### Changed

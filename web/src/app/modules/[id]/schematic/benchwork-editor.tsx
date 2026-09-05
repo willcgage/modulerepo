@@ -1844,15 +1844,23 @@ export function BenchworkEditor({
       const host =
         drawnHost && drawnHost.length >= 2 ? drawnHost : hostPointsOf(ind.track);
       const rel = (abs: number) => relAlongPoints(host, abs);
-      const sign = ind.side === "above" ? 1 : -1;
       const midPos = (ind.fromPos + ind.toPos) / 2;
-      // `sampleAt` hands back the LEFT normal of whatever it walked, so a track
-      // drawn east→west has one pointing the opposite way from the module's —
-      // and "above" would come out below. Settle the direction ONCE, against the
-      // centre-line, so the band can't twist along its own length either.
-      const hostMid = sampleAt(host, rel(midPos));
-      const mainMid = sampleAt(centerline, midPos);
-      const flip = hostMid.nx * mainMid.nx + hostMid.ny * mainMid.ny < 0 ? -1 : 1;
+      /**
+       * ⚠️ `ind.side` NO LONGER MOVES ANYTHING ON THIS CANVAS, and that is a
+       * consequence worth stating rather than leaving to be rediscovered.
+       *
+       * Both the mark and its name now sit ON the served track, so there is no
+       * "above/below" for either to take. This used to need a `sign` from the
+       * side AND a `flip` settled against the centre-line, because `sampleAt`
+       * returns the LEFT normal of whatever it walked — a track drawn east→west
+       * has one pointing the opposite way from the module's, so "above" came
+       * out below. That whole correction is gone with the offset it corrected.
+       *
+       * ⭐ The FIELD is untouched: it is authored, it still ships to FD, and FD
+       * still places its label with it. Only this renderer stopped consulting
+       * it. Whether the builder should keep offering the control is Will's
+       * call, not something to settle by deleting a stored value.
+       */
       const at = (abs: number, o: number) => {
         const p = sampleAt(host, rel(abs));
         return { x: p.x + p.nx * o, y: p.y + p.ny * o };
@@ -1899,13 +1907,17 @@ export function BenchworkEditor({
           { end: "from" as const, ...at(ind.fromPos, 0) },
           { end: "to" as const, ...at(ind.toPos, 0) },
         ],
-        // ⭐ The NAME still sits on the authored side — that is what `side`
-        // means, and it is the owner's. It used to follow the band instead,
-        // because clearance could move the band to the other rail and a label
-        // left behind would have sat across the track the band stepped off.
-        // With the mark on the rail there is nothing to follow, so the label
-        // goes back to the side the owner actually declared.
-        label: at(midPos, sign * flip * 2.2),
+        /**
+         * ⭐⭐ THE NAME SITS ON THE HIGHLIGHT (Will, 2026-09-05: *"the text
+         * should overlay over the highlight, but it needs to be readable"*).
+         *
+         * Offset zero, like the mark itself. Put beside the track it competed
+         * for the same lane space the band used to, which is the problem this
+         * whole change removes — a label off to one side is a smaller version
+         * of the same mistake. Readability comes from a halo behind the glyphs
+         * (`paintOrder="stroke"`), not from moving the text somewhere emptier.
+         */
+        label: at(midPos, 0),
       };
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -5094,13 +5106,25 @@ const ENDPLATE_TAB = 5; // ballast-shoulder band width, inches
                   <title>{ind.name || "Industry"}</title>
                 </polyline>
               )}
+              {/* ⭐ READABLE OVER THE HIGHLIGHT AND THE RAIL. The glyphs are
+                  painted over a white halo of their own outline — `paintOrder`
+                  puts the stroke UNDER the fill, so the letters keep their
+                  shape instead of being thickened. That works over the amber
+                  band, the rail and the ties alike, which a solid backing
+                  rectangle would not: it would hide the very track the
+                  highlight exists to point at. */}
               <text
                 x={ind.label.x}
                 y={sy(ind.label.y)}
                 textAnchor="middle"
+                dominantBaseline="middle"
                 fontSize={world(9)}
-                fill="#92400e"
-                fontWeight={600}
+                fill="#7c2d12"
+                stroke="#ffffff"
+                strokeWidth={world(2.6)}
+                strokeLinejoin="round"
+                paintOrder="stroke"
+                fontWeight={700}
                 pointerEvents="none"
               >
                 {ind.name || "Industry"}
