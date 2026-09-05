@@ -1412,6 +1412,16 @@ export function SchematicEditor({
    * fault this whole file has been full of.
    */
   const spanCtx = { mains: mainRows, extraTracks: state.extraTracks, centerline };
+  /**
+   * Industry bands the canvas could not place clear of other tracks (#421).
+   *
+   * ⭐ Reported UP by `BenchworkEditor`, not worked out here: the placement
+   * depends on the DRAWN track paths, which only the canvas has. Deriving it a
+   * second time from the stored extents would give a second answer to one
+   * question ([[one-answer-per-drawn-fact]]).
+   */
+  const [crowdedBands, setCrowdedBands] = useState<string[]>([]);
+
   const problems = useMemo<Problem[]>(() => {
     const out: Problem[] = [];
     const r1 = (v: number) => Math.round(v * 10) / 10;
@@ -1435,6 +1445,33 @@ export function SchematicEditor({
       out.push({ key: `hands:${id}`, what: nameOf(id),
         message: "Its two turnouts disagree about which side of the main it is on.",
         go: { kind: "track", id } });
+    /**
+     * ⛔ A BAND THE CANVAS COULD NOT PLACE CLEAR (#421).
+     *
+     * Placement tries the industry's own side, then pulls in, then the far side
+     * — and when none of those clears every track it does not serve, it draws
+     * the best of a bad set. That is the honest thing to draw, but it must not
+     * be drawn SILENTLY: this is the one case where the marker still touches a
+     * rail it has nothing to do with ([[flagged-never-corrected]]).
+     *
+     * ⭐ The ids come UP from the canvas rather than being re-derived, because
+     * only the canvas knows where the band actually landed — the placement
+     * follows the DRAWN path, not the stored extent. A spot's id is
+     * `<industry>#<n>`, so the name is looked up on the part before the "#".
+     */
+    for (const bandId of crowdedBands) {
+      const ind = state.industries.find((i) => i.id === bandId.split("#")[0]);
+      if (!ind) continue;
+      const isSpot = bandId.includes("#");
+      out.push({
+        key: `band:${bandId}`,
+        what: ind.name || "Industry",
+        message: isSpot
+          ? "Its marker on a second track cannot be drawn clear of the tracks around it — move the spot, or the track it crowds."
+          : "Its marker cannot be drawn clear of the tracks around it — move the span, or the track it crowds.",
+        go: { kind: "industry", id: ind.id },
+      });
+    }
     for (const ind of state.industries) {
       const spans = [
         { track: ind.track, fromPos: ind.fromPos, toPos: ind.toPos, cars: ind.cars, what: "span" },
@@ -1469,7 +1506,7 @@ export function SchematicEditor({
         go: { kind: "endplate", id } });
     return out;
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [state, partLibrary, mainRows, flexByTrack, unreachedPlates, centerline]);
+  }, [state, partLibrary, mainRows, flexByTrack, unreachedPlates, centerline, crowdedBands]);
 
   const canvasTurnouts = useMemo(
     () =>
@@ -3629,6 +3666,10 @@ export function SchematicEditor({
             <div className="min-h-[28rem] flex-1 rounded-lg border border-gray-200 bg-white p-2">
               <BenchworkEditor
                 unreachableTracks={unreachable}
+                // `setCrowdedBands` is a stable setState identity, so the
+                // child's effect fires only when the SET of crowded bands
+                // changes — not on every geometry render.
+                onCrowdedIndustries={setCrowdedBands}
                 outline={activeSection ? (activeSection.outline ?? []) : state.outline}
                 // The loop's donut hole — only for the whole-module board, not a
                 // section being shaped on its own.

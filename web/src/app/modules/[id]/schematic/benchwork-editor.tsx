@@ -272,6 +272,7 @@ export function BenchworkEditor({
   turnouts = [],
   signals = [],
   industries = [],
+  onCrowdedIndustries,
   onTurnoutMove,
   onTrackEndMove,
   onIndustryEndMove,
@@ -351,6 +352,18 @@ export function BenchworkEditor({
   signals?: CanvasSignal[];
   /** Industries — car-spot spans beside their track. */
   industries?: CanvasIndustry[];
+  /**
+   * Which industry bands could NOT be placed clear of the tracks they do not
+   * serve (#421).
+   *
+   * ⭐⭐ REPORTED UP RATHER THAN RE-DERIVED. Only the canvas knows where a band
+   * actually landed — the placement depends on the DRAWN track paths (leg +
+   * eased arrival + body), not on the stored extents. Working it out a second
+   * time in the builder would be one fact with two implementations, which is
+   * the mirror of why `unreachableTracks` is handed DOWN
+   * ([[one-answer-per-drawn-fact]]).
+   */
+  onCrowdedIndustries?: (ids: string[]) => void;
   /** Drag a turnout along the main → its new position, inches from endplate A. */
   onTurnoutMove?: (id: string, pos: number) => void;
   /** Drag a siding/spur end along the main → its new from/to position. */
@@ -1881,6 +1894,15 @@ export function BenchworkEditor({
       const off = placed.off;
       const path: Pt[] = bandAt(off);
       return {
+        /**
+         * ⛔ NO OFFSET COULD BE FOUND THAT CLEARS EVERYTHING. The band is drawn
+         * at the best of them, which still touches a track it does not serve —
+         * so the canvas SAYS SO rather than drawing it quietly
+         * ([[flagged-never-corrected]]). Reported up to the builder's warning
+         * list, because the owner fixes this by moving a span or a track, not
+         * here.
+         */
+        crowded: !placed.clears,
         id: ind.id,
         industryId: ind.industryId,
         editable: ind.editable,
@@ -1900,6 +1922,26 @@ export function BenchworkEditor({
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [centerline, industries, tracks, trackPaths]);
+
+  /**
+   * Tell the builder which bands could not be placed clear (#421).
+   *
+   * ⚠️ REPORTED THROUGH A STABLE KEY, NOT THE ARRAY. `industryShapes` is a new
+   * array on every geometry change, so calling the parent with it directly
+   * would set state on every render and spin. The joined id string only changes
+   * when the SET changes, which is the only thing the warning list cares about.
+   *
+   * ⚠️ And in an effect, never during render: this writes to the parent, and a
+   * write-capable call in render is the mistake the React compiler was right
+   * about (#284).
+   */
+  const crowdedKey = useMemo(
+    () => industryShapes.filter((s) => s.crowded).map((s) => s.id).sort().join(","),
+    [industryShapes],
+  );
+  useEffect(() => {
+    onCrowdedIndustries?.(crowdedKey ? crowdedKey.split(",") : []);
+  }, [crowdedKey, onCrowdedIndustries]);
 
   /** Content bounds in world (module-local) inches — what "Fit" frames to. */
   const bounds = useMemo<ViewBox>(() => {

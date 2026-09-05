@@ -5,6 +5,13 @@ Headings are `version — date` (YYYY-MM-DD).
 
 ---
 
+## v0.133.3 — 2026-09-05
+
+### Added
+- **The builder now says when an industry's marker cannot be drawn clear of the track around it.** The marker keeps itself off tracks it does not serve — it holds the side you chose where it can, pulls in if it must, and moves to the other rail only as a last resort. Where the tracks are close enough that none of those is clear, it draws the best position available and now adds a warning to the badge instead of leaving you to spot it, with a **Show** button that selects the industry so you can move the span or the track it crowds.
+
+---
+
 ## v0.133.2 — 2026-09-05
 
 ### Changed
