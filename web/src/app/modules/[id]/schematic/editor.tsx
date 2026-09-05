@@ -265,6 +265,7 @@ import { partLibraryWith } from "./part-library";
 import { tracksAdriftFromTurnouts } from "@/lib/track-adrift";
 import { sidingHandConflicts } from "@/lib/siding-hands";
 import { tracksStrandedAcrossMain2 } from "@/lib/track-crosses-main";
+import { defaultSpotTrack } from "@/lib/industry-spot-defaults";
 import { endplateTrackPoints, startJointsFor } from "./piece-layer";
 import type { StoredTrackPart } from "@willcgage/module-schematic";
 import {
@@ -7468,7 +7469,9 @@ function Inspector({
               type="button"
               onClick={() =>
                 up((x) => {
-                  const t = state.extraTracks[0]?.id ?? ind.track;
+                  // Was `state.extraTracks[0]` flat, which put a spot on
+                  // whatever track happened to be first — see the rule (#421).
+                  const t = defaultSpotTrack(ind, state.extraTracks);
                   // Not on top of the last spot, and not on top of an industry
                   // either — both are counted against the same rail (#344).
                   const [from, to] = defaultSpanOn(state, t, [
@@ -7521,6 +7524,23 @@ function Inspector({
                       aria-label="Cars on this track"
                       title="How many cars this industry can take on this track."
                     />
+                    {/* ⛔ A SPOT HAD NO SIDE CONTROL AT ALL (#421). It was
+                        given `side: x.side` when created and there was no way
+                        to change it, so which side of its rail an owner's spot
+                        sat on was the app's choice and not theirs. Mirrors the
+                        industry's own Side select above. */}
+                    <select
+                      value={sp.side ?? ind.side}
+                      onChange={(e) =>
+                        up((x) => (x.spots[si].side = e.target.value as "above" | "below"))
+                      }
+                      className={`${inp} w-24 text-xs`}
+                      aria-label="Which side of this track"
+                      title="Which side of this track the industry sits on."
+                    >
+                      <option value="above">Above</option>
+                      <option value="below">Below</option>
+                    </select>
                     <button
                       type="button"
                       onClick={() => up((x) => x.spots.splice(si, 1))}
