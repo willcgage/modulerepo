@@ -5,6 +5,13 @@ Headings are `version — date` (YYYY-MM-DD).
 
 ---
 
+## v0.137.1 — 2026-09-05
+
+### Fixed
+- **Industry highlights no longer darken where they overlap.** Several industries sharing one stretch of track each painted their own tint on top of the last, so that stretch came out far heavier than a track with a single industry on it — the siding on one module read three times darker than the main beside it, for no reason an owner could see. Overlapping highlights are now blended together before the tint is applied, so four industries on one span look exactly like one.
+
+---
+
 ## v0.137.0 — 2026-09-05
 
 ### Changed

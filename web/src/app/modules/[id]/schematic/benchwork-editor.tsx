@@ -5076,25 +5076,39 @@ const ENDPLATE_TAB = 5; // ballast-shoulder band width, inches
           );
         })}
         {/* Industries — a car-spot span beside its track, name + optional readout. */}
-        {industryShapes.map((ind) => {
-          const on = selection?.kind === "industry" && selection.id === ind.industryId;
-          return (
-            <g key={`ind${ind.id}`}>
-              {ind.path.length >= 2 && (
+        {/* ⭐⭐ THE OPACITY IS ON THE GROUP, NOT ON EACH STROKE — and that is a
+            correctness fix, not a tidy-up (Will: *"the passenger depot is more
+            transparent than the freight house highlight"*).
+        
+            Per-stroke alpha COMPOUNDS where marks overlap. On FMN-0011 four
+            industries are authored on the SAME span of the same siding (#443),
+            so four translucent strokes composited to 1 − 0.8⁴ ≈ **0.59** while
+            the lone depot on the main sat at 0.20 — the siding read three times
+            heavier for a reason that has nothing to do with either industry.
+            Group opacity flattens the strokes FIRST and applies alpha ONCE, so
+            one highlight and four stacked highlights look identical.
+        
+            ⭐ Two groups rather than one, because a selected industry is drawn
+            heavier — and the selected mark must not be flattened into its
+            neighbours' alpha either. */}
+        {([false, true] as const).map((sel) => (
+          <g key={sel ? "ind-sel" : "ind-plain"} opacity={sel ? 0.34 : 0.2}>
+            {industryShapes
+              .filter(
+                (ind) =>
+                  ind.path.length >= 2 &&
+                  (selection?.kind === "industry" && selection.id === ind.industryId) === sel,
+              )
+              .map((ind) => (
                 <polyline
+                  key={`indmark${ind.id}`}
                   points={ind.path.map((p) => `${p.x},${sy(p.y)}`).join(" ")}
                   fill="none"
-                  stroke={on ? "#b45309" : "#d97706"}
-                  /* ⭐ A HIGHLIGHTER, NOT A COVER. The mark now lies ON the
-                     rail it describes, so it is drawn wide and translucent —
-                     the track, its ties and its joints still read THROUGH it.
-                     Painting an opaque line here would hide the very thing the
-                     owner is being shown. */
-                  strokeWidth={on ? world(9) : world(7)}
-                  /* Will, twice: it must read as a HIGHLIGHT, not a coat of
-                     paint. 0.4 still buried the ties; 0.2 tints the rail and
-                     leaves every joint and tie legible through it. */
-                  strokeOpacity={on ? 0.32 : 0.2}
+                  /* ⭐ FULLY OPAQUE HERE ON PURPOSE. The group above owns the
+                     transparency; an alpha on the stroke as well would bring
+                     the compounding straight back. */
+                  stroke={sel ? "#b45309" : "#d97706"}
+                  strokeWidth={sel ? world(9) : world(7)}
                   strokeLinecap="round"
                   style={onSelect ? { cursor: "pointer" } : undefined}
                   onPointerDown={
@@ -5108,7 +5122,15 @@ const ENDPLATE_TAB = 5; // ballast-shoulder band width, inches
                 >
                   <title>{ind.name || "Industry"}</title>
                 </polyline>
-              )}
+              ))}
+          </g>
+        ))}
+        {industryShapes.map((ind) => {
+          // The mark itself is drawn in the grouped pass above; what is left
+          // here is the label and the drag handles, neither of which takes the
+          // group's alpha — a half-visible name or handle helps nobody.
+          return (
+            <g key={`ind${ind.id}`}>
               {/* ⭐ READABLE OVER THE HIGHLIGHT AND THE RAIL. The glyphs are
                   painted over a white halo of their own outline — `paintOrder`
                   puts the stroke UNDER the fill, so the letters keep their
