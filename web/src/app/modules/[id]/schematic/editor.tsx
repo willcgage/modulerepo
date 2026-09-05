@@ -252,6 +252,7 @@ import {
   sectionBand,
   sectionAdjacency,
   sectionEdgeSeams,
+  sectionSpineEscapes,
   sectionSpansOrWhole,
   remapPos,
   sectionNeighbours,
@@ -2093,6 +2094,47 @@ export function SchematicEditor({
     );
   }, [activeSection, state.sections, state.endplateWidths, footprint.spine, renderTrackOffsets]);
 
+  /** The band ANY section would occupy with no authored shape — the same
+   * geometry `activeSectionBand` uses, for one board rather than the selected
+   * one, so "reshape to match" can write it without selecting the board first. */
+  const bandForSection = useCallback(
+    (id: string) => {
+      const sp = sectionSpans({ sections: state.sections }).find((x) => x.id === id);
+      if (!sp) return null;
+      return sectionBand(
+        footprint.spine,
+        sp.fromPos,
+        sp.toPos,
+        state.endplateWidths.A ?? 24,
+        state.endplateWidths.B ?? 24,
+        renderTrackOffsets.A,
+        renderTrackOffsets.B,
+      );
+    },
+    [state.sections, state.endplateWidths, footprint.spine, renderTrackOffsets],
+  );
+
+  /** ⭐⭐ BOARDS WHOSE OWN CENTRE-LINE RUNS OFF THEM (#437).
+   *
+   * A section's drawn shape and its `geometryType` are two descriptions of one
+   * board, and changing the Shape of an already-shaped board moves only one of
+   * them — the rectangle stays put while the spine turns out of it. This reached
+   * a live module twice before anything said a word about it.
+   *
+   * ⛔ REPORTED, NEVER REPAIRED. Will on #351: *"Do not derive benchwork. You
+   * can help an owner build, but don't make a decision on your own."* The board
+   * is the thing they actually cut; the reshape is one click away and theirs to
+   * take ([[flagged-never-corrected]]). */
+  const spineEscapes = useMemo(
+    () =>
+      sectionSpineEscapes(
+        footprint.spine,
+        footprint.sectionOutlines,
+        sectionSpans({ sections: state.sections }),
+      ),
+    [footprint.spine, footprint.sectionOutlines, state.sections],
+  );
+
   /** Every OTHER section's shape, drawn as context behind the one being
    * edited so you can see what the board has to meet. */
   const otherSectionOutlines = useMemo(
@@ -3879,6 +3921,12 @@ export function SchematicEditor({
               setTool("benchwork");
             }}
             sectionMeets={sectionMeets}
+            spineEscapes={spineEscapes}
+            onReshapeSection={(id) => {
+              const band = bandForSection(id);
+              if (!band) return;
+              setSections(state.sections.map((x) => (x.id === id ? { ...x, outline: band } : x)));
+            }}
             floatingSections={floatingSections}
             trackOptions={trackOptions}
             centerline={centerline}
@@ -4382,6 +4430,8 @@ function SectionList({
   activeId,
   onShape,
   meets,
+  escapes,
+  onReshape,
   floating,
   boardWidthInches,
   inp,
@@ -4404,6 +4454,10 @@ function SectionList({
   activeId: string | null;
   onShape: (id: string) => void;
   meets: { a: string; b: string; lengthInches: number }[];
+  /** Boards whose own centre-line runs off them (#437). */
+  escapes: { sectionId: string; outsideByInches: number }[];
+  /** Re-seed a board's outline from the band its geometry implies. */
+  onReshape: (id: string) => void;
   floating: Set<string>;
   /** How wide the boards are, for saying what a skewed seam would reach (#354). */
   boardWidthInches: number;
@@ -4780,6 +4834,36 @@ function SectionList({
                 </button>
               )}
             </div>
+            {/* ⭐⭐ THE BOARD AND ITS OWN CENTRE-LINE DISAGREE (#437).
+                
+                Changing the Shape of an already-drawn board moves the spine and
+                leaves the outline where it was drawn, so the track runs off the
+                benchwork. It reached a live module twice with nothing said.
+                
+                ⛔ SAID, NOT FIXED. Will on #351: "Do not derive benchwork. You
+                can help an owner build, but don't make a decision on your own."
+                Silently reshaping would throw away a board somebody drew, so the
+                reshape is offered and stays theirs to take. */}
+            {(() => {
+              const esc = escapes.find((e) => e.sectionId === sec.id);
+              if (!esc) return null;
+              return (
+                <p className="mt-1 rounded-md bg-amber-50 px-2 py-1 text-[11px] text-amber-800">
+                  ⚠ This board&apos;s centre-line runs{" "}
+                  <span className="font-medium">{esc.outsideByInches}″</span> off the shape
+                  it was drawn as — the track and the benchwork disagree. The drawn shape is
+                  kept as you made it; if the geometry is the one that&apos;s right,{" "}
+                  <button
+                    type="button"
+                    onClick={() => onReshape(sec.id)}
+                    className="font-medium underline"
+                  >
+                    reshape this board to match
+                  </button>
+                  .
+                </p>
+              );
+            })()}
           </div>
         );
       })}
@@ -5293,6 +5377,8 @@ function Inspector({
   activeSectionId,
   onShapeSection,
   sectionMeets,
+  spineEscapes,
+  onReshapeSection,
   floatingSections,
   trackOptions,
   centerline,
@@ -5384,6 +5470,9 @@ function Inspector({
   activeSectionId: string | null;
   onShapeSection: (id: string) => void;
   sectionMeets: { a: string; b: string; lengthInches: number }[];
+  /** Boards whose own centre-line runs off them (#437). */
+  spineEscapes: { sectionId: string; outsideByInches: number }[];
+  onReshapeSection: (id: string) => void;
   floatingSections: Set<string>;
   trackOptions: { value: string; label: string }[];
   /** The module's centre-line, for measuring how much RAIL a span really has
@@ -5630,6 +5719,8 @@ function Inspector({
               activeId={activeSectionId}
               onShape={onShapeSection}
               meets={sectionMeets}
+              escapes={spineEscapes}
+              onReshape={onReshapeSection}
               floating={floatingSections}
               boardWidthInches={Math.max(
                 state.endplateWidths.A ?? FREEMO_ENDPLATE_WIDTH_RECOMMENDED_INCHES,
