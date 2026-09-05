@@ -251,6 +251,7 @@ import {
   sectionJointSkewDeg,
   sectionBand,
   sectionAdjacency,
+  sectionEdgeSeams,
   sectionSpansOrWhole,
   remapPos,
   sectionNeighbours,
@@ -266,7 +267,6 @@ import { tracksAdriftFromTurnouts } from "@/lib/track-adrift";
 import { sidingHandConflicts } from "@/lib/siding-hands";
 import { tracksStrandedAcrossMain2 } from "@/lib/track-crosses-main";
 import { defaultSpotTrack } from "@/lib/industry-spot-defaults";
-import { sectionSeams, seamKey } from "@/lib/section-adjacency";
 import { endplateTrackPoints, startJointsFor } from "./piece-layer";
 import type { StoredTrackPart } from "@willcgage/module-schematic";
 import {
@@ -6012,7 +6012,17 @@ function Inspector({
        independently. The standard's claim is only that endplate rules are not
        REQUIRED across an internal boundary — so name the edge and let the owner
        choose. */
-    const seams = sectionSeams(sectionsWithShape);
+    /* ⛔⛔ THIS WAS MR'S OWN COPY OF THE GEOMETRY, AND IT DISAGREED WITH THE
+       PACKAGE'S. The local `web/src/lib/section-adjacency.ts` re-derived the
+       same collinear-overlap test with a 0.1″ gap and a 0.5″ minimum, against
+       `sharedEdgeLength`'s 0.5″ and 1″ — so two boards drawn a third of an inch
+       apart were "Meets section 2" in the Sections panel (which reads
+       `sectionAdjacency`, forty lines above) and NOT seamed in this list, on
+       one screen. One question, two answers. The package owns it now (pkg
+       0.160.0) and the local copy is deleted. */
+    const seams = new Map(
+      sectionEdgeSeams(sectionsWithShape).map((x) => [`${x.sectionId}:${x.edgeIndex}`, x]),
+    );
     const sectionLabel = (id: string) => {
       const n = sectionsWithShape.findIndex((s) => s.id === id);
       return sectionsWithShape[n]?.name || `Section ${n + 1}`;
@@ -6026,7 +6036,7 @@ function Inspector({
         const p1 = arr[(i + 1) % arr.length];
         const len = Math.round(Math.hypot(p1.x - p0.x, p1.y - p0.y) * 10) / 10;
         const e = endplateEdgePose(outline, { index: i, section });
-        const seam = section ? seams.get(seamKey(section, i)) : undefined;
+        const seam = section ? seams.get(`${section}:${i}`) : undefined;
         // A seam over PART of an edge leaves the rest facing open air — a
         // peninsula against the long side of a band covers 13% of it — so the
         // two cases read differently rather than both saying "joint".
@@ -6413,7 +6423,7 @@ function Inspector({
              needs to know it is 10″ — they just need it as the condition for
              standing alone, not as a fault. Same numbers, honest framing. */
           const seam = bound?.section
-            ? seams.get(seamKey(bound.section, bound.index))
+            ? seams.get(`${bound.section}:${bound.index}`)
             : undefined;
           const issues = checkEndplateWidth({
             widthInches:
@@ -6535,7 +6545,7 @@ function Inspector({
                   explicitly allows. Say which it is; don't decide for them. */}
               {(() => {
                 const seam = bound.section
-                  ? seams.get(seamKey(bound.section, bound.index))
+                  ? seams.get(`${bound.section}:${bound.index}`)
                   : undefined;
                 if (!seam) return null;
                 return (

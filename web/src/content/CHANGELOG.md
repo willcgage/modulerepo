@@ -5,6 +5,13 @@ Headings are `version — date` (YYYY-MM-DD).
 
 ---
 
+## v0.133.12 — 2026-09-05
+
+### Fixed
+- **The Sections panel and the endplate edge list now agree about what counts as a joint.** Both answer the same question — which boards meet along a shared edge — but they were doing the measuring separately, and the newer one was stricter about how close two boards had to be drawn before it counted them as joined. Boards drawn a fraction of an inch apart could therefore be described as meeting in one panel and not marked as a joint in the other, on the same screen. There is now one measurement behind both.
+
+---
+
 ## v0.133.11 — 2026-09-05
 
 ### Fixed
