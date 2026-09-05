@@ -54,10 +54,20 @@ import {
   projectToCenterline,
   LANE_SPACING_INCHES,
 } from "@/lib/physical-track";
+import { chooseBandOffset } from "@/lib/industry-band-clearance";
 
 type Pt = { x: number; y: number };
 type ViewBox = { minX: number; minY: number; w: number; h: number };
 const DEG = Math.PI / 180;
+/**
+ * How far an industry's band must stay off any track it does not serve (#421).
+ *
+ * A rail is drawn to `RAIL_GAUGE_INCHES / 2` either side of its centre (0.177″
+ * here) plus its ties, so anything under about a quarter inch reads as touching
+ * even when the numbers say it clears. 0.35″ leaves daylight at the zoom levels
+ * the canvas is actually used at without shoving the band into the next lane.
+ */
+const BAND_CLEARANCE_INCHES = 0.35;
 /** A 40-ft N-scale car is ~3.0″; ~3.3″ over the couplers — the real spacing a
  * train occupies. Capacity in cars reads truer than scale feet for a builder. */
 const CAR_INCHES = 3.3;
@@ -1829,20 +1839,47 @@ export function BenchworkEditor({
       const hostMid = sampleAt(host, rel(midPos));
       const mainMid = sampleAt(centerline, midPos);
       const flip = hostMid.nx * mainMid.nx + hostMid.ny * mainMid.ny < 0 ? -1 : 1;
-      // Beyond the track's rails, on the industry's side. No lane term now: the
-      // track's own path already is where the lane put it.
-      const off = sign * flip * (LANE_SPACING_INCHES * 0.9);
       const at = (abs: number, o: number) => {
         const p = sampleAt(host, rel(abs));
         return { x: p.x + p.nx * o, y: p.y + p.ny * o };
       };
       const a0 = Math.min(ind.fromPos, ind.toPos);
       const b0 = Math.max(ind.fromPos, ind.toPos);
-      const path: Pt[] = [];
       const steps = 16;
-      for (let s = 0; s <= steps && b0 - a0 > 0.01; s++) {
-        path.push(at(a0 + ((b0 - a0) * s) / steps, off));
-      }
+      const bandAt = (o: number) => {
+        const out: Pt[] = [];
+        for (let s = 0; s <= steps && b0 - a0 > 0.01; s++) {
+          out.push(at(a0 + ((b0 - a0) * s) / steps, o));
+        }
+        return out;
+      };
+      /**
+       * ⭐⭐ THE BAND MUST NOT LIE ACROSS A TRACK IT DOES NOT SERVE (#421).
+       *
+       * ⛔ This was a bare `sign * flip * (LANE_SPACING_INCHES * 0.9)` — beyond
+       * the host's rails on the declared side, and blind to everything else on
+       * the board. On FMN-0083 that drew the spot on the SIDING straight
+       * through the diagonal spur (measured: gap −0.226″ at x=20, +0.108″ at
+       * x=22, so it crossed at x≈21.4). Will: *"it should never interfere."*
+       *
+       * ⚠️ Measured, not assumed from the lane grid: a spur leaves its turnout
+       * across the lanes, so it can cross ANY constant offset somewhere.
+       */
+      const others = trackPaths
+        .filter((tp) => tp.id !== ind.track && tp.pts.length >= 2)
+        .map((tp) => tp.pts)
+        // An industry on the main is measured against the other tracks only —
+        // `trackPaths` never contains `main`, so the centre-line is added by
+        // hand for everything else.
+        .concat(ind.track === MAIN_TRACK_ID ? [] : [centerline]);
+      const placed = chooseBandOffset(
+        bandAt,
+        others,
+        sign * flip * (LANE_SPACING_INCHES * 0.9),
+        BAND_CLEARANCE_INCHES,
+      );
+      const off = placed.off;
+      const path: Pt[] = bandAt(off);
       return {
         id: ind.id,
         industryId: ind.industryId,
@@ -1855,7 +1892,10 @@ export function BenchworkEditor({
           { end: "from" as const, ...at(ind.fromPos, off) },
           { end: "to" as const, ...at(ind.toPos, off) },
         ],
-        label: at(midPos, off + sign * flip * 2.2),
+        // ⚠️ The label follows the band, not the declared side. When clearance
+        // moves the band to the other rail, a label still placed by
+        // `sign * flip` would sit across the track the band just stepped off.
+        label: at(midPos, off + Math.sign(off) * 2.2),
       };
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
