@@ -5,6 +5,13 @@ Headings are `version — date` (YYYY-MM-DD).
 
 ---
 
+## v0.133.11 — 2026-09-05
+
+### Fixed
+- **A section joint no longer looks like a place to put an endplate.** On a module built from two boards, the endplate's "which edge of the benchwork is this?" list offered every edge of every board — so the internal joint where the two boards meet appeared twice, once from each side, reading exactly like the module's real ends. Binding a plate there then measured that internal joint against the endplate standards and reported it as too narrow, which the Free-moN standard expressly does not require: the standards for module end interfaces do not apply between sections. Seam edges are now named as section joints, and if you do put a plate on one — which is what owners building sections that can stand alone as modules do — the width figures are shown as the condition for standing alone rather than as a fault.
+
+---
+
 ## v0.133.10 — 2026-09-05
 
 ### Fixed
