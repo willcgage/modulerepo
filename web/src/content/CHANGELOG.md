@@ -5,6 +5,13 @@ Headings are `version — date` (YYYY-MM-DD).
 
 ---
 
+## v0.133.6 — 2026-09-05
+
+### Added
+- **A drawn main line is now measured against Free-moN's 22″ minimum radius.** The builder has always warned when a piece of flex was bent tighter than the standard allows, but a track you draw as a path with bend handles was never checked at all — so a main could curve at four inches and nothing said a word. The badge now names any main whose tightest curve is under 22″, with the figure and a **Show** button. It applies to main lines only, as the standard does: a spur, a yard lead or an industrial track may legitimately be tighter, and a route to a third endplate counts as a main because that is what it is.
+
+---
+
 ## v0.133.5 — 2026-09-05
 
 ### Fixed

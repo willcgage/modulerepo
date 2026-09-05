@@ -1422,6 +1422,8 @@ export function SchematicEditor({
    * question ([[one-answer-per-drawn-fact]]).
    */
   const [crowdedBands, setCrowdedBands] = useState<string[]>([]);
+  /** The tightest curve in each drawn track, measured by the canvas (#421). */
+  const [curveRadii, setCurveRadii] = useState<{ id: string; minRadius: number }[]>([]);
 
   const problems = useMemo<Problem[]>(() => {
     const out: Problem[] = [];
@@ -1460,6 +1462,41 @@ export function SchematicEditor({
      * follows the DRAWN path, not the stored extent. A spot's id is
      * `<industry>#<n>`, so the name is looked up on the part before the "#".
      */
+    /**
+     * ⛔ A DRAWN CURVE WAS NEVER HELD TO THE STANDARD'S MINIMUM RADIUS.
+     *
+     * The flex-piece inspector has warned about this for ages, but it is gated
+     * on `isFlex && piece.radiusInches != null` — a track drawn as a path with
+     * bend handles has no per-piece radius, so nothing measured it. FMN-0068's
+     * branch to endplate C runs at 4.1″ against a 22″ standard and the builder
+     * said nothing. Will: *"there is an allowed minimum radius for curves, but
+     * this one is too small."*
+     *
+     * ⭐⭐ MAINS ONLY, AND "MAIN" IS NOT A ROLE TEST. The standard binds the
+     * MAIN LINE — the package says so in as many words, and warning an owner
+     * that their yard lead is out of spec would teach them to ignore these
+     * notes. But `role: "branch"` does NOT mean Main 3: the return-loop
+     * generator emits that role too. A branch is identified by an ENDPLATE
+     * POINTING AT IT — `EditorState.branches[].trackId` ([[branch-is-a-main]]) —
+     * which is why this lives here and not in the canvas: an `EndplatePose`
+     * carries no `trackId` to test.
+     */
+    for (const { id, minRadius } of curveRadii) {
+      if (minRadius >= FREEMO_MAIN_MIN_RADIUS_INCHES) continue;
+      const track = state.extraTracks.find((t) => t.id === id);
+      const isMain =
+        id === MAIN_TRACK_ID ||
+        id === MAIN2_TRACK_ID ||
+        track?.role === "main" ||
+        state.branches.some((b) => b.trackId === id);
+      if (!isMain) continue;
+      out.push({
+        key: `radius:${id}`,
+        what: nameOf(id),
+        message: `Its tightest curve is ${minRadius.toFixed(1)}″ — Free-moN's minimum main-line radius is ${FREEMO_MAIN_MIN_RADIUS_INCHES}″.`,
+        go: { kind: "track", id },
+      });
+    }
     for (const bandId of crowdedBands) {
       const ind = state.industries.find((i) => i.id === bandId.split("#")[0]);
       if (!ind) continue;
@@ -1507,7 +1544,7 @@ export function SchematicEditor({
         go: { kind: "endplate", id } });
     return out;
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [state, partLibrary, mainRows, flexByTrack, unreachedPlates, centerline, crowdedBands]);
+  }, [state, partLibrary, mainRows, flexByTrack, unreachedPlates, centerline, crowdedBands, curveRadii]);
 
   const canvasTurnouts = useMemo(
     () =>
@@ -3671,6 +3708,7 @@ export function SchematicEditor({
                 // child's effect fires only when the SET of crowded bands
                 // changes — not on every geometry render.
                 onCrowdedIndustries={setCrowdedBands}
+                onTrackCurveRadii={setCurveRadii}
                 outline={activeSection ? (activeSection.outline ?? []) : state.outline}
                 // The loop's donut hole — only for the whole-module board, not a
                 // section being shaped on its own.
