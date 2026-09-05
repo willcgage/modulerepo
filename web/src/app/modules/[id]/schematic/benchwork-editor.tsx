@@ -1950,11 +1950,26 @@ export function BenchworkEditor({
    */
   const curveRadii = useMemo(
     () =>
-      trackPaths
-        .filter((tp) => !/-leg\d+$/.test(tp.id) && tp.pts.length > 2)
-        .map((tp) => ({ id: tp.id, minRadius: minCurveRadius(tp.pts) }))
-        .filter((r) => Number.isFinite(r.minRadius)),
-    [trackPaths],
+      [
+        /**
+         * ⛔⛔ THE MAIN IS NOT IN `trackPaths` — AND THE STANDARD IS ABOUT MAINS.
+         *
+         * `trackPaths` maps over `tracks`, which is the EXTRA tracks; the main
+         * IS the centre-line and has no entry there. Shipped without this, the
+         * check measured every track except the one the 22″ rule exists for:
+         * FMN-0081's main curves at 7.7″ and the builder stayed silent while
+         * happily flagging Main 2 on another module. Caught by verifying a
+         * module I had predicted WOULD warn, which is the only reason it
+         * surfaced.
+         */
+        ...(centerline.length > 2
+          ? [{ id: MAIN_TRACK_ID, minRadius: minCurveRadius(centerline) }]
+          : []),
+        ...trackPaths
+          .filter((tp) => !/-leg\d+$/.test(tp.id) && tp.pts.length > 2)
+          .map((tp) => ({ id: tp.id, minRadius: minCurveRadius(tp.pts) })),
+      ].filter((r) => Number.isFinite(r.minRadius)),
+    [trackPaths, centerline],
   );
   // Same stability trick as below: a key that only changes when the ANSWER
   // does, so this never sets parent state on a bare re-render.
