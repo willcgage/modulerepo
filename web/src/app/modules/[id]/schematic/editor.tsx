@@ -5112,6 +5112,44 @@ function spanOverhangOf(
   return o.overhangInches < SPAN_OVERHANG_MIN_INCHES ? null : o;
 }
 
+/**
+ * How an industry's car figures read as ONE line (#423).
+ *
+ * ⛔ THE READOUT THIS REPLACES SAID ONLY THE SUM. An industry is counted per
+ * track (#310) — its own track plus a figure for every extra spot — so FMN-0083's
+ * "Ace Feed", three cars on the spur and three on the siding, read **"6 cars"**
+ * against a single name. Arithmetically right and easy to misread as one
+ * six-car customer, when the truth is three here and three there, and only if
+ * both tracks get worked. Will: *"show the breakdown."*
+ *
+ * ⭐⭐ ONE DEFINITION, TWO CALLERS — the inspector's total and the objects list
+ * render this exact string. They are the same fact and drifted apart once
+ * already ([[one-answer-per-drawn-fact]]); do not format cars anywhere else.
+ *
+ * ⛔ THE TOTAL IS A SUM OF WHAT THE OWNER ENTERED (#310), not a derivation.
+ * Will, 2026-08-22: *"the owner should put the number of cars that the industry
+ * supports per track."* It used to be `carCapacity(span)` per track, which
+ * measured along the MODULE — wrong on a curve — and answered the wrong
+ * question anyway: a dock with three doors holds three cars whether or not the
+ * rail beside it could take ten.
+ *
+ * `null` when NOTHING has been entered anywhere, so a caller can say "not
+ * recorded" rather than claiming a confident zero.
+ */
+function carsLabelFor(ind: {
+  cars?: number | null;
+  spots?: { cars?: number | null }[];
+}): string | null {
+  const figures = [ind.cars, ...(ind.spots ?? []).map((sp) => sp.cars)].filter(
+    (n): n is number => typeof n === "number",
+  );
+  if (!figures.length) return null;
+  const total = figures.reduce((a, b) => a + b, 0);
+  // The total still leads, because that is what the eye wants when scanning a
+  // list; the parts follow so the number cannot be mistaken for one track's.
+  return figures.length > 1 ? `${total} cars · ${figures.join(" + ")}` : `${total} cars`;
+}
+
 /** The owner's car figure against the rail actually under the span (#310). */
 function carsOverflowOf(
   ctx: {
@@ -7212,24 +7250,6 @@ function Inspector({
     const ind = state.industries[idx];
     const up = (fn: (x: EditorState["industries"][number]) => void) =>
       patch((s) => fn(s.industries[idx]));
-    /**
-     * ⛔ THE TOTAL IS A SUM OF WHAT THE OWNER ENTERED (#310), not a derivation.
-     *
-     * Will, 2026-08-22: "the owner should put the number of cars that the
-     * industry supports per track." It used to be `carCapacity(span)` per
-     * track, which measured along the MODULE — wrong on a curve — and answered
-     * the wrong question anyway: a dock with three doors holds three cars
-     * whether or not the rail beside it could take ten.
-     *
-     * `null` when NOTHING has been entered anywhere, so the readout can say so
-     * rather than claiming a confident zero.
-     */
-    const carFigures = [ind.cars, ...ind.spots.map((sp) => sp.cars)].filter(
-      (n): n is number => typeof n === "number",
-    );
-    const cars = carFigures.length
-      ? carFigures.reduce((a, b) => a + b, 0)
-      : null;
     /** Set a per-track figure; a blank field means NOT RECORDED, not zero. */
     const setCars = (
       v: string,
@@ -7394,7 +7414,7 @@ function Inspector({
           <div className="flex justify-between">
             <span>Total across its tracks</span>
             <span className="tabular-nums font-medium text-gray-800">
-              {cars != null ? `${cars} cars` : "not recorded"}
+              {carsLabelFor(ind) ?? "not recorded"}
             </span>
           </div>
         </div>
@@ -8826,13 +8846,9 @@ function ObjectsList({
             ind.name || "unnamed",
             { kind: "industry", id: ind.id },
             // The owner's figures across this industry's tracks (#310), not a
-            // number worked out from the drawn span.
-            (() => {
-              const ns = [ind.cars, ...(ind.spots ?? []).map((sp) => sp.cars)].filter(
-                (n): n is number => typeof n === "number",
-              );
-              return ns.length ? `${ns.reduce((a, b) => a + b, 0)} cars` : "—";
-            })(),
+            // number worked out from the drawn span — and broken out per track
+            // so a two-track industry cannot read as one big one (#423).
+            carsLabelFor(ind) ?? "—",
           ),
         )}
       </Group>

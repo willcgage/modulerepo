@@ -5,6 +5,13 @@ Headings are `version — date` (YYYY-MM-DD).
 
 ---
 
+## v0.133.2 — 2026-09-05
+
+### Changed
+- **An industry served on more than one track now shows the figure for each.** An industry is counted per track — so many cars at its own dock, so many on another track it also spots — and the list showed only the total. An industry taking three cars on its spur and three on a siding read "6 cars" against a single name, which invites reading it as one six-car customer rather than three here and three there. It now reads **6 cars · 3 + 3**, in both the objects list and the industry panel. An industry served by one track is unchanged.
+
+---
+
 ## v0.133.1 — 2026-09-05
 
 ### Fixed
