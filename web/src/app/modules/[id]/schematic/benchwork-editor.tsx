@@ -5091,7 +5091,10 @@ const ENDPLATE_TAB = 5; // ballast-shoulder band width, inches
                      Painting an opaque line here would hide the very thing the
                      owner is being shown. */
                   strokeWidth={on ? world(9) : world(7)}
-                  strokeOpacity={on ? 0.55 : 0.4}
+                  /* Will, twice: it must read as a HIGHLIGHT, not a coat of
+                     paint. 0.4 still buried the ties; 0.2 tints the rail and
+                     leaves every joint and tie legible through it. */
+                  strokeOpacity={on ? 0.32 : 0.2}
                   strokeLinecap="round"
                   style={onSelect ? { cursor: "pointer" } : undefined}
                   onPointerDown={
