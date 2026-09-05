@@ -266,6 +266,7 @@ import { tracksAdriftFromTurnouts } from "@/lib/track-adrift";
 import { sidingHandConflicts } from "@/lib/siding-hands";
 import { tracksStrandedAcrossMain2 } from "@/lib/track-crosses-main";
 import { defaultSpotTrack } from "@/lib/industry-spot-defaults";
+import { sectionSeams, seamKey } from "@/lib/section-adjacency";
 import { endplateTrackPoints, startJointsFor } from "./piece-layer";
 import type { StoredTrackPart } from "@willcgage/module-schematic";
 import {
@@ -5995,6 +5996,27 @@ function Inspector({
      */
     const compass = (deg: number) =>
       ["east", "north", "west", "south"][Math.round(((deg % 360) + 360) % 360 / 90) % 4];
+    const sectionsWithShape = (state.sections ?? []).filter((s) => (s.outline?.length ?? 0) >= 3);
+    /* ⭐⭐ SAY WHICH EDGES ARE INTERNAL SEAMS (#96). Every edge of every section
+       was offered here, gated only on being straight — so on Blairstown, a real
+       96″ × 12″ board split at x=48, the SAME internal joint appeared twice
+       (`sec1` edge 2 and `sec2` edge 4) looking exactly like the module's two
+       genuine ends. All four are 12″ and straight; only the compass direction
+       told them apart, and only to an owner who worked it out. Bind a plate to
+       one and `checkEndplateWidth` then measures a section joint against §1.1,
+       which is the thing this issue exists to forbid.
+
+       ⭐ NOT disabled, deliberately. A section built with conforming plates at
+       both ends is a module by the standard's own mechanical test, and Will's
+       own note on #96 says owners do exactly that so sections can be used
+       independently. The standard's claim is only that endplate rules are not
+       REQUIRED across an internal boundary — so name the edge and let the owner
+       choose. */
+    const seams = sectionSeams(sectionsWithShape);
+    const sectionLabel = (id: string) => {
+      const n = sectionsWithShape.findIndex((s) => s.id === id);
+      return sectionsWithShape[n]?.name || `Section ${n + 1}`;
+    };
     const edgesOf = (
       outline: BenchworkPoint[] | null | undefined,
       section: string | null,
@@ -6004,17 +6026,26 @@ function Inspector({
         const p1 = arr[(i + 1) % arr.length];
         const len = Math.round(Math.hypot(p1.x - p0.x, p1.y - p0.y) * 10) / 10;
         const e = endplateEdgePose(outline, { index: i, section });
+        const seam = section ? seams.get(seamKey(section, i)) : undefined;
+        // A seam over PART of an edge leaves the rest facing open air — a
+        // peninsula against the long side of a band covers 13% of it — so the
+        // two cases read differently rather than both saying "joint".
+        const seamNote = !seam
+          ? ""
+          : seam.fraction >= 0.99
+            ? ` · section joint with ${sectionLabel(seam.otherSectionId)}`
+            : ` · meets ${sectionLabel(seam.otherSectionId)} along ${Math.round(seam.inches * 10) / 10}″ of it`;
         return {
           key: section ? `${section}:${i}` : String(i),
           index: i,
           section,
           usable: !!e,
+          seam,
           label: e
-            ? `${prefix}Edge ${i + 1} — ${len}″, faces ${compass(e.heading)}`
+            ? `${prefix}Edge ${i + 1} — ${len}″, faces ${compass(e.heading)}${seamNote}`
             : `${prefix}Edge ${i + 1} — ${len}″, curved (an endplate face must be straight)`,
         };
       });
-    const sectionsWithShape = (state.sections ?? []).filter((s) => (s.outline?.length ?? 0) >= 3);
     const edgeChoices = [
       ...edgesOf(state.outline, null, ""),
       ...sectionsWithShape.flatMap((s, n) =>
@@ -6369,25 +6400,57 @@ function Inspector({
             
             Unbound there is no edge to read from, so the authored number IS the
             plate and is what gets checked. */}
-        {checkEndplateWidth({
-          widthInches:
-            bound && pose.boundToEdge && Number.isFinite(pose.widthInches)
-              ? pose.widthInches
-              : state.endplateWidths[id],
-          config: plateConfig,
-          trackOffsetInches: state.endplateTrackOffsets[id],
-          // Which side Main 2 is on decides which track sits nearest a fascia,
-          // and whether the pair straddles the plate at all (#190).
-          main2Below: state.mainsSwapped === true,
-        }).map((issue) => (
-          <p
-            key={issue.code}
-            className="rounded-md bg-amber-50 px-2 py-1 text-xs text-amber-800"
-            role="status"
-          >
-            ⚠ {issue.message}
-          </p>
-        ))}
+        {(() => {
+          /* ⭐⭐ AT AN INTERNAL SEAM THESE ARE ADVICE, NOT NON-CONFORMANCE (#96).
+             The standard: "standards for module end interfaces do not apply to
+             inter-section interfaces". So a 10″ plate on a section joint does
+             NOT breach §1.1 — and saying "the standard requires at least 12″"
+             in amber there states a violation that does not exist, which is the
+             precise failure this issue was filed to prevent.
+
+             ⭐ The check still RUNS, and that is deliberate. An owner who put a
+             plate on a seam so the section can stand alone as its own module
+             needs to know it is 10″ — they just need it as the condition for
+             standing alone, not as a fault. Same numbers, honest framing. */
+          const seam = bound?.section
+            ? seams.get(seamKey(bound.section, bound.index))
+            : undefined;
+          const issues = checkEndplateWidth({
+            widthInches:
+              bound && pose.boundToEdge && Number.isFinite(pose.widthInches)
+                ? pose.widthInches
+                : state.endplateWidths[id],
+            config: plateConfig,
+            trackOffsetInches: state.endplateTrackOffsets[id],
+            // Which side Main 2 is on decides which track sits nearest a fascia,
+            // and whether the pair straddles the plate at all (#190).
+            main2Below: state.mainsSwapped === true,
+          });
+          if (!issues.length) return null;
+          if (!seam)
+            return issues.map((issue) => (
+              <p
+                key={issue.code}
+                className="rounded-md bg-amber-50 px-2 py-1 text-xs text-amber-800"
+                role="status"
+              >
+                ⚠ {issue.message}
+              </p>
+            ));
+          return (
+            <div className="rounded-md bg-gray-50 px-2 py-1 text-xs text-gray-700" role="status">
+              <p className="font-medium">
+                This edge is an internal section joint, so the endplate standards do not bind
+                here. They would, if this section is ever set up as a module on its own:
+              </p>
+              {issues.map((issue) => (
+                <p key={issue.code} className="mt-0.5">
+                  • {issue.message}
+                </p>
+              ))}
+            </div>
+          );
+        })()}
 
         {/* ⭐ THE ENDPLATE'S EDGE OF THE BENCHWORK (ADR 0001). Above the pose
             because it supersedes it: bound, the plate reads its place, facing
@@ -6462,6 +6525,30 @@ function Inspector({
                 endplate moves with it — its width is the edge&apos;s own, so the
                 two can&apos;t disagree.
               </p>
+              {/* ⭐⭐ AN INTERNAL JOINT IS NOT A STANDARDIZED INTERFACE (#96).
+                  The standard: "standards for module end interfaces do not
+                  apply to inter-section interfaces, as these are considered to
+                  be internal to the module." So the width and clearance
+                  warnings above this are advice here, not non-conformance —
+                  and an owner who put a plate here on purpose, so the section
+                  can stand alone as a module, is doing something the standard
+                  explicitly allows. Say which it is; don't decide for them. */}
+              {(() => {
+                const seam = bound.section
+                  ? seams.get(seamKey(bound.section, bound.index))
+                  : undefined;
+                if (!seam) return null;
+                return (
+                  <p className="mt-1 rounded-md bg-sky-50 px-2 py-1 text-xs text-sky-800">
+                    This edge is an internal section joint with{" "}
+                    <span className="font-medium">{sectionLabel(seam.otherSectionId)}</span>
+                    {seam.fraction >= 0.99 ? "" : ` along ${Math.round(seam.inches * 10) / 10}″ of its run`}. The
+                    standard exempts inter-section interfaces from the endplate rules, so track
+                    may cross it at any angle — an endplate here is optional, and worth having
+                    only if this section is meant to stand alone as a module.
+                  </p>
+                );
+              })()}
               {/* ⭐ WHERE THE PLATE STARTS ALONG THAT EDGE (#275). Will:
                   "This should be allowed to be set for where it starts on the
                   edge and where it ends." The width above answers "how big";
