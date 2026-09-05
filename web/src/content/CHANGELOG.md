@@ -5,6 +5,13 @@ Headings are `version — date` (YYYY-MM-DD).
 
 ---
 
+## v0.133.7 — 2026-09-05
+
+### Fixed
+- **The minimum-radius check now measures the main line itself.** It was reading every track except the one the 22″ rule is actually about: the main is the module's centre line rather than an added track, so it had no entry in the list being checked. A module whose main curves tighter than the standard allows stayed silent while the same warning appeared correctly for a second main on another module.
+
+---
+
 ## v0.133.6 — 2026-09-05
 
 ### Added
