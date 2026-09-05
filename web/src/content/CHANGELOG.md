@@ -5,6 +5,13 @@ Headings are `version — date` (YYYY-MM-DD).
 
 ---
 
+## v0.139.0 — 2026-09-05
+
+### Added
+- **The builder now tells you when two or more industries claim the same stretch of the same track.** Only one marker can be drawn there, so the others were invisible — and because the room each industry reports is measured against the rail it sits on, a siding claimed by four industries was reporting its length four times over, with none of them looking wrong on its own. **Your spans are not changed**: four businesses along one team track is a real arrangement, and the note simply says the figures are counting one piece of rail more than once. Industries that merely meet end to end are not flagged.
+
+---
+
 ## v0.138.0 — 2026-09-05
 
 ### Removed

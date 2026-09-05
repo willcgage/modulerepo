@@ -269,6 +269,7 @@ import { sidingHandConflicts } from "@/lib/siding-hands";
 import { tracksStrandedAcrossMain2 } from "@/lib/track-crosses-main";
 import { defaultSpotTrack } from "@/lib/industry-spot-defaults";
 import { bendsWiderAsArc } from "@/lib/curve-radius";
+import { overlappingSpanGroups } from "@/lib/industry-span-overlap";
 import { endplateTrackPoints, startJointsFor } from "./piece-layer";
 import type { StoredTrackPart } from "@willcgage/module-schematic";
 import {
@@ -1522,6 +1523,34 @@ export function SchematicEditor({
             ? ` One of its bends uses both handles; the same bow drawn as a single bend would hold ${wider.asArcInches.toFixed(1)}″.`
             : ""),
         go: { kind: "track", id },
+      });
+    }
+    /* ⭐⭐ INDUSTRIES SHARING ONE STRETCH OF RAIL (#443).
+    
+       Found on FMN-0011, where FOUR industries are each authored 13→73 on the
+       siding — the whole of it. They draw one mark and one legible name where
+       there are four, and nothing said so.
+    
+       ⛔ NOT ONLY A DRAWING PROBLEM, which is why it is a warning and not a
+       nicer layout: #310 measures capacity against the rail an industry spots
+       on, PER INDUSTRY, so one 60″ siding claimed four times reports its room
+       four times over and **neither industry looks wrong on its own**.
+    
+       ⛔⛔ THE SPANS ARE AUTHORED AND ARE NOT TOUCHED. Four businesses along one
+       team track is a real arrangement; what the owner is owed is the knowledge
+       that the figures behave as though they are one ([[flagged-never-corrected]]). */
+    for (const g of overlappingSpanGroups(state.industries)) {
+      const names = g.claims.map((c) => (c.spot ? `${c.name} (second track)` : c.name));
+      const first = g.claims[0];
+      out.push({
+        key: `span-share:${g.track}:${g.from}`,
+        what: names.length > 2 ? `${names[0]} and ${names.length - 1} more` : names.join(" and "),
+        message:
+          `${names.length} industries claim the same ${r1(g.from)}″–${r1(g.to)}″ of ` +
+          `${nameOf(g.track)}: ${names.join(", ")}. Only one marker can show there, and each is ` +
+          `measured against that rail on its own — so between them they report room that counts ` +
+          `it ${names.length} times. Give each its own stretch if they really share the track.`,
+        go: { kind: "industry", id: first.industryId },
       });
     }
     for (const ind of state.industries) {
