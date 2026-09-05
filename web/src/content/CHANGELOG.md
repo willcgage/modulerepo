@@ -5,6 +5,13 @@ Headings are `version — date` (YYYY-MM-DD).
 
 ---
 
+## v0.137.0 — 2026-09-05
+
+### Changed
+- **An industry's name is smaller now, and is left out when it will not fit.** Tracks sit close together and the name is a fixed size on screen, so two industries on neighbouring tracks could print over each other as soon as you zoomed out. Rather than push the name off the track it belongs to, it is simply not drawn when there is no room for it — the highlight still shows you the span, and hovering it or opening the Objects list still tells you whose it is.
+
+---
+
 ## v0.136.2 — 2026-09-05
 
 ### Changed
