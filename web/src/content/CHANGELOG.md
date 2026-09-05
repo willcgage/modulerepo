@@ -5,6 +5,13 @@ Headings are `version — date` (YYYY-MM-DD).
 
 ---
 
+## v0.133.0 — 2026-09-03
+
+### Added
+- **House track is now a kind of track you can choose.** A siding is a passing track, a spur is a stub for setting cars out, and a house track is the one alongside a freight house or depot that an industry loads from — until now you had to call it one of the other two. Pick it in a track's **Role**, or make one straight from a turnout with **＋ New house track…**. It is drawn like a spur, because that is what it is: joined to the main at one end. Nothing you have already saved changes.
+
+---
+
 ## v0.132.1 — 2026-09-03
 
 ### Fixed

@@ -6,7 +6,11 @@
  * lanes; turnouts diverge; signal masts). Pure render from the doc.
  */
 import type { ReactNode } from "react";
-import { moduleFeatures, type ModuleSchematicDoc } from "@/lib/module-schematic";
+import {
+  moduleFeatures,
+  drawsFromOneEnd,
+  type ModuleSchematicDoc,
+} from "@/lib/module-schematic";
 
 const LANE_GAP = 12;
 const PAD = 10;
@@ -341,7 +345,8 @@ export function SchematicPreview({
           // Diverge from the main the track's turnout sits on — a team track
           // off Main 2 starts at lane 1, not as a crossover from Main 1.
           const ym = laneY(t.divergesFromLane);
-          const isSpur = t.role === "spur";
+          // ⭐ The package owns this now — see `drawsFromOneEnd` (#417).
+          const isSpur = drawsFromOneEnd(t.role);
           // A spur's throat is at its turnout (either end, #bug3); the stub runs
           // to the far end. A siding dips to the main at both ends — UNLESS
           // nothing diverges into it (no turnout diverges to it) while turnouts
