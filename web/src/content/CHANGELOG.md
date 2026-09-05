@@ -5,6 +5,13 @@ Headings are `version — date` (YYYY-MM-DD).
 
 ---
 
+## v0.136.0 — 2026-09-05
+
+### Changed
+- **An industry's marker now highlights the track it serves, instead of sitting beside it.** The marker used to be drawn in the space next to its track, which meant it could land on top of a *different* track — and a lot of machinery existed to hunt for a gap it would fit in, plus a warning for when no gap could be found. Drawing it on the rail it actually describes makes that impossible rather than merely unlikely, so the search and the warning are both gone. The span still reads the same way, end to end, and **the industry's name still sits on the side you set** — that is what the side is for.
+
+---
+
 ## v0.135.0 — 2026-09-05
 
 ### Added

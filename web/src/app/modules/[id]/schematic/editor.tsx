@@ -1424,7 +1424,6 @@ export function SchematicEditor({
    * second time from the stored extents would give a second answer to one
    * question ([[one-answer-per-drawn-fact]]).
    */
-  const [crowdedBands, setCrowdedBands] = useState<string[]>([]);
   /** The tightest curve in each drawn track, measured by the canvas (#421). */
   const [curveRadii, setCurveRadii] = useState<{ id: string; minRadius: number }[]>([]);
 
@@ -1525,19 +1524,6 @@ export function SchematicEditor({
         go: { kind: "track", id },
       });
     }
-    for (const bandId of crowdedBands) {
-      const ind = state.industries.find((i) => i.id === bandId.split("#")[0]);
-      if (!ind) continue;
-      const isSpot = bandId.includes("#");
-      out.push({
-        key: `band:${bandId}`,
-        what: ind.name || "Industry",
-        message: isSpot
-          ? "Its marker on a second track cannot be drawn clear of the tracks around it — move the spot, or the track it crowds."
-          : "Its marker cannot be drawn clear of the tracks around it — move the span, or the track it crowds.",
-        go: { kind: "industry", id: ind.id },
-      });
-    }
     for (const ind of state.industries) {
       const spans = [
         { track: ind.track, fromPos: ind.fromPos, toPos: ind.toPos, cars: ind.cars, what: "span" },
@@ -1572,7 +1558,7 @@ export function SchematicEditor({
         go: { kind: "endplate", id } });
     return out;
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [state, partLibrary, mainRows, flexByTrack, unreachedPlates, centerline, crowdedBands, curveRadii]);
+  }, [state, partLibrary, mainRows, flexByTrack, unreachedPlates, centerline, curveRadii]);
 
   const canvasTurnouts = useMemo(
     () =>
@@ -3773,10 +3759,6 @@ export function SchematicEditor({
             <div className="min-h-[28rem] flex-1 rounded-lg border border-gray-200 bg-white p-2">
               <BenchworkEditor
                 unreachableTracks={unreachable}
-                // `setCrowdedBands` is a stable setState identity, so the
-                // child's effect fires only when the SET of crowded bands
-                // changes — not on every geometry render.
-                onCrowdedIndustries={setCrowdedBands}
                 onTrackCurveRadii={setCurveRadii}
                 outline={activeSection ? (activeSection.outline ?? []) : state.outline}
                 // The loop's donut hole — only for the whole-module board, not a
