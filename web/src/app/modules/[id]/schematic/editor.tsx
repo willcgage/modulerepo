@@ -300,9 +300,19 @@ const addBtn =
   "rounded-md border border-gray-300 px-2 py-1 text-xs font-medium text-gray-700 hover:bg-gray-50";
 const xBtn = "text-xs font-medium text-red-600 hover:underline";
 
+/**
+ * ⭐ WHAT A TRACK IS. `house` added 2026-09-03 (#417) — Will: *"that is strange
+ * to call it a siding technically."* A siding is a PASSING track, a spur is a
+ * stub for setting cars out, and a house track is the one alongside a freight
+ * house or depot that an industry loads from. Owners had to call the third one
+ * of the first two.
+ *
+ * ⚠️ The order is the order an owner reaches for them, not alphabetical.
+ */
 const ROLE_OPTIONS: { value: TrackRole; label: string }[] = [
   { value: "siding", label: "Passing siding" },
   { value: "spur", label: "Industry spur" },
+  { value: "house", label: "House track" },
   { value: "yard", label: "Yard track" },
 ];
 const KIND_OPTIONS: { value: TurnoutKind; label: string }[] = [
@@ -2337,10 +2347,14 @@ export function SchematicEditor({
    * a NEW spur or siding for it to feed, named so the owner can rename it, with
    * a short default stub they then shape by dragging its end. Steve Branton's
    * suggestion — the reverse of drawing a track and having it mint the turnout. */
-  const newDivergeTrack = (turnoutId: string, role: "spur" | "siding") => {
+  const newDivergeTrack = (turnoutId: string, role: "spur" | "siding" | "house") => {
     const tn = state.turnouts.find((t) => t.id === turnoutId);
     if (!tn) return;
-    const id = nextId(role === "spur" ? "spur" : "sid", state.extraTracks.map((t) => t.id));
+    // ⭐ The id is minted from the role and then NEVER changes — it is a
+    // reference (a turnout's `divergeTrack` points at it), so re-roling a track
+    // later leaves the id alone and `trackLabel` carries the new name (#417).
+    const prefix = role === "spur" ? "spur" : role === "house" ? "house" : "sid";
+    const id = nextId(prefix, state.extraTracks.map((t) => t.id));
     const p = Math.round(tn.pos * 10) / 10;
     // ⛔ NO INVENTED TRACK (#379). This used to mint
     //     max(6, min(remaining, lengthInches * 0.12))
@@ -2363,7 +2377,8 @@ export function SchematicEditor({
         fromPos: p,
         toPos: Math.min(s.lengthInches, p + stub),
         moduleTrackId: null,
-        trackName: role === "spur" ? "New spur" : "New siding",
+        trackName:
+          role === "spur" ? "New spur" : role === "house" ? "New house track" : "New siding",
       });
       const t = s.turnouts.find((x) => x.id === turnoutId);
       if (t) connectDiverge(t, id, { fromPos: p, toPos: Math.min(s.lengthInches, p + stub) });
@@ -4132,6 +4147,8 @@ function trackLabel(
       return `Siding ${n}`;
     case "spur":
       return `Spur ${n}`;
+    case "house":
+      return `House track ${n}`;
     // ⭐ A YARD TRACK AND A BRANCH ARE ROLES TOO (#416). They fell through to
     // the raw id, so a yard track read "yard1" while every other kind got a
     // proper name — the same flattening as calling every track a siding.
@@ -5243,7 +5260,7 @@ function Inspector({
   setSections: (next: SchematicSection[]) => void;
   /** How many placed objects stand on a board — the remove guard (#195). */
   countOnSection: (sectionId: string) => number;
-  onNewDivergeTrack: (turnoutId: string, role: "spur" | "siding") => void;
+  onNewDivergeTrack: (turnoutId: string, role: "spur" | "siding" | "house") => void;
   onDivergeToEndplate: (turnoutId: string, endplateId: string) => void;
   activeSectionId: string | null;
   onShapeSection: (id: string) => void;
@@ -6692,6 +6709,7 @@ function Inspector({
                 // turnout to feed instead of picking an existing one.
                 if (v === "__new_spur__") onNewDivergeTrack(t.id, "spur");
                 else if (v === "__new_siding__") onNewDivergeTrack(t.id, "siding");
+                else if (v === "__new_house__") onNewDivergeTrack(t.id, "house");
                 else if (v.startsWith("__to_ep__"))
                   onDivergeToEndplate(t.id, v.slice("__to_ep__".length));
                 // ⭐ Picking an existing track is a connection too, so it pins
@@ -6725,6 +6743,7 @@ function Inspector({
                 ))}
               <option disabled>──────────</option>
               <option value="__new_spur__">＋ New spur…</option>
+              <option value="__new_house__">＋ New house track…</option>
               <option value="__new_siding__">＋ New siding…</option>
               {/* Draw a branch route out to a placed 3rd+ endplate (#170). */}
               {state.branches.map((_, bi) => {

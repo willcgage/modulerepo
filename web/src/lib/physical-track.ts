@@ -18,6 +18,7 @@ import {
   moduleFeatures,
   samplePath,
   turnoutDivergingLeg,
+  drawsFromOneEnd,
   turnoutClosure,
   turnoutFacing,
   divergeSideForHand,
@@ -609,7 +610,11 @@ export function physicalSchematic(
   }
   const divergesTo = (id: string) => (doc.turnouts ?? []).some((sw) => sw.divergeTrack === id);
   for (const t of f.extraTracks) {
-    const isSpur = t.role === "spur";
+    /** ⭐ ONE DEFINITION, THREE RENDERERS (#417). This was `t.role === "spur"`
+     * here, in `schematic-preview`, and in FD's `OperationsSchematic` — three
+     * copies of one fact. `house` joining the roles would have made all three
+     * disagree, so the rule moved into the package. */
+    const isSpur = drawsFromOneEnd(t.role);
     // A track that turnouts sit ON but nothing DIVERGES INTO (a crossover leg)
     // stays flat — its connection is the crossover diagonal, not an end dip.
     /**
