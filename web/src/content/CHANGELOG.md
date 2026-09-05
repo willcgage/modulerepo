@@ -5,6 +5,13 @@ Headings are `version — date` (YYYY-MM-DD).
 
 ---
 
+## v0.138.0 — 2026-09-05
+
+### Removed
+- **The "Side" (above/below track) setting is gone from the industry editor**, for the industry and for each of its extra tracks. Since the marker and its name now sit on the track itself — in the builder and in the dispatcher alike — that setting had stopped changing anything you could see, and a control that quietly ignores you is worse than no control at all. **Nothing you have already set has been altered**: the value is still stored with your module and still travels to the dispatcher, it simply is not something the builder asks you for any more.
+
+---
+
 ## v0.137.2 — 2026-09-05
 
 ### Changed
