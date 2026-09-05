@@ -5,6 +5,13 @@ Headings are `version — date` (YYYY-MM-DD).
 
 ---
 
+## v0.136.2 — 2026-09-05
+
+### Changed
+- **The industry highlight is lighter.** It was still solid enough to bury the rail's ties and joints; it now tints the track rather than covering it.
+
+---
+
 ## v0.136.1 — 2026-09-05
 
 ### Changed
