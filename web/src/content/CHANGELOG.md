@@ -5,6 +5,13 @@ Headings are `version — date` (YYYY-MM-DD).
 
 ---
 
+## v0.133.5 — 2026-09-05
+
+### Fixed
+- **The dispatcher view now agrees with the canvas about which side an industry's extra spot is on.** An extra spot that had never been given a side of its own was drawn beside the industry's side on the canvas but always above the rail in the dispatcher view below it — the same document, drawn two ways on one screen. A spot with no side of its own now follows its industry in both, and a spot you have given a side is unaffected.
+
+---
+
 ## v0.133.4 — 2026-09-05
 
 ### Added
