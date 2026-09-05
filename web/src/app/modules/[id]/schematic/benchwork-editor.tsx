@@ -3174,6 +3174,13 @@ export function BenchworkEditor({
     dragRef.current = d;
     selectFromDrag(d);
   };
+  /**
+   * Is this turnout the current selection — i.e. has the owner already said
+   * they mean IT, rather than the track it sits on? (#grab-priority)
+   */
+  const turnoutArmed = (id: string) =>
+    selection?.kind === "turnout" && selection.id === id;
+
   /** Pointer → inches along the main, clamped to the module. */
   const posFrom = (p: Pt) =>
     Math.round(
@@ -4914,15 +4921,58 @@ const ENDPLATE_TAB = 5; // ballast-shoulder band width, inches
                 fill="#fff"
                 stroke={node}
                 strokeWidth={r * 0.38}
-                style={onTurnoutMove ? { cursor: "ew-resize" } : undefined}
+                style={
+                  onTurnoutMove
+                    ? { cursor: turnoutArmed(t.id) ? "ew-resize" : "pointer" }
+                    : undefined
+                }
                 onPointerDown={
-                  onTurnoutMove ? (e) => beginDrag(e, { kind: "turnout", id: t.id }) : undefined
+                  onTurnoutMove
+                    ? (e) => {
+                        /**
+                         * ⭐⭐ SELECT FIRST, MOVE SECOND — GRAB PRIORITY (Will,
+                         * 2026-09-05: *"when I try and move Main 1, I end up
+                         * moving the switch"*).
+                         *
+                         * This node sits ON its host track by construction —
+                         * its centre IS the frog, which is a point on the main
+                         * — so every press aimed at the main near a turnout
+                         * lands on it too, and SVG hit-testing follows paint
+                         * order, which puts this circle on top. It used to call
+                         * `beginDrag` outright, so an ambiguous press did not
+                         * merely pick the wrong object: it MOVED it.
+                         *
+                         * An unselected turnout now only selects. Nothing on the
+                         * board moves until you have said which thing you meant,
+                         * and a mis-aimed press costs a click rather than an
+                         * edit. `beginDrag` already had exactly this shape for
+                         * the right button (#284) — "selecting is still right;
+                         * the menu then acts on what you clicked".
+                         *
+                         * ⚠️ The turnout stays reachable: the press selects it,
+                         * and the second grab drags it. Do NOT "fix" this by
+                         * letting the press fall through to the track — that
+                         * makes a turnout unselectable on the canvas, which is
+                         * the mirror of the bug where a siding end could not be
+                         * grabbed because a turnout four pixels away was
+                         * painted over it.
+                         */
+                        if (!turnoutArmed(t.id) && e.button !== 2) {
+                          e.stopPropagation();
+                          onSelect?.({ kind: "turnout", id: t.id });
+                          return;
+                        }
+                        beginDrag(e, { kind: "turnout", id: t.id });
+                      }
+                    : undefined
                 }
               >
                 <title>
-                  {onTurnoutMove
-                    ? "Turnout — drag along the track to move it (its position is measured to its frog)"
-                    : "Turnout"}
+                  {!onTurnoutMove
+                    ? "Turnout"
+                    : turnoutArmed(t.id)
+                      ? "Turnout — drag along the track to move it (its position is measured to its frog)"
+                      : "Turnout — click to select it; drag once selected (so a press meant for the track never moves it)"}
                 </title>
               </circle>
             </g>

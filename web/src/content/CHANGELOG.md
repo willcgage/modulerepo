@@ -5,6 +5,13 @@ Headings are `version — date` (YYYY-MM-DD).
 
 ---
 
+## v0.133.8 — 2026-09-05
+
+### Fixed
+- **Reaching for the track near a turnout no longer moves the turnout.** A turnout's node sits on the track by definition — its centre is the frog, which is a point on the main — so a press aimed at the main next to a turnout landed on the node instead, and the node moved the turnout straight away. It now takes a click to select the turnout and a second grab to move it, so a mis-aimed press costs you a click instead of an edit. Once a turnout is selected it drags exactly as before.
+
+---
+
 ## v0.133.7 — 2026-09-05
 
 ### Fixed
