@@ -5,6 +5,13 @@ Headings are `version — date` (YYYY-MM-DD).
 
 ---
 
+## v0.133.1 — 2026-09-05
+
+### Fixed
+- **An industry's marker no longer lies across a track it does not serve.** The orange band that shows where an industry spots cars was drawn a fixed distance out from its own track, with no regard for anything else on the board — so on a module where a spur leaves its turnout diagonally, an industry marked on the siding had its band drawn straight through that spur, crossing the rail and then drifting away from it. The band now measures its way out: it keeps the side you chose and the distance it always used whenever that is clear, pulls in closer if it has to, and only moves to the other side of the rail when its own side cannot be made to clear. Nothing moves on a module where the marker was not already touching another track.
+
+---
+
 ## v0.133.0 — 2026-09-03
 
 ### Added
