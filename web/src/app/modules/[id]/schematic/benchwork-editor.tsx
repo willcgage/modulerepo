@@ -5115,28 +5115,54 @@ const ENDPLATE_TAB = 5; // ballast-shoulder band width, inches
                   shape instead of being thickened. That works over the amber
                   band, the rail and the ties alike, which a solid backing
                   rectangle would not: it would hide the very track the
-                  highlight exists to point at. */}
-              <text
-                x={ind.label.x}
-                y={sy(ind.label.y)}
-                textAnchor="middle"
-                dominantBaseline="middle"
-                fontSize={world(9)}
-                fill="#7c2d12"
-                stroke="#ffffff"
-                strokeWidth={world(2.6)}
-                strokeLinejoin="round"
-                paintOrder="stroke"
-                fontWeight={700}
-                pointerEvents="none"
-              >
-                {ind.name || "Industry"}
-                {ind.sub && (
-                  <tspan x={ind.label.x} dy={world(10)} fontWeight={400} fill="#a16207">
-                    {ind.sub}
-                  </tspan>
-                )}
-              </text>
+                  highlight exists to point at.
+
+                  ⭐⭐ AND IT IS DROPPED WHEN IT DOES NOT FIT ITS OWN SPAN.
+                  Lanes sit `LANE_SPACING_INCHES` apart while the label is a
+                  fixed SCREEN size, so on a module with track on neighbouring
+                  lanes two names collide as soon as you zoom out — measured on
+                  FMN-0011, where the main's label ran through the siding's.
+                  Rather than shove the text off the track it belongs to (the
+                  mistake this whole change removed), it simply is not drawn
+                  when it cannot fit: the highlight still shows the span, and
+                  the name is a hover and a click away in the Objects list.
+
+                  ⚠️ Width is estimated from the character count, and the span
+                  is measured END TO END rather than along its arc — both err
+                  toward HIDING on a curve, which is the safe direction. */}
+              {(() => {
+                const a = ind.path[0];
+                const b = ind.path[ind.path.length - 1];
+                if (!a || !b) return null;
+                const span = Math.hypot(b.x - a.x, b.y - a.y);
+                const fontSize = world(7);
+                const text = ind.name || "Industry";
+                const widest = Math.max(text.length, ind.sub ? ind.sub.length : 0);
+                if (widest * fontSize * 0.55 > span) return null;
+                return (
+                  <text
+                    x={ind.label.x}
+                    y={sy(ind.label.y)}
+                    textAnchor="middle"
+                    dominantBaseline="middle"
+                    fontSize={fontSize}
+                    fill="#7c2d12"
+                    stroke="#ffffff"
+                    strokeWidth={world(2.2)}
+                    strokeLinejoin="round"
+                    paintOrder="stroke"
+                    fontWeight={700}
+                    pointerEvents="none"
+                  >
+                    {text}
+                    {ind.sub && (
+                      <tspan x={ind.label.x} dy={world(8)} fontWeight={400} fill="#a16207">
+                        {ind.sub}
+                      </tspan>
+                    )}
+                  </text>
+                );
+              })()}
               {onIndustryEndMove &&
                 ind.editable &&
                 ind.ends.map((h) => (
