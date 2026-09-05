@@ -5,6 +5,16 @@ Headings are `version — date` (YYYY-MM-DD).
 
 ---
 
+## v0.133.4 — 2026-09-05
+
+### Added
+- **You can now choose which side of the track each of an industry's extra spots sits on.** An industry served on more than one track gave each spot the side of the industry itself, and there was no way to change it — so which side of its rail your spot sat on was the app's choice rather than yours. Each spot now has its own Above/Below control, matching the one the industry already had.
+
+### Fixed
+- **Adding a track to an industry no longer offers the track it is already on.** "＋ Add track" defaulted to the first siding or spur on the module whatever it was, so an industry already on that track got a second span on the same rail. It now starts on the first track the industry is not already using, and you can change it as before.
+
+---
+
 ## v0.133.3 — 2026-09-05
 
 ### Added
