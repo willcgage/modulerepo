@@ -55,6 +55,7 @@ import {
   LANE_SPACING_INCHES,
 } from "@/lib/physical-track";
 import { chooseBandOffset } from "@/lib/industry-band-clearance";
+import { minCurveRadius } from "@/lib/curve-radius";
 
 type Pt = { x: number; y: number };
 type ViewBox = { minX: number; minY: number; w: number; h: number };
@@ -273,6 +274,7 @@ export function BenchworkEditor({
   signals = [],
   industries = [],
   onCrowdedIndustries,
+  onTrackCurveRadii,
   onTurnoutMove,
   onTrackEndMove,
   onIndustryEndMove,
@@ -364,6 +366,17 @@ export function BenchworkEditor({
    * ([[one-answer-per-drawn-fact]]).
    */
   onCrowdedIndustries?: (ids: string[]) => void;
+  /**
+   * The tightest curve in each DRAWN track, so the builder can hold it against
+   * the standard's minimum main-line radius.
+   *
+   * ⭐ Reported UP for the same reason the crowded bands are: only the canvas
+   * knows the drawn geometry. And the split is deliberate — the canvas measures
+   * the radius, the BUILDER decides which tracks are mains, because that needs
+   * the endplates (a 3rd-plate route is Main 3) and the canvas has no
+   * `trackId` on a pose to test.
+   */
+  onTrackCurveRadii?: (radii: { id: string; minRadius: number }[]) => void;
   /** Drag a turnout along the main → its new position, inches from endplate A. */
   onTurnoutMove?: (id: string, pos: number) => void;
   /** Drag a siding/spur end along the main → its new from/to position. */
@@ -1922,6 +1935,43 @@ export function BenchworkEditor({
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [centerline, industries, tracks, trackPaths]);
+
+  /**
+   * Measure the tightest curve in every drawn track and hand it up (#421).
+   *
+   * ⚠️ TURNOUT LEGS ARE EXCLUDED. `trackPaths` carries `<id>-leg<n>` entries
+   * built from the turnout PART's own geometry — a #4's diverging radius is a
+   * property of the product the owner chose, not of a curve they drew, and
+   * warning about it would be telling them their turnout is the wrong shape.
+   *
+   * ⚠️ Industry bands are not in here at all; they live in `industryShapes`.
+   * A survey that scanned every `<polyline>` counted "Curve Feed" as a track
+   * at 6.69″ — the band, not the rail.
+   */
+  const curveRadii = useMemo(
+    () =>
+      trackPaths
+        .filter((tp) => !/-leg\d+$/.test(tp.id) && tp.pts.length > 2)
+        .map((tp) => ({ id: tp.id, minRadius: minCurveRadius(tp.pts) }))
+        .filter((r) => Number.isFinite(r.minRadius)),
+    [trackPaths],
+  );
+  // Same stability trick as below: a key that only changes when the ANSWER
+  // does, so this never sets parent state on a bare re-render.
+  const radiiKey = useMemo(
+    () => curveRadii.map((r) => `${r.id}:${r.minRadius.toFixed(2)}`).join(","),
+    [curveRadii],
+  );
+  useEffect(() => {
+    onTrackCurveRadii?.(
+      radiiKey
+        ? radiiKey.split(",").map((s) => {
+            const i = s.lastIndexOf(":");
+            return { id: s.slice(0, i), minRadius: Number(s.slice(i + 1)) };
+          })
+        : [],
+    );
+  }, [radiiKey, onTrackCurveRadii]);
 
   /**
    * Tell the builder which bands could not be placed clear (#421).
