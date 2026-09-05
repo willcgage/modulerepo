@@ -5,6 +5,13 @@ Headings are `version — date` (YYYY-MM-DD).
 
 ---
 
+## v0.134.1 — 2026-09-05
+
+### Fixed
+- The new board/centre-line warning ran the measurement into the next word — "3.28″off the shape". Spacing only; the figure was right.
+
+---
+
 ## v0.134.0 — 2026-09-05
 
 ### Added

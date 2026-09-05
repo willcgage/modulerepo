@@ -4850,8 +4850,8 @@ function SectionList({
               return (
                 <p className="mt-1 rounded-md bg-amber-50 px-2 py-1 text-[11px] text-amber-800">
                   ⚠ This board&apos;s centre-line runs{" "}
-                  <span className="font-medium">{esc.outsideByInches}″</span> off the shape
-                  it was drawn as — the track and the benchwork disagree. The drawn shape is
+                  <span className="font-medium">{esc.outsideByInches}″</span>{" "}
+                  off the shape it was drawn as — the track and the benchwork disagree. The drawn shape is
                   kept as you made it; if the geometry is the one that&apos;s right,{" "}
                   <button
                     type="button"
