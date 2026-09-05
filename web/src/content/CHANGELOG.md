@@ -5,6 +5,13 @@ Headings are `version — date` (YYYY-MM-DD).
 
 ---
 
+## v0.133.10 — 2026-09-05
+
+### Fixed
+- **Clicking the main right beside a turnout selects the main.** The previous release made a press pick the nearest track, but a turnout's short connector legs are drawn as bands that cannot themselves be selected — so a press landing on one had no handler at all and fell through to the background, which cleared the selection instead. A press on drawn track now always resolves to the nearest track you can actually select, and only a press on genuinely empty board deselects.
+
+---
+
 ## v0.133.9 — 2026-09-05
 
 ### Fixed
