@@ -4172,6 +4172,45 @@ const ENDPLATE_TAB = 5; // ballast-shoulder band width, inches
   type TrackLine = (typeof trackLines)[number];
   // What clicking a line selects — the main's segments all report the main.
   const trackSelId = (line: TrackLine) => line.selId ?? line.id;
+  /**
+   * Which track did the owner actually press on? (Will, 2026-09-05: *"I still
+   * can't move the main 1 away from the turnout."*)
+   *
+   * ⛔⛔ HIT-TESTING FOLLOWED PAINT ORDER, AND THE BANDS ARE 1.3″ WIDE. Only the
+   * roadbed pass takes pointer events — the rails are `pointerEvents="none"` —
+   * so whichever band was painted LAST owned every pixel it covered. The main is
+   * first in `trackLines`, so near a turnout the diverging leg's band lay over
+   * it: measured on FMN-0083, a press 1.5″ west of the turnout at pos 40 landed
+   * on `sid-leg1`, not the main. Selecting Main 1 there was impossible, and
+   * `mainHandlesOn` needs the main SELECTED — so it could not be reshaped near a
+   * turnout at all.
+   *
+   * ⭐ This is the hit-testing twin of the burial already recorded on
+   * `renderTrackBand`: *"the main was never broken, the DOM had it as one
+   * unbroken polyline the whole time — it was buried."* That fix split the
+   * PAINT into two passes so the rails stay visible. The press had the same
+   * problem and kept it.
+   *
+   * ⭐⭐ So resolve by GEOMETRY, not by z-order: the track whose drawn centre-line
+   * is nearest the pointer wins. `trackLines` is what is actually on screen, so
+   * this cannot disagree with what the owner sees — unlike `hostPointsOf`, the
+   * simplified re-derivation that has drifted from the drawn line before.
+   */
+  const nearestTrackLineId = (p: Pt): string | null => {
+    let best: { id: string; d: number } | null = null;
+    for (const l of trackLines) {
+      if (!l.selectable || l.pts.length < 2) continue;
+      let d = Infinity;
+      for (let i = 0; i < l.pts.length - 1; i++) {
+        const seg = distToSegment(p, l.pts[i], l.pts[i + 1]);
+        if (seg < d) d = seg;
+      }
+      if (!best || d < best.d) best = { id: trackSelId(l), d };
+    }
+    return best?.id ?? null;
+  };
+
+
   const trackOn = (line: TrackLine) =>
     selection?.kind === "track" && selection.id === trackSelId(line);
   const trackClick = (line: TrackLine) =>
@@ -4197,7 +4236,7 @@ const ENDPLATE_TAB = 5; // ballast-shoulder band width, inches
           onSelect
         ? (e: React.PointerEvent) => {
             e.stopPropagation();
-            onSelect({ kind: "track", id: trackSelId(line) });
+            onSelect({ kind: "track", id: nearestTrackLineId(toLocal(e)) ?? trackSelId(line) });
           }
         : undefined;
 

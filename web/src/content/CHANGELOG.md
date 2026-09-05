@@ -5,6 +5,13 @@ Headings are `version — date` (YYYY-MM-DD).
 
 ---
 
+## v0.133.9 — 2026-09-05
+
+### Fixed
+- **Clicking a track now selects the track you clicked, not whichever one was drawn last.** Only the wide roadbed band takes clicks, and bands are painted one over another, so near a turnout the diverging leg's band lay across the main and swallowed every press: clicking Main 1 next to a turnout selected the leg instead. Since the main has to be selected before its shape handles appear, that made the main impossible to reshape anywhere near a turnout. The press now goes to whichever track's centre line is actually under your pointer.
+
+---
+
 ## v0.133.8 — 2026-09-05
 
 ### Fixed
