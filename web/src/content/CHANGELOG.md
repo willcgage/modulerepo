@@ -5,6 +5,13 @@ Headings are `version — date` (YYYY-MM-DD).
 
 ---
 
+## v0.135.0 — 2026-09-05
+
+### Added
+- **When a main line is under the 22″ minimum, the warning now says if the way it was drawn is the limit.** A bend is a true arc until you move its second handle — and because that handle starts exactly where the first one sits, moving it changes nothing on screen while quietly capping how wide the curve can be. The same bow that holds 22.0″ as a single bend holds only 19.3″ once both handles are in play, so an owner could redraw for ever without reaching the standard. The warning now adds what the same bow would hold drawn as a single bend. **It only tells you** — the shape you drew is left exactly as you drew it, and it stays quiet on an S-bend or any bend you deliberately made lopsided, where a single arc could not say the same thing.
+
+---
+
 ## v0.134.1 — 2026-09-05
 
 ### Fixed

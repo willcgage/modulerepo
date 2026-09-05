@@ -18,6 +18,8 @@
  * not a tight curve. Two different questions; this file answers the radius one.
  */
 
+import { samplePath } from "@willcgage/module-schematic";
+
 export type Pt = { x: number; y: number };
 
 /**
@@ -60,3 +62,52 @@ export function radiusThrough(a: Pt, b: Pt, c: Pt): number {
   if (area2 < 1e-12) return Infinity; // straight
   return (ab * bc * ca) / (2 * area2);
 }
+
+/**
+ * Bends drawn with BOTH handles that a single bend would hold wider (#435).
+ *
+ * ⛔⛔ ONE BEND, TWO REPRESENTATIONS, AND ONE IS STRICTLY WORSE. `samplePath`
+ * draws an edge as a TRUE CIRCULAR ARC while `bulgeEnd` is unset, and as a cubic
+ * with its controls pinned at ⅓/⅔ once it is set. The far handle starts exactly
+ * where the near one is, so touching it changes nothing on screen at that
+ * instant — but the edge has silently become the cubic, whose curvature is
+ * tightest in the middle. Measured on an 83° turn authored at 22″: the arc reads
+ * **22.00″** and the cubic **19.27″** for the same authored bow. An owner can
+ * make a compliant curve permanently non-compliant with a drag that looks like a
+ * small adjustment, and nothing tells them the representation changed.
+ *
+ * ⭐⭐ THIS ONLY REPORTS. Will, asked directly: *"flag it, don't collapse."*
+ * Rewriting `bulgeEnd` away would change a drawn shape the owner authored —
+ * slightly, and for the better on paper, but it is theirs
+ * ([[flagged-never-corrected]]).
+ *
+ * ⚠️ SYMMETRIC BENDS ONLY, and the tolerance is the stored precision. Two
+ * handles pulled in OPPOSITE directions make an S, which a single arc cannot
+ * express at all — telling that owner to use one bend would be telling them to
+ * flatten a shape they meant. Unequal same-way handles are a deliberate
+ * asymmetry for the same reason. Only a bow that is symmetric to the last stored
+ * digit is one the arc branch can hold identically.
+ */
+export function bendsWiderAsArc(
+  path: readonly { x: number; y: number; bulge?: number; bulgeEnd?: number }[],
+): { index: number; asDrawnInches: number; asArcInches: number }[] {
+  const out: { index: number; asDrawnInches: number; asArcInches: number }[] = [];
+  for (let i = 0; i < path.length - 1; i++) {
+    const p0 = path[i];
+    const p1 = path[i + 1];
+    const near = p0.bulge ?? 0;
+    const far = p0.bulgeEnd;
+    if (far == null) continue; // already the arc branch
+    if (!near || !far) continue; // nothing bowed on one side; not a symmetric bow
+    if (Math.sign(near) !== Math.sign(far)) continue; // an S — an arc cannot say it
+    if (Math.abs(near - far) > 0.011) continue; // authored asymmetry, not this bug
+    const asDrawn = minCurveRadius(samplePath([{ ...p0 }, { ...p1 }] as never));
+    const asArc = minCurveRadius(
+      samplePath([{ x: p0.x, y: p0.y, bulge: near }, { x: p1.x, y: p1.y }] as never),
+    );
+    if (!Number.isFinite(asDrawn) || !Number.isFinite(asArc)) continue;
+    if (asArc > asDrawn + 0.05) out.push({ index: i, asDrawnInches: asDrawn, asArcInches: asArc });
+  }
+  return out;
+}
+
