@@ -54,21 +54,11 @@ import {
   projectToCenterline,
   LANE_SPACING_INCHES,
 } from "@/lib/physical-track";
-import { chooseBandOffset } from "@/lib/industry-band-clearance";
 import { minCurveRadius } from "@/lib/curve-radius";
 
 type Pt = { x: number; y: number };
 type ViewBox = { minX: number; minY: number; w: number; h: number };
 const DEG = Math.PI / 180;
-/**
- * How far an industry's band must stay off any track it does not serve (#421).
- *
- * A rail is drawn to `RAIL_GAUGE_INCHES / 2` either side of its centre (0.177″
- * here) plus its ties, so anything under about a quarter inch reads as touching
- * even when the numbers say it clears. 0.35″ leaves daylight at the zoom levels
- * the canvas is actually used at without shoving the band into the next lane.
- */
-const BAND_CLEARANCE_INCHES = 0.35;
 /** A 40-ft N-scale car is ~3.0″; ~3.3″ over the couplers — the real spacing a
  * train occupies. Capacity in cars reads truer than scale feet for a builder. */
 const CAR_INCHES = 3.3;
@@ -273,7 +263,6 @@ export function BenchworkEditor({
   turnouts = [],
   signals = [],
   industries = [],
-  onCrowdedIndustries,
   onTrackCurveRadii,
   onTurnoutMove,
   onTrackEndMove,
@@ -365,12 +354,11 @@ export function BenchworkEditor({
    * the mirror of why `unreachableTracks` is handed DOWN
    * ([[one-answer-per-drawn-fact]]).
    */
-  onCrowdedIndustries?: (ids: string[]) => void;
   /**
    * The tightest curve in each DRAWN track, so the builder can hold it against
    * the standard's minimum main-line radius.
    *
-   * ⭐ Reported UP for the same reason the crowded bands are: only the canvas
+   * ⭐ Reported UP because only the canvas
    * knows the drawn geometry. And the split is deliberate — the canvas measures
    * the radius, the BUILDER decides which tracks are mains, because that needs
    * the endplates (a 3rd-plate route is Main 3) and the canvas has no
@@ -1880,42 +1868,26 @@ export function BenchworkEditor({
         return out;
       };
       /**
-       * ⭐⭐ THE BAND MUST NOT LIE ACROSS A TRACK IT DOES NOT SERVE (#421).
+       * ⭐⭐ THE MARKER IS THE TRACK ITSELF — offset ZERO (Will, 2026-09-05:
+       * *"it may be better to specifically highlight the track and not above or
+       * below the track."*).
        *
-       * ⛔ This was a bare `sign * flip * (LANE_SPACING_INCHES * 0.9)` — beyond
-       * the host's rails on the declared side, and blind to everything else on
-       * the board. On FMN-0083 that drew the spot on the SIDING straight
-       * through the diagonal spur (measured: gap −0.226″ at x=20, +0.108″ at
-       * x=22, so it crossed at x≈21.4). Will: *"it should never interfere."*
+       * ⛔⛔ THIS REPLACES A CLEARANCE SEARCH, AND THAT IS THE POINT. The band
+       * used to be drawn BESIDE the rail — `sign * flip * LANE_SPACING × 0.9` —
+       * which put a mark describing one track into the space belonging to
+       * others. #421 was that mark lying across a spur it does not serve
+       * (measured on FMN-0083: gap −0.226″ at x=20, +0.108″ at x=22, crossing
+       * at x≈21.4), and the fix was a four-candidate search for an offset that
+       * cleared everything drawn. ⭐⭐ **A mark drawn ON the thing it describes
+       * cannot interfere with anything else — the whole class goes away by
+       * construction rather than by a constant.** So `chooseBandOffset`, the
+       * 0.35″ clearance and the "crowded" report all retire with it.
        *
-       * ⚠️ Measured, not assumed from the lane grid: a spur leaves its turnout
-       * across the lanes, so it can cross ANY constant offset somewhere.
+       * ⭐ `side` is NOT dropped — it is authored, and it says which side the
+       * building and its dock stand on. It still places the NAME, below.
        */
-      const others = trackPaths
-        .filter((tp) => tp.id !== ind.track && tp.pts.length >= 2)
-        .map((tp) => tp.pts)
-        // An industry on the main is measured against the other tracks only —
-        // `trackPaths` never contains `main`, so the centre-line is added by
-        // hand for everything else.
-        .concat(ind.track === MAIN_TRACK_ID ? [] : [centerline]);
-      const placed = chooseBandOffset(
-        bandAt,
-        others,
-        sign * flip * (LANE_SPACING_INCHES * 0.9),
-        BAND_CLEARANCE_INCHES,
-      );
-      const off = placed.off;
-      const path: Pt[] = bandAt(off);
+      const path: Pt[] = bandAt(0);
       return {
-        /**
-         * ⛔ NO OFFSET COULD BE FOUND THAT CLEARS EVERYTHING. The band is drawn
-         * at the best of them, which still touches a track it does not serve —
-         * so the canvas SAYS SO rather than drawing it quietly
-         * ([[flagged-never-corrected]]). Reported up to the builder's warning
-         * list, because the owner fixes this by moving a span or a track, not
-         * here.
-         */
-        crowded: !placed.clears,
         id: ind.id,
         industryId: ind.industryId,
         editable: ind.editable,
@@ -1924,13 +1896,16 @@ export function BenchworkEditor({
         sub: ind.sub,
         path,
         ends: [
-          { end: "from" as const, ...at(ind.fromPos, off) },
-          { end: "to" as const, ...at(ind.toPos, off) },
+          { end: "from" as const, ...at(ind.fromPos, 0) },
+          { end: "to" as const, ...at(ind.toPos, 0) },
         ],
-        // ⚠️ The label follows the band, not the declared side. When clearance
-        // moves the band to the other rail, a label still placed by
-        // `sign * flip` would sit across the track the band just stepped off.
-        label: at(midPos, off + Math.sign(off) * 2.2),
+        // ⭐ The NAME still sits on the authored side — that is what `side`
+        // means, and it is the owner's. It used to follow the band instead,
+        // because clearance could move the band to the other rail and a label
+        // left behind would have sat across the track the band stepped off.
+        // With the mark on the rail there is nothing to follow, so the label
+        // goes back to the side the owner actually declared.
+        label: at(midPos, sign * flip * 2.2),
       };
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -2000,14 +1975,6 @@ export function BenchworkEditor({
    * write-capable call in render is the mistake the React compiler was right
    * about (#284).
    */
-  const crowdedKey = useMemo(
-    () => industryShapes.filter((s) => s.crowded).map((s) => s.id).sort().join(","),
-    [industryShapes],
-  );
-  useEffect(() => {
-    onCrowdedIndustries?.(crowdedKey ? crowdedKey.split(",") : []);
-  }, [crowdedKey, onCrowdedIndustries]);
-
   /** Content bounds in world (module-local) inches — what "Fit" frames to. */
   const bounds = useMemo<ViewBox>(() => {
     const ctx = [...centerline, ...trackPaths.flatMap((t) => t.pts)];
@@ -5106,7 +5073,13 @@ const ENDPLATE_TAB = 5; // ballast-shoulder band width, inches
                   points={ind.path.map((p) => `${p.x},${sy(p.y)}`).join(" ")}
                   fill="none"
                   stroke={on ? "#b45309" : "#d97706"}
-                  strokeWidth={on ? world(4) : world(2.5)}
+                  /* ⭐ A HIGHLIGHTER, NOT A COVER. The mark now lies ON the
+                     rail it describes, so it is drawn wide and translucent —
+                     the track, its ties and its joints still read THROUGH it.
+                     Painting an opaque line here would hide the very thing the
+                     owner is being shown. */
+                  strokeWidth={on ? world(9) : world(7)}
+                  strokeOpacity={on ? 0.55 : 0.4}
                   strokeLinecap="round"
                   style={onSelect ? { cursor: "pointer" } : undefined}
                   onPointerDown={
