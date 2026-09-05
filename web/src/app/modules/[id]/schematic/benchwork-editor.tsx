@@ -4229,14 +4229,28 @@ const ENDPLATE_TAB = 5; // ballast-shoulder band width, inches
         // POSITIONAL track drawn underneath had its own click handler, so laying
         // a piece over an existing main just selected the main. Verified on a
         // real module before it was noticed.
-        !(track1D && armed) &&
-          tool !== "signal" &&
-          !piecesMode &&
-          line.selectable &&
-          onSelect
+        !(track1D && armed) && tool !== "signal" && !piecesMode && onSelect
         ? (e: React.PointerEvent) => {
+            /**
+             * ⛔⛔ NOT GATED ON `line.selectable` — THAT WAS THE SECOND HALF OF
+             * THE BUG. A turnout's connector legs are drawn as bands with
+             * `selectable: false`, so no handler attached to them at all and a
+             * press there fell through to the background, which CLEARS the
+             * selection. Measured on FMN-0083 after the first fix: pressing the
+             * main 1.5″ from the turnout selected *nothing* — the leg's band
+             * swallowed the press and then dropped it.
+             *
+             * The band being unselectable means "this line is not a thing you
+             * can select", NOT "nothing here is". The press is still on drawn
+             * track, so it resolves to the nearest track that IS selectable —
+             * the main, at distance 0, when you are on the main's centre line.
+             */
+            const id = nearestTrackLineId(toLocal(e));
+            // Nothing selectable near enough — let the background have it, so
+            // clicking genuinely empty board still deselects.
+            if (!id) return;
             e.stopPropagation();
-            onSelect({ kind: "track", id: nearestTrackLineId(toLocal(e)) ?? trackSelId(line) });
+            onSelect({ kind: "track", id });
           }
         : undefined;
 
