@@ -5,6 +5,13 @@ Headings are `version — date` (YYYY-MM-DD).
 
 ---
 
+## v0.134.0 — 2026-09-05
+
+### Added
+- **A board now says so when its own centre-line runs off it.** A section carries both a drawn shape and a geometry — straight, a 90° corner, a curve — and changing the geometry of a board you had already drawn moved only one of the two: the outline stayed the rectangle you drew while the centre-line turned out of it, so the track ran off the benchwork with nothing said. The board is flagged now, with how far off it runs, and a one-click **reshape this board to match** beside it. **The shape you drew is never changed for you** — if the drawn board is the right one and the geometry is wrong, the warning is telling you which to correct.
+
+---
+
 ## v0.133.12 — 2026-09-05
 
 ### Fixed
