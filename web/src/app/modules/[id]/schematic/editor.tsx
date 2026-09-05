@@ -7660,32 +7660,33 @@ function Inspector({
             />
           </label>
         </div>
-        <div className="grid grid-cols-2 gap-2">
-          <label className="block text-xs font-medium text-gray-600">
-            Side
-            <select
-              value={ind.side}
-              onChange={(e) => up((x) => (x.side = e.target.value as "above" | "below"))}
-              className={`mt-0.5 ${inp}`}
-            >
-              <option value="above">Above track</option>
-              <option value="below">Below track</option>
-            </select>
-          </label>
-          <label className="block text-xs font-medium text-gray-600">
-            Cars on this track
-            <input
-              type="number"
-              min={0}
-              step={1}
-              value={ind.cars ?? ""}
-              onChange={(e) => setCars(e.target.value, (x, n) => (x.cars = n))}
-              className={`mt-0.5 ${inp}`}
-              placeholder="not recorded"
-              title="How many cars this industry can take on its primary track. Yours to state — it is not worked out from the drawing."
-            />
-          </label>
-        </div>
+        {/* ⛔ THE "SIDE" SELECT IS GONE (Will, 2026-09-05), because nothing
+            draws with it any more: since v0.136.0 the marker and its name both
+            sit ON the served track, in the builder AND in the dispatcher, so
+            above/below moved nothing an owner could see. A control that cannot
+            change anything is worse than no control — it invites the owner to
+            set something and then quietly ignores them.
+
+            ⭐⭐ THE STORED `side` IS DELIBERATELY LEFT ALONE. It is authored —
+            every one of Blairstown's five industries carries one — and it is
+            still in the package contract. Removing the CONTROL is a UI
+            decision; removing the FIELD would be a schema change across three
+            repos and is not implied by it ([[flagged-never-corrected]]:
+            an owner's value is not the app's to discard). `docToState` and
+            `stateToDoc` still carry it, so it round-trips untouched. */}
+        <label className="block text-xs font-medium text-gray-600">
+          Cars on this track
+          <input
+            type="number"
+            min={0}
+            step={1}
+            value={ind.cars ?? ""}
+            onChange={(e) => setCars(e.target.value, (x, n) => (x.cars = n))}
+            className={`mt-0.5 ${inp}`}
+            placeholder="not recorded"
+            title="How many cars this industry can take on its primary track. Yours to state — it is not worked out from the drawing."
+          />
+        </label>
         <div className="rounded-md bg-gray-50 px-2 py-1.5 text-xs text-gray-600">
           <div className="flex justify-between">
             <span>Total across its tracks</span>
@@ -7758,23 +7759,6 @@ function Inspector({
                       aria-label="Cars on this track"
                       title="How many cars this industry can take on this track."
                     />
-                    {/* ⛔ A SPOT HAD NO SIDE CONTROL AT ALL (#421). It was
-                        given `side: x.side` when created and there was no way
-                        to change it, so which side of its rail an owner's spot
-                        sat on was the app's choice and not theirs. Mirrors the
-                        industry's own Side select above. */}
-                    <select
-                      value={sp.side ?? ind.side}
-                      onChange={(e) =>
-                        up((x) => (x.spots[si].side = e.target.value as "above" | "below"))
-                      }
-                      className={`${inp} w-24 text-xs`}
-                      aria-label="Which side of this track"
-                      title="Which side of this track the industry sits on."
-                    >
-                      <option value="above">Above</option>
-                      <option value="below">Below</option>
-                    </select>
                     <button
                       type="button"
                       onClick={() => up((x) => x.spots.splice(si, 1))}
