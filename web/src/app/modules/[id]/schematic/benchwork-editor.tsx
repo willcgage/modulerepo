@@ -4291,7 +4291,7 @@ const ENDPLATE_TAB = 5; // ballast-shoulder band width, inches
                     ? "Drag the spur's points ○ to bend/rotate (◇ to curve · Alt-click to remove). The throat stays on its turnout."
                     : mainPath.length < 2 && centerline.length < 2
                       ? "Draw the mainline — click near one end of the board, then the other. Then drag a point ○ to move it, or an edge ◇ to curve it."
-                      : "Drag the mainline's points ○ · edge ◇ to curve · click the line to add a bend · Alt-click to remove. Click a siding or spur to edit it."}
+                      : "Drag the mainline's points ○ · edge ◇ to curve · click the line to add a bend · Alt-click to remove. Click any other track to edit it."}
               </span>
               {/* ⭐ THE REBUILD OFFER HAD TO REACH THIS BAR TOO, and that is the
                   one part of this fold that no type error would have caught. It
@@ -4306,7 +4306,15 @@ const ENDPLATE_TAB = 5; // ballast-shoulder band width, inches
           )
         ) : (
           <span className="text-gray-500">
-            Click anything to select it · drag a turnout ● or a siding&rsquo;s end ○
+            {/* ⭐ "A TRACK'S END", NOT "A SIDING'S END" (#416). This line is
+                always on screen and it was said of EVERY non-main track, so an
+                industry spur and a yard track were both called a siding. Will:
+                *"that is strange to call it a siding technically."* A SIDING IS
+                A PASSING TRACK; a track serving an industry is a spur or a
+                house track. The roles themselves were already right — "Passing
+                siding", "Industry spur", "Yard track" — it was the prose around
+                them that flattened all three into the commonest word. */}
+            Click anything to select it · drag a turnout ● or a track&rsquo;s end ○
             along the main to position it · <span className="whitespace-nowrap">drag the background to pan</span>.
           </span>
         )}
@@ -5567,7 +5575,7 @@ const ENDPLATE_TAB = 5; // ballast-shoulder band width, inches
             {[
               { sw: <circle cx={8} cy={8} r={5} fill="#fff" stroke="#475569" strokeWidth={2} />, label: "Turnout — drag to move (its position is its frog)" },
               { sw: <circle cx={8} cy={8} r={3.5} fill="#fff" stroke="#475569" strokeWidth={1.6} />, label: "Frog — where the diverging rails cross. Set by the turnout's position." },
-              { sw: <circle cx={8} cy={8} r={4.5} fill="#fff" stroke="#0f766e" strokeWidth={2} />, label: "Track end — drag to lengthen or shorten a spur / siding" },
+              { sw: <circle cx={8} cy={8} r={4.5} fill="#fff" stroke="#0f766e" strokeWidth={2} />, label: "Track end — drag to lengthen or shorten the track it belongs to" },
               { sw: <rect x={3} y={3} width={10} height={10} transform="rotate(45 8 8)" fill="#fff" stroke="#2563eb" strokeWidth={2} />, label: "Benchwork corner / endplate — drag to reshape" },
               { sw: <circle cx={8} cy={8} r={4.5} fill="#fff" stroke="#2563eb" strokeWidth={2} />, label: "Endplate tab (outboard) — drag to resize the last section" },
               { sw: <rect x={3} y={5} width={10} height={6} fill="#fff" stroke="#b45309" strokeWidth={2} />, label: "Industry — its car-spot extent" },

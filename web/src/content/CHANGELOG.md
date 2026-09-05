@@ -5,6 +5,14 @@ Headings are `version — date` (YYYY-MM-DD).
 
 ---
 
+## v0.132.1 — 2026-09-03
+
+### Fixed
+- **The builder stops calling every track a siding.** A siding is a passing track; a track that serves an industry is a spur, and a yard track is neither. The roles themselves were always right — Passing siding, Industry spur, Yard track — but the instructions around them said "a siding's end" of any track you could drag, so a spur and a yard track were both called sidings. They now say "a track's end".
+- **A yard track and a branch get their own names in the objects list.** They fell through to the raw internal id — "yard1" — while every other kind got a proper label.
+
+---
+
 ## v0.132.0 — 2026-09-02
 
 ### Added

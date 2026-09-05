@@ -4132,6 +4132,13 @@ function trackLabel(
       return `Siding ${n}`;
     case "spur":
       return `Spur ${n}`;
+    // ⭐ A YARD TRACK AND A BRANCH ARE ROLES TOO (#416). They fell through to
+    // the raw id, so a yard track read "yard1" while every other kind got a
+    // proper name — the same flattening as calling every track a siding.
+    case "yard":
+      return `Yard track ${n}`;
+    case "branch":
+      return `Branch ${n}`;
     case "crossover":
       return `Crossover ${n}`;
     case "main":
