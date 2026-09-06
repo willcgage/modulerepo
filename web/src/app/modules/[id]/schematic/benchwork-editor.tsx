@@ -4475,9 +4475,21 @@ const ENDPLATE_TAB = 5; // ballast-shoulder band width, inches
                     : "Click a track to drop the turnout there — it lands with a short spur you drag to size. Esc to put it down."
                   : editSpurTrack
                     ? "Drag the spur's points ○ to bend/rotate (◇ to curve · Alt-click to remove). The throat stays on its turnout."
-                    : mainPath.length < 2 && centerline.length < 2
-                      ? "Draw the mainline — click near one end of the board, then the other. Then drag a point ○ to move it, or an edge ◇ to curve it."
-                      : "Drag the mainline's points ○ · edge ◇ to curve · click the line to add a bend · Alt-click to remove. Click any other track to edit it."}
+                    : /* ⛔ THE "DRAW THE MAINLINE" BRANCH WAS UNREACHABLE AND IS GONE.
+                         It needed `mainPath.length < 2 && centerline.length < 2` — but
+                         whenever the main is undrawn, the PARTS PALETTE bar renders in
+                         place of this one, so the condition could never be seen. Observed
+                         in all three states, not inferred: a graph-built module
+                         (FMN-0079 — centre-line genuinely empty) and a brand-new one
+                         (no graph, no main) both show the palette and NEITHER hint; a
+                         legacy module with a drawn main (FMN-0068) shows this bar and the
+                         line below.
+
+                         ⚠️ It is dead because the palette now PREEMPTS drawing a main —
+                         the same supersession that closed #49 — not because drawing a
+                         main stopped mattering. If a legacy module should offer that
+                         again, the fix is the palette gating, not this string. */
+                      "Drag the mainline's points ○ · edge ◇ to curve · click the line to add a bend · Alt-click to remove. Click any other track to edit it."}
               </span>
               {/* ⭐ THE REBUILD OFFER HAD TO REACH THIS BAR TOO, and that is the
                   one part of this fold that no type error would have caught. It
